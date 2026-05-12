@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  --color-tally-teal: #004050;
+  --color-tally-header: #005c6f;
+  --color-tally-status: #004d40;
+  --color-tally-accent: #ffcc00;
+  --color-tally-hotkey: #00796b;
+  --color-tally-light: #f1f8e9;
+  --color-tally-bg: #e0f2f1;
+  
+  --font-tally: "Helvetica Neue", Arial, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-tally-bg font-tally text-tally-teal overflow-hidden select-none;
+  }
+}
+
+.gateway-box {
+  @apply border-2 border-tally-teal bg-white;
+  box-shadow: 4px 4px 0px rgba(0, 64, 80, 0.2);
+}
+
+.hotkey-btn {
+  @apply border-l border-tally-hotkey px-2 py-0.5 text-[11px] uppercase flex items-center justify-between cursor-pointer transition-colors hover:bg-tally-hotkey;
+}

@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "Company": {
+      "title": "Company",
+      "description": "Company profile and configuration",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "gstin": { "type": "string" },
+        "financialYearStart": { "type": "string", "format": "date" },
+        "booksBeginningFrom": { "type": "string", "format": "date" }
+      },
+      "required": ["name", "financialYearStart"]
+    },
+    "Ledger": {
+      "title": "Ledger",
+      "description": "Account ledger details",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "group": { "type": "string" },
+        "openingBalance": { "type": "number" },
+        "balanceType": { "type": "string", "enum": ["Dr", "Cr"] },
+        "gstApplicable": { "type": "boolean" }
+      },
+      "required": ["name", "group"]
+    },
+    "Voucher": {
+      "title": "Voucher",
+      "description": "Financial transaction voucher",
+      "type": "object",
+      "properties": {
+        "voucherNumber": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "type": { "type": "string", "enum": ["Contra", "Payment", "Receipt", "Journal", "Sales", "Purchase"] },
+        "narration": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "ledgerEntries": { 
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ledgerId": { "type": "string" },
+              "amount": { "type": "number" },
+              "type": { "type": "string", "enum": ["Dr", "Cr"] }
+            }
+          }
+        }
+      },
+      "required": ["date", "type", "ledgerEntries"]
+    }
+  },
+  "firestore": {
+    "/companies": {
+      "schema": "Company",
+      "description": "Registered companies"
+    },
+    "/companies/{companyId}/ledgers": {
+      "schema": "Ledger",
+      "description": "Ledgers for a specific company"
+    },
+    "/companies/{companyId}/vouchers": {
+      "schema": "Voucher",
+      "description": "Vouchers for a specific company"
+    }
+  }
+}

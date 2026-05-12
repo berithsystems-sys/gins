@@ -1,0 +1,21 @@
+{
+  "name": "TallyPrime Clone ERP",
+  "short_name": "TallyPrime",
+  "description": "Keyboard-driven accounting and inventory system",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#004050",
+  "theme_color": "#004050",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2534/2534015.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2534/2534015.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

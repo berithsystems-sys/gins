@@ -1,0 +1,364 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect } from 'react';
+import { useHotkeys } from './hooks/useHotkeys';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  LayoutDashboard, 
+  BookOpen, 
+  Receipt, 
+  Settings, 
+  Database, 
+  FileText,
+  Package,
+  Users,
+  ChevronRight,
+  Clock
+} from 'lucide-react';
+import VoucherScreen from './components/VoucherScreen';
+import LedgerScreen from './components/LedgerScreen';
+import ReportsScreen from './components/ReportsScreen';
+import StockScreen from './components/StockScreen';
+
+type MenuOption = {
+  id: string;
+  label: string;
+  key: string;
+  icon?: React.ReactNode;
+  shortcut?: string;
+};
+
+const GATEWAY_MENU: MenuOption[] = [
+  { id: 'masters', label: 'Masters', key: 'M', icon: <Database className="w-4 h-4" /> },
+  { id: 'create', label: 'Create', key: 'C', icon: <Settings className="w-4 h-4" />, shortcut: 'Alt+C' },
+  { id: 'alter', label: 'Alter', key: 'A', icon: <FileText className="w-4 h-4" />, shortcut: 'Alt+A' },
+  { id: 'transactions', label: 'Transactions', key: 'T', icon: <Receipt className="w-4 h-4" /> },
+  { id: 'vouchers', label: 'Vouchers', key: 'V', icon: <Receipt className="w-4 h-4" />, shortcut: 'F4-F9' },
+  { id: 'daybook', label: 'Day Book', key: 'K', icon: <BookOpen className="w-4 h-4" /> },
+  { id: 'utilities', label: 'Utilities', key: 'U', icon: <Settings className="w-4 h-4" /> },
+  { id: 'banking', label: 'Banking', key: 'B', icon: <Database className="w-4 h-4" /> },
+  { id: 'reports', label: 'Reports', key: 'R', icon: <FileText className="w-4 h-4" /> },
+  { id: 'balance-sheet', label: 'Balance Sheet', key: 'B', icon: <LayoutDashboard className="w-4 h-4" /> },
+  { id: 'pl-account', label: 'Profit & Loss A/c', key: 'P', icon: <Clock className="w-4 h-4" /> },
+  { id: 'stock-summary', label: 'Stock Summary', key: 'S', icon: <Package className="w-4 h-4" /> },
+  { id: 'ratio-analysis', label: 'Ratio Analysis', key: 'O', icon: <FileText className="w-4 h-4" /> },
+];
+
+export default function App() {
+  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'STOCK'>('GATEWAY');
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [showCalculator, setShowCalculator] = useState(false);
+  const [calcInput, setCalcInput] = useState('');
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useHotkeys('up', () => {
+    if (currentScreen === 'GATEWAY') {
+      setSelectedIndex(prev => Math.max(0, prev - 1));
+    }
+  });
+  
+  useHotkeys('down', () => {
+    if (currentScreen === 'GATEWAY') {
+      setSelectedIndex(prev => Math.min(GATEWAY_MENU.length - 1, prev + 1));
+    }
+  });
+
+  useHotkeys('enter', () => {
+    if (currentScreen === 'GATEWAY') {
+      const selectedId = GATEWAY_MENU[selectedIndex].id;
+      if (selectedId === 'vouchers') setCurrentScreen('VOUCHER');
+      if (selectedId === 'create') setCurrentScreen('LEDGER');
+      if (selectedId === 'reports' || selectedId === 'balance-sheet') setCurrentScreen('REPORTS');
+      if (selectedId === 'stock-summary') setCurrentScreen('STOCK');
+    }
+  });
+
+  useHotkeys('esc', () => {
+    if (showCalculator) {
+      setShowCalculator(false);
+    } else {
+      setCurrentScreen('GATEWAY');
+    }
+  });
+
+  useHotkeys('v', () => setCurrentScreen('VOUCHER'));
+  useHotkeys('c', () => setCurrentScreen('LEDGER'));
+  useHotkeys('b', () => setCurrentScreen('REPORTS'));
+  useHotkeys('p', () => setCurrentScreen('REPORTS')); // P&L
+  useHotkeys('r', () => setCurrentScreen('REPORTS')); // Reports
+  useHotkeys('s', () => setCurrentScreen('STOCK'));
+  useHotkeys('ctrl+n', () => setShowCalculator(true));
+
+  // Global Function Keys (Tally Style)
+  useHotkeys('f2', () => alert('Date: 12-May-2026'));
+  useHotkeys('f3', () => alert('Select Company: ABC TRADING CO.'));
+  useHotkeys('f4', () => setCurrentScreen('VOUCHER'));
+  useHotkeys('f5', () => setCurrentScreen('VOUCHER'));
+  useHotkeys('f6', () => setCurrentScreen('VOUCHER'));
+  useHotkeys('f7', () => setCurrentScreen('VOUCHER'));
+  useHotkeys('f8', () => setCurrentScreen('VOUCHER'));
+  useHotkeys('f9', () => setCurrentScreen('VOUCHER'));
+  useHotkeys('f11', () => alert('Features (F11)'));
+  useHotkeys('f12', () => alert('Configuration (F12)'));
+  useHotkeys('alt+c', () => setCurrentScreen('LEDGER'));
+  useHotkeys('alt+a', () => alert('Alter Masters Mode Activated'));
+  const [showQuit, setShowQuit] = useState(false);
+
+  useHotkeys('q', () => setShowQuit(true));
+  useHotkeys('ctrl+q', () => setShowQuit(true));
+  useHotkeys('y', () => { if (showQuit) window.close(); });
+  useHotkeys('n', () => { if (showQuit) setShowQuit(false); });
+  useHotkeys('f5', () => { if (currentScreen === 'VOUCHER') alert('Payment Mode'); });
+  useHotkeys('f6', () => { if (currentScreen === 'VOUCHER') alert('Receipt Mode'); });
+  useHotkeys('f7', () => { if (currentScreen === 'VOUCHER') alert('Journal Mode'); });
+
+  return (
+    <div className="flex flex-col h-screen bg-tally-bg overflow-hidden">
+      {/* Top Header Bar */}
+      <header className="bg-tally-header text-white h-[35px] flex items-center justify-between px-2 text-[12px] border-b border-tally-hotkey">
+        <div className="flex items-center gap-6">
+          <div className="flex gap-4">
+            <span><u>K</u>: Company</span>
+            <span><u>Y</u>: Data</span>
+            <span><u>Z</u>: Exchange</span>
+            <span className="bg-white/20 px-2 rounded font-bold cursor-pointer" onClick={() => setCurrentScreen('GATEWAY')}>G: Go To</span>
+            <span><u>O</u>: Import</span>
+            <span><u>E</u>: Export</span>
+            <span><u>M</u>: E-mail</span>
+            <span><u>P</u>: Print</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-full bg-blue-400"></div>
+            <span>Cloud Enabled</span>
+          </div>
+          <button className="opacity-80 hover:opacity-100">F1: Help</button>
+        </div>
+      </header>
+
+      {/* Secondary Ribbon */}
+      <div className="bg-tally-teal text-white h-[30px] flex items-center px-4 justify-between border-b border-tally-hotkey">
+        <div className="flex gap-8 text-[13px] font-semibold">
+          <span>Gateway of Tally</span>
+        </div>
+        <div className="text-[12px] opacity-80 italic">
+          ABC TRADING CO. (2024-25)
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex overflow-hidden">
+        <AnimatePresence>
+          {showQuit && (
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="absolute inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+            >
+              <div className="bg-white border-4 border-tally-teal p-8 shadow-2xl text-center">
+                <h2 className="text-xl font-bold text-tally-teal uppercase mb-4 tracking-widest">Quit ?</h2>
+                <div className="flex gap-8 justify-center">
+                  <button onClick={() => window.close()} className="bg-tally-accent text-black px-8 py-1 font-bold border border-black hover:bg-yellow-500 transition-colors">Yes (Y)</button>
+                  <button onClick={() => setShowQuit(false)} className="bg-gray-100 px-8 py-1 font-bold border border-gray-300 hover:bg-gray-200 transition-colors">No (N)</button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {currentScreen === 'GATEWAY' ? (
+          <>
+            {/* Left Side: Current Status */}
+            <section className="w-[35%] border-r border-teal-200 p-4 bg-transparent flex flex-col gap-6">
+              <div className="flex justify-between border-b border-teal-300 pb-2">
+                <div className="flex flex-col">
+                  <span className="text-[10px] uppercase opacity-60">Current Period</span>
+                  <span className="text-[13px] font-bold">1-Apr-2024 to 31-Mar-2025</span>
+                </div>
+                <div className="flex flex-col text-right">
+                  <span className="text-[10px] uppercase opacity-60">Current Date</span>
+                  <span className="text-[13px] font-bold">Tuesday, 12-May-2026</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col">
+                <span className="text-[11px] font-bold uppercase mb-2 border-b border-teal-200">List of Selected Companies</span>
+                <div className="flex justify-between items-center bg-white p-2 border border-teal-200">
+                  <div className="flex flex-col">
+                    <span className="font-bold text-blue-900">ABC TRADING CO.</span>
+                    <span className="text-[10px] text-gray-500 italic">No Vouchers Entered</span>
+                  </div>
+                  <span className="text-[11px]">12-May-26</span>
+                </div>
+              </div>
+
+              <div className="mt-auto bg-[#fff9c4] border border-[#fbc02d] p-3 text-[12px] text-gray-800">
+                <p className="font-bold mb-1">Accountant Notice:</p>
+                <p>Welcome to TallyPrime. Quick access key: <span className="font-bold text-red-600">G</span> for Go To.</p>
+              </div>
+            </section>
+
+            {/* Right Side: Gateway of Tally Menu */}
+            <section className="flex-grow bg-[#f5f5f5] flex items-center justify-center relative">
+              <div className="gateway-box w-[320px] flex flex-col">
+                <div className="bg-tally-teal text-white text-center py-1 text-[13px] font-bold uppercase tracking-wider">
+                  Gateway of Tally
+                </div>
+                <div className="p-4 flex flex-col gap-1 text-[14px]">
+                  {GATEWAY_MENU.map((item, index) => (
+                    <React.Fragment key={item.id}>
+                      {index === 0 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Masters</div>}
+                      {index === 3 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Transactions</div>}
+                      {index === 6 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Utilities</div>}
+                      {index === 8 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Reports</div>}
+                      
+                      <div
+                        id={`menu-item-${index}`}
+                        className={`flex justify-between px-2 py-0.5 cursor-pointer transition-colors ${
+                          selectedIndex === index 
+                            ? 'bg-tally-accent text-black font-bold' 
+                            : 'hover:bg-gray-100'
+                        }`}
+                        onClick={() => setSelectedIndex(index)}
+                        onDoubleClick={() => {
+                          if (item.id === 'vouchers') setCurrentScreen('VOUCHER');
+                          if (item.id === 'create') setCurrentScreen('LEDGER');
+                          if (item.id === 'reports' || item.id === 'balance-sheet') setCurrentScreen('REPORTS');
+                        }}
+                      >
+                        <div className="flex gap-2">
+                          <span className={selectedIndex === index ? 'text-black' : 'text-red-700 font-bold'}>{item.key}</span>
+                          <span>{item.label.replace(item.key, '')}</span>
+                        </div>
+                        {item.shortcut && (
+                          <span className="text-[10px] opacity-40 uppercase font-mono">
+                            {item.shortcut}
+                          </span>
+                        )}
+                      </div>
+                    </React.Fragment>
+                  ))}
+                  <div className="border-t border-gray-300 pt-1 flex justify-between px-2 hover:bg-red-100 cursor-pointer mt-2">
+                    <span><u>Q</u>uit</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </>
+        ) : (
+          <div className="flex-1 bg-white p-4 overflow-auto">
+            <div className="max-w-4xl mx-auto border-2 border-tally-teal rounded-sm p-4 shadow-lg bg-white">
+              <div className="flex justify-between items-center mb-6 border-b border-tally-teal/20 pb-2">
+                <h1 className="text-lg font-bold text-tally-teal uppercase flex items-center gap-2">
+                  <div className="w-1 h-6 bg-tally-teal"></div>
+                  {currentScreen === 'VOUCHER' && 'Accounting Voucher Creation'}
+                  {currentScreen === 'LEDGER' && 'Ledger Creation'}
+                  {currentScreen === 'REPORTS' && 'Reports'}
+                </h1>
+                <button 
+                  onClick={() => setCurrentScreen('GATEWAY')}
+                  className="text-[11px] bg-tally-bg hover:bg-gray-200 px-3 py-1 border border-tally-teal/20 rounded font-bold"
+                >
+                  ESC: Back
+                </button>
+              </div>
+
+              {currentScreen === 'VOUCHER' && <VoucherScreen />}
+              {currentScreen === 'LEDGER' && <LedgerScreen />}
+              {currentScreen === 'REPORTS' && <ReportsScreen />}
+              {currentScreen === 'STOCK' && <StockScreen />}
+            </div>
+          </div>
+        )}
+
+        {/* Sidebar Actions */}
+        <aside className="w-[180px] bg-tally-teal text-white flex flex-col border-l border-tally-hotkey">
+          <div className="hotkey-btn" onClick={() => alert('Date')}><span>F2: Date</span></div>
+          <div className="hotkey-btn" onClick={() => alert('Company')}><span>F3: Company</span></div>
+          <div className="h-4 bg-black/10"></div>
+          <div className="hotkey-btn" onClick={() => setCurrentScreen('VOUCHER')}><span>F4: Contra</span></div>
+          <div className="hotkey-btn" onClick={() => setCurrentScreen('VOUCHER')}><span>F5: Payment</span></div>
+          <div className="hotkey-btn" onClick={() => setCurrentScreen('VOUCHER')}><span>F6: Receipt</span></div>
+          <div className="hotkey-btn" onClick={() => setCurrentScreen('VOUCHER')}><span>F7: Journal</span></div>
+          <div className="hotkey-btn" onClick={() => setCurrentScreen('VOUCHER')}><span>F8: Sales</span></div>
+          <div className="hotkey-btn" onClick={() => setCurrentScreen('VOUCHER')}><span>F9: Purchase</span></div>
+          <div className="hotkey-btn"><span>F10: Other</span></div>
+          <div className="h-4 bg-black/10"></div>
+          <div className="hotkey-btn opacity-60"><span>F11: Features</span></div>
+          <div className="hotkey-btn opacity-60"><span>F12: Configure</span></div>
+          <div className="mt-auto bg-[#002e3a] p-2 text-[10px] text-center italic">
+            {currentTime.toLocaleTimeString()}
+          </div>
+        </aside>
+      </main>
+
+      {/* Footer / Status Bar */}
+      <footer className="relative">
+        <AnimatePresence>
+          {showCalculator && (
+            <motion.div 
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              className="absolute bottom-6 right-2 w-72 bg-tally-teal border-2 border-white shadow-2xl p-2 z-50 overflow-hidden"
+            >
+              <div className="flex justify-between text-[10px] text-white font-bold mb-1">
+                <span>Calculator</span>
+                <span className="opacity-50">ESC: Close</span>
+              </div>
+              <div className="bg-black/20 p-2 text-right font-mono text-white min-h-[40px] break-all border border-white/20">
+                {calcInput || '0'}
+              </div>
+              <div className="grid grid-cols-4 gap-1 mt-2">
+                {['/', '*', '-', '+', '7', '8', '9', '=', '4', '5', '6', 'C', '1', '2', '3', '0'].map(char => (
+                  <button 
+                    key={char}
+                    onClick={() => {
+                      if (char === 'C') setCalcInput('');
+                      else if (char === '=') {
+                        try { setCalcInput(eval(calcInput).toString()); } catch { setCalcInput('Error'); }
+                      }
+                      else setCalcInput(prev => prev + char);
+                    }}
+                    className="bg-white/10 hover:bg-white/20 text-white p-1 text-xs font-bold font-mono border border-white/10"
+                  >
+                    {char}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="h-[24px] bg-tally-status text-white text-[11px] flex items-center px-2 justify-between">
+          <div className="flex gap-4">
+            <span className="font-bold">TALLY PRIME</span>
+            <span className="opacity-50">|</span>
+            <span>Rel. 4.0</span>
+            <span className="opacity-50">|</span>
+            <span className="text-tally-accent font-bold">Educational Mode</span>
+          </div>
+          <div className="flex gap-4 items-center">
+            <span className="opacity-70">C:\TallyPrime\Data\10001</span>
+            <span 
+              className={`bg-white/10 px-2 rounded cursor-pointer ${showCalculator ? 'bg-tally-accent text-black' : ''}`}
+              onClick={() => setShowCalculator(!showCalculator)}
+            >
+              Ctrl+N: Calculator
+            </span>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
