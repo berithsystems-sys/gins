@@ -1,0 +1,12 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  
+  # Forward /api requests to api.php
+  RewriteRule ^api/(.*)$ api.php?request=$1 [QSA,L]
+
+  # For React SPA Routing: 
+  # If the file/dir doesn't exist, send to index.html
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /index.html [L]
+</IfModule>
