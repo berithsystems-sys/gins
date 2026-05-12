@@ -10,10 +10,10 @@ header("Access-Control-Allow-Headers: Content-Type, Authorization");
 header("Content-Type: application/json");
 
 // 1. Database Configuration
-$host = 'localhost'; // Change this if Hostinger gives you a specific DB host
-$db   = 'u698772346_tally'; // Your MySQL Database Name
-$user = 'u698772346_user';  // Your MySQL Username
-$pass = 'your_strong_password'; // Your MySQL Password
+$host = 'localhost'; 
+$db   = 'u698772346_tally'; // YOUR_DATABASE_NAME
+$user = 'u698772346_user';  // YOUR_DATABASE_USER
+$pass = 'YOUR_ACTUAL_PASSWORD_HERE'; // <--- CHANGE THIS TO YOUR REAL PASSWORD
 $charset = 'utf8mb4';
 
 $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
