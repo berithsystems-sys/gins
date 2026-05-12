@@ -1,14 +1,15 @@
-import fs from 'fs/promises';
+import knex from 'knex';
 import path from 'path';
 
-const DB_FILE = path.join(process.cwd(), 'database.json');
+const isProduction = process.env.NODE_ENV === 'production';
 
+// Interfaces for Frontend & Server
 export interface User {
   id: string;
   username: string;
-  password: string; // Plain text for this prototype, but note for user
+  password?: string;
   role: 'HQ' | 'BRANCH';
-  branchId?: string; // HQ has no specific branchId or accesses all
+  branchId?: string;
 }
 
 export interface Branch {
@@ -21,7 +22,8 @@ export interface Branch {
 export interface Ledger {
   id: string;
   name: string;
-  group: string;
+  group_name?: string;
+  group?: string; // Legacy support
   openingBalance: number;
   balanceType: 'Dr' | 'Cr';
   branchId: string;
@@ -29,13 +31,13 @@ export interface Ledger {
 
 export interface Voucher {
   id: string;
-  number: string;
+  number?: string;
   date: string;
   type: 'Contra' | 'Payment' | 'Receipt' | 'Journal' | 'Sales' | 'Purchase';
   narration: string;
   amount: number;
   branchId: string;
-  entries: {
+  entries?: {
     ledgerId: string;
     amount: number;
     type: 'Dr' | 'Cr';
@@ -52,41 +54,104 @@ export interface AuditLog {
   details?: string;
 }
 
-interface DB {
-  users: User[];
-  branches: Branch[];
-  ledgers: Ledger[];
-  vouchers: Voucher[];
-  auditLogs: AuditLog[];
-}
+// Knex Configuration
+export const db = knex({
+  client: process.env.DB_CLIENT || 'sqlite3',
+  connection: process.env.DB_CLIENT === 'mysql2' ? {
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT) || 3306,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+  } : {
+    filename: path.join(process.cwd(), 'database.sqlite')
+  },
+  useNullAsDefault: true,
+});
 
-const initialData: DB = {
-  users: [
-    { id: '1', username: 'hq_admin', password: 'password', role: 'HQ' },
-    { id: '2', username: 'branch_a', password: 'password', role: 'BRANCH', branchId: '101' }
-  ],
-  branches: [
-    { id: '101', code: 'BR001', name: 'Main City Branch', location: 'City Center' },
-    { id: '102', code: 'BR002', name: 'East Side Church', location: 'East Suburb' }
-  ],
-  ledgers: [
-    { id: '1', name: 'Cash', group: 'Cash-in-hand', openingBalance: 0, balanceType: 'Dr', branchId: '101' },
-    { id: '2', name: 'Tithe Collection', group: 'Direct Incomes', openingBalance: 0, balanceType: 'Cr', branchId: '101' }
-  ],
-  vouchers: [],
-  auditLogs: []
-};
-
-export async function getDB(): Promise<DB> {
-  try {
-    const data = await fs.readFile(DB_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch (e) {
-    await fs.writeFile(DB_FILE, JSON.stringify(initialData, null, 2));
-    return initialData;
+export async function initDB() {
+  // Branches
+  if (!(await db.schema.hasTable('branches'))) {
+    await db.schema.createTable('branches', (table) => {
+      table.string('id').primary();
+      table.string('code').notNullable();
+      table.string('name').notNullable();
+      table.string('location').notNullable();
+    });
+    // Seed initial branches
+    await db('branches').insert([
+      { id: '101', code: 'BR001', name: 'Main City Branch', location: 'City Center' },
+      { id: '102', code: 'BR002', name: 'East Side Church', location: 'East Suburb' }
+    ]);
   }
-}
 
-export async function saveDB(data: DB) {
-  await fs.writeFile(DB_FILE, JSON.stringify(data, null, 2));
+  // Users
+  if (!(await db.schema.hasTable('users'))) {
+    await db.schema.createTable('users', (table) => {
+      table.string('id').primary();
+      table.string('username').unique().notNullable();
+      table.string('password').notNullable();
+      table.string('role').notNullable();
+      table.string('branchId').references('id').inTable('branches');
+    });
+    // Seed initial users
+    await db('users').insert([
+      { id: '1', username: 'hq_admin', password: 'password', role: 'HQ' },
+      { id: '2', username: 'branch_a', password: 'password', role: 'BRANCH', branchId: '101' }
+    ]);
+  }
+
+  // Ledgers
+  if (!(await db.schema.hasTable('ledgers'))) {
+    await db.schema.createTable('ledgers', (table) => {
+      table.string('id').primary();
+      table.string('name').notNullable();
+      table.string('group_name').notNullable();
+      table.float('openingBalance').defaultTo(0);
+      table.string('balanceType').notNullable();
+      table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
+    });
+    // Seed initial ledgers
+    await db('ledgers').insert([
+      { id: '1', name: 'Cash', group_name: 'Cash-in-hand', openingBalance: 0, balanceType: 'Dr', branchId: '101' },
+      { id: '2', name: 'Tithe Collection', group_name: 'Direct Incomes', openingBalance: 0, balanceType: 'Cr', branchId: '101' }
+    ]);
+  }
+
+  // Vouchers
+  if (!(await db.schema.hasTable('vouchers'))) {
+    await db.schema.createTable('vouchers', (table) => {
+      table.string('id').primary();
+      table.string('number');
+      table.string('date').notNullable();
+      table.string('type').notNullable();
+      table.text('narration');
+      table.float('amount').notNullable();
+      table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
+    });
+  }
+
+  // Voucher Entries (Relational child of Vouchers)
+  if (!(await db.schema.hasTable('voucher_entries'))) {
+    await db.schema.createTable('voucher_entries', (table) => {
+      table.increments('id').primary();
+      table.string('voucherId').references('id').inTable('vouchers').onDelete('CASCADE');
+      table.string('ledgerId').references('id').inTable('ledgers');
+      table.float('amount').notNullable();
+      table.string('type').notNullable(); // Dr or Cr
+    });
+  }
+
+  // Audit Logs
+  if (!(await db.schema.hasTable('audit_logs'))) {
+    await db.schema.createTable('audit_logs', (table) => {
+      table.string('id').primary();
+      table.string('userId');
+      table.string('username');
+      table.string('action');
+      table.string('timestamp');
+      table.string('branchId');
+      table.string('details');
+    });
+  }
 }
