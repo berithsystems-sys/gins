@@ -184,6 +184,25 @@ switch ($path) {
         echo json_encode(['status' => 'success', 'message' => 'Tables initialized']);
         break;
 
+    case 'health':
+        echo json_encode(['status' => 'ok', 'service' => 'Tally Church ERP (PHP Edition)', 'db' => 'mysql']);
+        break;
+
+    case 'export':
+        $data = [
+            'branches' => $pdo->query("SELECT * FROM branches")->fetchAll(),
+            'users' => $pdo->query("SELECT id, username, role, branchId FROM users")->fetchAll(),
+            'ledgers' => $pdo->query("SELECT * FROM ledgers")->fetchAll(),
+            'vouchers' => $pdo->query("SELECT * FROM vouchers")->fetchAll(),
+            'entries' => $pdo->query("SELECT * FROM voucher_entries")->fetchAll(),
+            'logs' => $pdo->query("SELECT * FROM audit_logs")->fetchAll(),
+            'timestamp' => date('c')
+        ];
+        header('Content-Type: application/json');
+        header('Content-Disposition: attachment; filename=tally_full_backup.json');
+        echo json_encode($data, JSON_PRETTY_PRINT);
+        exit;
+
     default:
         http_response_code(404);
         echo json_encode(['error' => 'Endpoint not found', 'path' => $path]);
