@@ -22,6 +22,8 @@ import VoucherScreen from './components/VoucherScreen';
 import LedgerScreen from './components/LedgerScreen';
 import ReportsScreen from './components/ReportsScreen';
 import StockScreen from './components/StockScreen';
+import DayBookScreen from './components/DayBookScreen';
+import TrialBalanceScreen from './components/TrialBalanceScreen';
 
 type MenuOption = {
   id: string;
@@ -39,7 +41,7 @@ const GATEWAY_MENU: MenuOption[] = [
   { id: 'vouchers', label: 'Vouchers', key: 'V', icon: <Receipt className="w-4 h-4" />, shortcut: 'F4-F9' },
   { id: 'daybook', label: 'Day Book', key: 'K', icon: <BookOpen className="w-4 h-4" /> },
   { id: 'utilities', label: 'Utilities', key: 'U', icon: <Settings className="w-4 h-4" /> },
-  { id: 'banking', label: 'Banking', key: 'B', icon: <Database className="w-4 h-4" /> },
+  { id: 'banking', label: 'Ban king', key: 'B', icon: <Database className="w-4 h-4" /> },
   { id: 'reports', label: 'Reports', key: 'R', icon: <FileText className="w-4 h-4" /> },
   { id: 'balance-sheet', label: 'Balance Sheet', key: 'B', icon: <LayoutDashboard className="w-4 h-4" /> },
   { id: 'pl-account', label: 'Profit & Loss A/c', key: 'P', icon: <Clock className="w-4 h-4" /> },
@@ -48,7 +50,7 @@ const GATEWAY_MENU: MenuOption[] = [
 ];
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'STOCK'>('GATEWAY');
+  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'STOCK' | 'DAYBOOK' | 'TRIAL'>('GATEWAY');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showCalculator, setShowCalculator] = useState(false);
@@ -76,8 +78,10 @@ export default function App() {
       const selectedId = GATEWAY_MENU[selectedIndex].id;
       if (selectedId === 'vouchers') setCurrentScreen('VOUCHER');
       if (selectedId === 'create') setCurrentScreen('LEDGER');
-      if (selectedId === 'reports' || selectedId === 'balance-sheet') setCurrentScreen('REPORTS');
+      if (selectedId === 'reports' || selectedId === 'balance-sheet' || selectedId === 'ratio-analysis') setCurrentScreen('REPORTS');
       if (selectedId === 'stock-summary') setCurrentScreen('STOCK');
+      if (selectedId === 'daybook') setCurrentScreen('DAYBOOK');
+      if (selectedId === 'masters') setCurrentScreen('TRIAL');
     }
   });
 
@@ -95,6 +99,8 @@ export default function App() {
   useHotkeys('p', () => setCurrentScreen('REPORTS')); // P&L
   useHotkeys('r', () => setCurrentScreen('REPORTS')); // Reports
   useHotkeys('s', () => setCurrentScreen('STOCK'));
+  useHotkeys('k', () => setCurrentScreen('DAYBOOK'));
+  useHotkeys('m', () => setCurrentScreen('TRIAL'));
   useHotkeys('ctrl+n', () => setShowCalculator(true));
 
   // Global Function Keys (Tally Style)
@@ -263,7 +269,10 @@ export default function App() {
                   <div className="w-1 h-6 bg-tally-teal"></div>
                   {currentScreen === 'VOUCHER' && 'Accounting Voucher Creation'}
                   {currentScreen === 'LEDGER' && 'Ledger Creation'}
-                  {currentScreen === 'REPORTS' && 'Reports'}
+                  {currentScreen === 'REPORTS' && 'Financial Reports'}
+                  {currentScreen === 'STOCK' && 'Stock Summary'}
+                  {currentScreen === 'DAYBOOK' && 'Day Book'}
+                  {currentScreen === 'TRIAL' && 'Trial Balance'}
                 </h1>
                 <button 
                   onClick={() => setCurrentScreen('GATEWAY')}
@@ -277,6 +286,8 @@ export default function App() {
               {currentScreen === 'LEDGER' && <LedgerScreen />}
               {currentScreen === 'REPORTS' && <ReportsScreen />}
               {currentScreen === 'STOCK' && <StockScreen />}
+              {currentScreen === 'DAYBOOK' && <DayBookScreen />}
+              {currentScreen === 'TRIAL' && <TrialBalanceScreen />}
             </div>
           </div>
         )}

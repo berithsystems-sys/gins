@@ -19,6 +19,17 @@ export default function VoucherScreen() {
 
   useEffect(() => {
     fetch('/api/ledgers').then(res => res.json()).then(data => setLedgers(data));
+    
+    // Internal Voucher Hotkeys
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === 'F5') setType('Payment');
+      if (event.key === 'F6') setType('Receipt');
+      if (event.key === 'F7') setType('Journal');
+      if (event.key === 'F8') setType('Sales');
+      if (event.key === 'F9') setType('Purchase');
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, []);
 
   const handleAddEntry = () => {
