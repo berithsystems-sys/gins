@@ -15,18 +15,18 @@ interface Voucher {
   amount: number;
 }
 
-export default function DayBookScreen() {
+export default function DayBookScreen({ branchId }: { branchId?: string }) {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/vouchers')
+    fetch(`/api/vouchers${branchId ? `?branchId=${branchId}` : ''}`)
       .then(res => res.json())
       .then(data => {
         setVouchers(data);
         setLoading(false);
       });
-  }, []);
+  }, [branchId]);
 
   return (
     <div className="space-y-4">

@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 
-export default function LedgerScreen() {
+export default function LedgerScreen({ branchId }: { branchId?: string }) {
   const [name, setName] = useState('');
   const [group, setGroup] = useState('Primary');
   const [openingBalance, setOpeningBalance] = useState('0');
@@ -16,7 +16,7 @@ export default function LedgerScreen() {
     const response = await fetch('/api/ledgers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, group, openingBalance: Number(openingBalance), balanceType }),
+      body: JSON.stringify({ name, group, openingBalance: Number(openingBalance), balanceType, branchId }),
     });
     if (response.ok) {
       alert('Ledger Created Successfully');

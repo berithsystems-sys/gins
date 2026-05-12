@@ -21,19 +21,20 @@ interface Voucher {
   }[];
 }
 
-export default function ReportsScreen() {
+export default function ReportsScreen({ branchId }: { branchId?: string }) {
   const [ledgers, setLedgers] = useState<Ledger[]>([]);
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
 
   useEffect(() => {
+    const query = branchId ? `?branchId=${branchId}` : '';
     Promise.all([
-      fetch('/api/ledgers').then(res => res.json()),
-      fetch('/api/vouchers').then(res => res.json())
+      fetch(`/api/ledgers${query}`).then(res => res.json()),
+      fetch(`/api/vouchers${query}`).then(res => res.json())
     ]).then(([l, v]) => {
       setLedgers(l);
       setVouchers(v);
     });
-  }, []);
+  }, [branchId]);
 
   const calculateBalance = (ledgerId: string) => {
     const ledger = ledgers.find(l => l.id === ledgerId);

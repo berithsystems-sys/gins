@@ -14,8 +14,53 @@ async function startServer() {
     res.json({ status: "ok", service: "Tally Prime ERP" });
   });
 
+  // Auth
+  app.post("/api/login", async (req, res) => {
+    const { username, password, code } = req.body;
+    const db = await getDB();
+    const user = db.users.find(u => u.username === username && u.password === password);
+    
+    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+    
+    if (user.role === 'BRANCH') {
+      const branch = db.branches.find(b => b.id === user.branchId);
+      if (!branch || (code && branch.code !== code)) {
+        return res.status(401).json({ error: "Invalid Branch Code" });
+      }
+    }
+    
+    res.json(user);
+  });
+
+  // Branches (HQ Only)
+  app.get("/api/branches", async (req, res) => {
+    const db = await getDB();
+    res.json(db.branches);
+  });
+
+  app.post("/api/branches", async (req, res) => {
+    const db = await getDB();
+    const newBranch = { ...req.body, id: Date.now().toString() };
+    db.branches.push(newBranch);
+    await saveDB(db);
+    res.json(newBranch);
+  });
+
+  app.delete("/api/branches/:id", async (req, res) => {
+    const db = await getDB();
+    db.branches = db.branches.filter(b => b.id !== req.params.id);
+    db.ledgers = db.ledgers.filter(l => l.branchId !== req.params.id);
+    db.vouchers = db.vouchers.filter(v => v.branchId !== req.params.id);
+    await saveDB(db);
+    res.json({ success: true });
+  });
+
   app.get("/api/ledgers", async (req, res) => {
     const db = await getDB();
+    const { branchId } = req.query;
+    if (branchId) {
+      return res.json(db.ledgers.filter((l: any) => l.branchId === branchId));
+    }
     res.json(db.ledgers);
   });
 
@@ -29,7 +74,7 @@ async function startServer() {
 
   app.put("/api/ledgers/:id", async (req, res) => {
     const db = await getDB();
-    const index = db.ledgers.findIndex(l => l.id === req.params.id);
+    const index = db.ledgers.findIndex((l: any) => l.id === req.params.id);
     if (index !== -1) {
       db.ledgers[index] = { ...db.ledgers[index], ...req.body };
       await saveDB(db);
@@ -41,6 +86,10 @@ async function startServer() {
 
   app.get("/api/vouchers", async (req, res) => {
     const db = await getDB();
+    const { branchId } = req.query;
+    if (branchId) {
+      return res.json(db.vouchers.filter((v: any) => v.branchId === branchId));
+    }
     res.json(db.vouchers);
   });
 

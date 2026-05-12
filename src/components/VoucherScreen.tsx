@@ -10,7 +10,7 @@ interface Ledger {
   name: string;
 }
 
-export default function VoucherScreen() {
+export default function VoucherScreen({ branchId }: { branchId?: string }) {
   const [ledgers, setLedgers] = useState<Ledger[]>([]);
   const [type, setType] = useState<'Payment' | 'Receipt' | 'Journal' | 'Sales' | 'Purchase'>('Payment');
   const [date, setDate] = useState('2026-05-12');
@@ -18,7 +18,9 @@ export default function VoucherScreen() {
   const [entries, setEntries] = useState([{ ledgerId: '', amount: '', type: 'Dr' as 'Dr' | 'Cr' }]);
 
   useEffect(() => {
-    fetch('/api/ledgers').then(res => res.json()).then(data => setLedgers(data));
+    fetch(`/api/ledgers${branchId ? `?branchId=${branchId}` : ''}`)
+      .then(res => res.json())
+      .then(data => setLedgers(data));
     
     // Internal Voucher Hotkeys
     const handler = (event: KeyboardEvent) => {
@@ -30,7 +32,7 @@ export default function VoucherScreen() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [branchId]);
 
   const handleAddEntry = () => {
     setEntries([...entries, { ledgerId: '', amount: '', type: 'Dr' }]);
@@ -47,6 +49,7 @@ export default function VoucherScreen() {
         type, 
         narration, 
         amount: totalAmount,
+        branchId,
         entries: entries.map(e => ({ ...e, amount: Number(e.amount) }))
       }),
     });

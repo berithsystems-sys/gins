@@ -24,6 +24,15 @@ import ReportsScreen from './components/ReportsScreen';
 import StockScreen from './components/StockScreen';
 import DayBookScreen from './components/DayBookScreen';
 import TrialBalanceScreen from './components/TrialBalanceScreen';
+import LoginScreen from './components/LoginScreen';
+import HQDashboard from './components/HQDashboard';
+
+type User = {
+  id: string;
+  username: string;
+  role: 'HQ' | 'BRANCH';
+  branchId?: string;
+};
 
 type MenuOption = {
   id: string;
@@ -50,11 +59,21 @@ const GATEWAY_MENU: MenuOption[] = [
 ];
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'STOCK' | 'DAYBOOK' | 'TRIAL'>('GATEWAY');
+  const [user, setUser] = useState<User | null>(null);
+  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'STOCK' | 'DAYBOOK' | 'TRIAL' | 'HQ'>('GATEWAY');
+  const [selectedBranchId, setSelectedBranchId] = useState<string | undefined>(undefined);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showCalculator, setShowCalculator] = useState(false);
   const [calcInput, setCalcInput] = useState('');
+
+  useEffect(() => {
+    if (user?.role === 'HQ') setCurrentScreen('HQ');
+    else if (user?.role === 'BRANCH') {
+      setCurrentScreen('GATEWAY');
+      setSelectedBranchId(user.branchId);
+    }
+  }, [user]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -89,7 +108,8 @@ export default function App() {
     if (showCalculator) {
       setShowCalculator(false);
     } else {
-      setCurrentScreen('GATEWAY');
+      if (user?.role === 'HQ') setCurrentScreen('HQ');
+      else setCurrentScreen('GATEWAY');
     }
   });
 
@@ -102,6 +122,7 @@ export default function App() {
   useHotkeys('k', () => setCurrentScreen('DAYBOOK'));
   useHotkeys('m', () => setCurrentScreen('TRIAL'));
   useHotkeys('ctrl+n', () => setShowCalculator(true));
+  useHotkeys('alt+f1', () => setUser(null)); // Logout
 
   // Global Function Keys (Tally Style)
   useHotkeys('f2', () => alert('Date: 12-May-2026'));
@@ -126,6 +147,8 @@ export default function App() {
   useHotkeys('f6', () => { if (currentScreen === 'VOUCHER') alert('Receipt Mode'); });
   useHotkeys('f7', () => { if (currentScreen === 'VOUCHER') alert('Journal Mode'); });
 
+  if (!user) return <LoginScreen onLogin={setUser} />;
+
   return (
     <div className="flex flex-col h-screen bg-tally-bg overflow-hidden">
       {/* Top Header Bar */}
@@ -135,7 +158,7 @@ export default function App() {
             <span><u>K</u>: Company</span>
             <span><u>Y</u>: Data</span>
             <span><u>Z</u>: Exchange</span>
-            <span className="bg-white/20 px-2 rounded font-bold cursor-pointer" onClick={() => setCurrentScreen('GATEWAY')}>G: Go To</span>
+            <span className="bg-white/20 px-2 rounded font-bold cursor-pointer" onClick={() => user.role === 'HQ' ? setCurrentScreen('HQ') : setCurrentScreen('GATEWAY')}>G: Go To</span>
             <span><u>O</u>: Import</span>
             <span><u>E</u>: Export</span>
             <span><u>M</u>: E-mail</span>
@@ -143,21 +166,21 @@ export default function App() {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-full bg-blue-400"></div>
-            <span>Cloud Enabled</span>
+          <div className="flex items-center gap-2">
+            <span className="opacity-70">User: {user.username}</span>
+            <span className="bg-red-500/20 px-2 rounded text-[10px] font-bold">{user.role}</span>
           </div>
-          <button className="opacity-80 hover:opacity-100">F1: Help</button>
+          <button className="opacity-80 hover:opacity-100" onClick={() => setUser(null)}>Alt+F1: Logout</button>
         </div>
       </header>
 
       {/* Secondary Ribbon */}
       <div className="bg-tally-teal text-white h-[30px] flex items-center px-4 justify-between border-b border-tally-hotkey">
         <div className="flex gap-8 text-[13px] font-semibold">
-          <span>Gateway of Tally</span>
+          <span>{user.role === 'HQ' ? 'HQ Administration' : 'Gateway of Tally'}</span>
         </div>
         <div className="text-[12px] opacity-80 italic">
-          ABC TRADING CO. (2024-25)
+          {user.role === 'HQ' ? 'Global Controller' : 'Branch Church'} (2024-25)
         </div>
       </div>
 
@@ -182,7 +205,9 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {currentScreen === 'GATEWAY' ? (
+        {currentScreen === 'HQ' ? (
+          <HQDashboard onSelectBranch={(id) => { setSelectedBranchId(id); setCurrentScreen('GATEWAY'); }} />
+        ) : currentScreen === 'GATEWAY' ? (
           <>
             {/* Left Side: Current Status */}
             <section className="w-[35%] border-r border-teal-200 p-4 bg-transparent flex flex-col gap-6">
@@ -193,30 +218,32 @@ export default function App() {
                 </div>
                 <div className="flex flex-col text-right">
                   <span className="text-[10px] uppercase opacity-60">Current Date</span>
-                  <span className="text-[13px] font-bold">Tuesday, 12-May-2026</span>
+                  <span className="text-[13px] font-bold">{currentTime.toLocaleDateString()}</span>
                 </div>
               </div>
 
               <div className="flex flex-col">
-                <span className="text-[11px] font-bold uppercase mb-2 border-b border-teal-200">List of Selected Companies</span>
+                <span className="text-[11px] font-bold uppercase mb-2 border-b border-teal-200">Selected Church Branch</span>
                 <div className="flex justify-between items-center bg-white p-2 border border-teal-200">
                   <div className="flex flex-col">
-                    <span className="font-bold text-blue-900">ABC TRADING CO.</span>
-                    <span className="text-[10px] text-gray-500 italic">No Vouchers Entered</span>
+                    <span className="font-bold text-blue-900 uppercase">
+                      {user.role === 'HQ' ? 'Admin Drilldown' : 'Local Branch Access'}
+                    </span>
+                    <span className="text-[10px] text-gray-500 italic">Financial Year: 2024-25</span>
                   </div>
-                  <span className="text-[11px]">12-May-26</span>
+                  <span className="text-[11px] opacity-60">{selectedBranchId || 'N/A'}</span>
                 </div>
               </div>
 
               <div className="mt-auto bg-[#fff9c4] border border-[#fbc02d] p-3 text-[12px] text-gray-800">
-                <p className="font-bold mb-1">Accountant Notice:</p>
-                <p>Welcome to TallyPrime. Quick access key: <span className="font-bold text-red-600">G</span> for Go To.</p>
+                <p className="font-bold mb-1 uppercase">Notice:</p>
+                <p>Press <span className="font-bold text-red-600">G</span> for Go To. Use keyboard shortcuts for faster entry.</p>
               </div>
             </section>
 
             {/* Right Side: Gateway of Tally Menu */}
             <section className="flex-grow bg-[#f5f5f5] flex items-center justify-center relative">
-              <div className="gateway-box w-[320px] flex flex-col">
+              <div className="gateway-box w-[320px] flex flex-col shadow-xl">
                 <div className="bg-tally-teal text-white text-center py-1 text-[13px] font-bold uppercase tracking-wider">
                   Gateway of Tally
                 </div>
@@ -254,7 +281,7 @@ export default function App() {
                       </div>
                     </React.Fragment>
                   ))}
-                  <div className="border-t border-gray-300 pt-1 flex justify-between px-2 hover:bg-red-100 cursor-pointer mt-2">
+                  <div className="border-t border-gray-300 pt-1 flex justify-between px-2 hover:bg-red-100 cursor-pointer mt-2" onClick={() => setShowQuit(true)}>
                     <span><u>Q</u>uit</span>
                   </div>
                 </div>
@@ -275,19 +302,19 @@ export default function App() {
                   {currentScreen === 'TRIAL' && 'Trial Balance'}
                 </h1>
                 <button 
-                  onClick={() => setCurrentScreen('GATEWAY')}
-                  className="text-[11px] bg-tally-bg hover:bg-gray-200 px-3 py-1 border border-tally-teal/20 rounded font-bold"
+                  onClick={() => user.role === 'HQ' ? setCurrentScreen('HQ') : setCurrentScreen('GATEWAY')}
+                  className="text-[11px] bg-tally-bg hover:bg-gray-200 px-3 py-1 border border-tally-teal/20 rounded font-bold uppercase transition-colors"
                 >
                   ESC: Back
                 </button>
               </div>
 
-              {currentScreen === 'VOUCHER' && <VoucherScreen />}
-              {currentScreen === 'LEDGER' && <LedgerScreen />}
-              {currentScreen === 'REPORTS' && <ReportsScreen />}
-              {currentScreen === 'STOCK' && <StockScreen />}
-              {currentScreen === 'DAYBOOK' && <DayBookScreen />}
-              {currentScreen === 'TRIAL' && <TrialBalanceScreen />}
+              {currentScreen === 'VOUCHER' && <VoucherScreen branchId={selectedBranchId} />}
+              {currentScreen === 'LEDGER' && <LedgerScreen branchId={selectedBranchId} />}
+              {currentScreen === 'REPORTS' && <ReportsScreen branchId={selectedBranchId} />}
+              {currentScreen === 'STOCK' && <StockScreen branchId={selectedBranchId} />}
+              {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} />}
+              {currentScreen === 'TRIAL' && <TrialBalanceScreen branchId={selectedBranchId} />}
             </div>
           </div>
         )}
@@ -295,7 +322,7 @@ export default function App() {
         {/* Sidebar Actions */}
         <aside className="w-[180px] bg-tally-teal text-white flex flex-col border-l border-tally-hotkey">
           <div className="hotkey-btn" onClick={() => alert('Date')}><span>F2: Date</span></div>
-          <div className="hotkey-btn" onClick={() => alert('Company')}><span>F3: Company</span></div>
+          <div className="hotkey-btn" onClick={() => alert('Branch Selection')}><span>F3: Branch</span></div>
           <div className="h-4 bg-black/10"></div>
           <div className="hotkey-btn" onClick={() => setCurrentScreen('VOUCHER')}><span>F4: Contra</span></div>
           <div className="hotkey-btn" onClick={() => setCurrentScreen('VOUCHER')}><span>F5: Payment</span></div>
@@ -307,7 +334,7 @@ export default function App() {
           <div className="h-4 bg-black/10"></div>
           <div className="hotkey-btn opacity-60"><span>F11: Features</span></div>
           <div className="hotkey-btn opacity-60"><span>F12: Configure</span></div>
-          <div className="mt-auto bg-[#002e3a] p-2 text-[10px] text-center italic">
+          <div className="mt-auto bg-[#001c24] p-2 text-[10px] text-center italic border-t border-white/5">
             {currentTime.toLocaleTimeString()}
           </div>
         </aside>
@@ -318,9 +345,9 @@ export default function App() {
         <AnimatePresence>
           {showCalculator && (
             <motion.div 
-              initial={{ y: 100 }}
+              initial={{ y: 200 }}
               animate={{ y: 0 }}
-              exit={{ y: 100 }}
+              exit={{ y: 200 }}
               className="absolute bottom-6 right-2 w-72 bg-tally-teal border-2 border-white shadow-2xl p-2 z-50 overflow-hidden"
             >
               <div className="flex justify-between text-[10px] text-white font-bold mb-1">
@@ -337,7 +364,10 @@ export default function App() {
                     onClick={() => {
                       if (char === 'C') setCalcInput('');
                       else if (char === '=') {
-                        try { setCalcInput(eval(calcInput).toString()); } catch { setCalcInput('Error'); }
+                        try { 
+                          // eslint-disable-next-line no-eval
+                          setCalcInput(eval(calcInput).toString()); 
+                        } catch { setCalcInput('Error'); }
                       }
                       else setCalcInput(prev => prev + char);
                     }}
@@ -352,15 +382,15 @@ export default function App() {
         </AnimatePresence>
 
         <div className="h-[24px] bg-tally-status text-white text-[11px] flex items-center px-2 justify-between">
-          <div className="flex gap-4">
-            <span className="font-bold">TALLY PRIME</span>
+          <div className="flex gap-4 uppercase font-bold tracking-tight">
+            <span>TALLY PRIME CLONE</span>
             <span className="opacity-50">|</span>
             <span>Rel. 4.0</span>
             <span className="opacity-50">|</span>
-            <span className="text-tally-accent font-bold">Educational Mode</span>
+            <span className="text-tally-accent">Church Multi-Branch ERP</span>
           </div>
           <div className="flex gap-4 items-center">
-            <span className="opacity-70">C:\TallyPrime\Data\10001</span>
+            <span className="opacity-70 uppercase">Data Path: DB/JSON/STORE</span>
             <span 
               className={`bg-white/10 px-2 rounded cursor-pointer ${showCalculator ? 'bg-tally-accent text-black' : ''}`}
               onClick={() => setShowCalculator(!showCalculator)}
