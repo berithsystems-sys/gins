@@ -126,6 +126,15 @@ switch ($path) {
             $stmt = $pdo->prepare("INSERT INTO branches (id, code, name, location) VALUES (?,?,?,?)");
             $stmt->execute([$input['id'], $input['code'], $input['name'], $input['location']]);
             echo json_encode($input);
+        } elseif ($method === 'DELETE') {
+            // Handle /api/branches/123 -> $path is 'branches/123'
+            $parts = explode('/', $_GET['request']);
+            $id = $parts[1] ?? null;
+            if ($id) {
+                $stmt = $pdo->prepare("DELETE FROM branches WHERE id = ?");
+                $stmt->execute([$id]);
+                echo json_encode(['success' => true]);
+            }
         }
         break;
 
