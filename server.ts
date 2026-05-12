@@ -28,8 +28,35 @@ async function startServer() {
         return res.status(401).json({ error: "Invalid Branch Code" });
       }
     }
+
+    // Log the login
+    db.auditLogs.unshift({
+      id: Date.now().toString(),
+      userId: user.id,
+      username: user.username,
+      action: 'LOGIN',
+      timestamp: new Date().toISOString(),
+      branchId: user.branchId,
+      details: `Successful login from ${user.role}`
+    });
+    // Keep only last 1000 logs
+    if (db.auditLogs.length > 1000) db.auditLogs.pop();
+    await saveDB(db);
     
     res.json(user);
+  });
+
+  // Audit Logs (HQ Only)
+  app.get("/api/audit", async (req, res) => {
+    const db = await getDB();
+    res.json(db.auditLogs);
+  });
+
+  app.get("/api/export", async (req, res) => {
+    const db = await getDB();
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', 'attachment; filename=database.json');
+    res.send(JSON.stringify(db, null, 2));
   });
 
   // Branches (HQ Only)

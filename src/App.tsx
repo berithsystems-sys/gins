@@ -7,15 +7,17 @@ import React, { useState, useEffect } from 'react';
 import { useHotkeys } from './hooks/useHotkeys';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  LayoutDashboard, 
+  Building2 as Building, 
   BookOpen, 
   Receipt, 
   Settings, 
   Database, 
   FileText,
   Package,
-  Users,
-  ChevronRight,
+  PlusCircle,
+  BarChart3,
+  ShieldCheck,
+  LayoutDashboard,
   Clock
 } from 'lucide-react';
 import VoucherScreen from './components/VoucherScreen';
@@ -26,6 +28,8 @@ import DayBookScreen from './components/DayBookScreen';
 import TrialBalanceScreen from './components/TrialBalanceScreen';
 import LoginScreen from './components/LoginScreen';
 import HQDashboard from './components/HQDashboard';
+import AnalyticsScreen from './components/AnalyticsScreen';
+import AuditLogScreen from './components/AuditLogScreen';
 
 type User = {
   id: string;
@@ -43,32 +47,44 @@ type MenuOption = {
 };
 
 const GATEWAY_MENU: MenuOption[] = [
-  { id: 'masters', label: 'Masters', key: 'M', icon: <Database className="w-4 h-4" /> },
-  { id: 'create', label: 'Create', key: 'C', icon: <Settings className="w-4 h-4" />, shortcut: 'Alt+C' },
-  { id: 'alter', label: 'Alter', key: 'A', icon: <FileText className="w-4 h-4" />, shortcut: 'Alt+A' },
-  { id: 'transactions', label: 'Transactions', key: 'T', icon: <Receipt className="w-4 h-4" /> },
+  { id: 'masters', label: 'Masters (Trial Balance)', key: 'M', icon: <Building className="w-4 h-4" /> },
+  { id: 'create', label: 'Create Ledger', key: 'C', icon: <PlusCircle className="w-4 h-4" />, shortcut: 'Alt+C' },
   { id: 'vouchers', label: 'Vouchers', key: 'V', icon: <Receipt className="w-4 h-4" />, shortcut: 'F4-F9' },
   { id: 'daybook', label: 'Day Book', key: 'K', icon: <BookOpen className="w-4 h-4" /> },
-  { id: 'utilities', label: 'Utilities', key: 'U', icon: <Settings className="w-4 h-4" /> },
-  { id: 'banking', label: 'Ban king', key: 'B', icon: <Database className="w-4 h-4" /> },
-  { id: 'reports', label: 'Reports', key: 'R', icon: <FileText className="w-4 h-4" /> },
-  { id: 'balance-sheet', label: 'Balance Sheet', key: 'B', icon: <LayoutDashboard className="w-4 h-4" /> },
-  { id: 'pl-account', label: 'Profit & Loss A/c', key: 'P', icon: <Clock className="w-4 h-4" /> },
+  { id: 'reports', label: 'Financial Reports', key: 'R', icon: <FileText className="w-4 h-4" /> },
+  { id: 'analytics', label: 'Visual Analytics', key: 'A', icon: <BarChart3 className="w-4 h-4" /> },
+  { id: 'audit', label: 'Audit Logs', key: 'L', icon: <ShieldCheck className="w-4 h-4" /> },
   { id: 'stock-summary', label: 'Stock Summary', key: 'S', icon: <Package className="w-4 h-4" /> },
-  { id: 'ratio-analysis', label: 'Ratio Analysis', key: 'O', icon: <FileText className="w-4 h-4" /> },
+  { id: 'backup', label: 'Manual Backup', key: 'B', icon: <Database className="w-4 h-4" /> },
+  { id: 'utilities', label: 'Utilities', key: 'U', icon: <Settings className="w-4 h-4" /> },
 ];
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'STOCK' | 'DAYBOOK' | 'TRIAL' | 'HQ'>('GATEWAY');
+  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'STOCK' | 'DAYBOOK' | 'TRIAL' | 'HQ' | 'ANALYTICS' | 'AUDIT'>('GATEWAY');
   const [selectedBranchId, setSelectedBranchId] = useState<string | undefined>(undefined);
+  const [branches, setBranches] = useState<any[]>([]);
+  const [allLedgers, setAllLedgers] = useState<any[]>([]);
+  const [allVouchers, setAllVouchers] = useState<any[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showCalculator, setShowCalculator] = useState(false);
   const [calcInput, setCalcInput] = useState('');
 
   useEffect(() => {
-    if (user?.role === 'HQ') setCurrentScreen('HQ');
+    if (user?.role === 'HQ') {
+      setCurrentScreen('HQ');
+      // Fetch global data for analytics
+      Promise.all([
+        fetch('/api/branches').then(res => res.json()),
+        fetch('/api/ledgers').then(res => res.json()),
+        fetch('/api/vouchers').then(res => res.json())
+      ]).then(([b, l, v]) => {
+        setBranches(b);
+        setAllLedgers(l);
+        setAllVouchers(v);
+      });
+    }
     else if (user?.role === 'BRANCH') {
       setCurrentScreen('GATEWAY');
       setSelectedBranchId(user.branchId);
@@ -97,10 +113,24 @@ export default function App() {
       const selectedId = GATEWAY_MENU[selectedIndex].id;
       if (selectedId === 'vouchers') setCurrentScreen('VOUCHER');
       if (selectedId === 'create') setCurrentScreen('LEDGER');
-      if (selectedId === 'reports' || selectedId === 'balance-sheet' || selectedId === 'ratio-analysis') setCurrentScreen('REPORTS');
+      if (selectedId === 'reports') setCurrentScreen('REPORTS');
       if (selectedId === 'stock-summary') setCurrentScreen('STOCK');
       if (selectedId === 'daybook') setCurrentScreen('DAYBOOK');
       if (selectedId === 'masters') setCurrentScreen('TRIAL');
+      if (selectedId === 'analytics') setCurrentScreen('ANALYTICS');
+      if (selectedId === 'audit') setCurrentScreen('AUDIT');
+      if (selectedId === 'backup') {
+        const confirmBackup = window.confirm("Download a local backup of the entire church database?");
+        if (confirmBackup) {
+          fetch('/api/export').then(res => res.blob()).then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `tally_church_backup_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+          });
+        }
+      }
     }
   });
 
@@ -115,12 +145,12 @@ export default function App() {
 
   useHotkeys('v', () => setCurrentScreen('VOUCHER'));
   useHotkeys('c', () => setCurrentScreen('LEDGER'));
-  useHotkeys('b', () => setCurrentScreen('REPORTS'));
-  useHotkeys('p', () => setCurrentScreen('REPORTS')); // P&L
   useHotkeys('r', () => setCurrentScreen('REPORTS')); // Reports
   useHotkeys('s', () => setCurrentScreen('STOCK'));
   useHotkeys('k', () => setCurrentScreen('DAYBOOK'));
   useHotkeys('m', () => setCurrentScreen('TRIAL'));
+  useHotkeys('a', () => setCurrentScreen('ANALYTICS'));
+  useHotkeys('l', () => setCurrentScreen('AUDIT'));
   useHotkeys('ctrl+n', () => setShowCalculator(true));
   useHotkeys('alt+f1', () => setUser(null)); // Logout
 
@@ -251,9 +281,9 @@ export default function App() {
                   {GATEWAY_MENU.map((item, index) => (
                     <React.Fragment key={item.id}>
                       {index === 0 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Masters</div>}
-                      {index === 3 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Transactions</div>}
-                      {index === 6 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Utilities</div>}
-                      {index === 8 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Reports</div>}
+                      {index === 2 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Transactions</div>}
+                      {index === 5 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Reports</div>}
+                      {index === 8 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Utilities</div>}
                       
                       <div
                         id={`menu-item-${index}`}
@@ -300,6 +330,8 @@ export default function App() {
                   {currentScreen === 'STOCK' && 'Stock Summary'}
                   {currentScreen === 'DAYBOOK' && 'Day Book'}
                   {currentScreen === 'TRIAL' && 'Trial Balance'}
+                  {currentScreen === 'ANALYTICS' && 'Visual Data Analytics'}
+                  {currentScreen === 'AUDIT' && 'Security Audit Dashboard'}
                 </h1>
                 <button 
                   onClick={() => user.role === 'HQ' ? setCurrentScreen('HQ') : setCurrentScreen('GATEWAY')}
@@ -315,6 +347,8 @@ export default function App() {
               {currentScreen === 'STOCK' && <StockScreen branchId={selectedBranchId} />}
               {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} />}
               {currentScreen === 'TRIAL' && <TrialBalanceScreen branchId={selectedBranchId} />}
+              {currentScreen === 'ANALYTICS' && <AnalyticsScreen branches={branches} ledgers={allLedgers} vouchers={allVouchers} />}
+              {currentScreen === 'AUDIT' && <AuditLogScreen />}
             </div>
           </div>
         )}

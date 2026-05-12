@@ -42,11 +42,22 @@ export interface Voucher {
   }[];
 }
 
+export interface AuditLog {
+  id: string;
+  userId: string;
+  username: string;
+  action: string;
+  timestamp: string;
+  branchId?: string;
+  details?: string;
+}
+
 interface DB {
   users: User[];
   branches: Branch[];
   ledgers: Ledger[];
   vouchers: Voucher[];
+  auditLogs: AuditLog[];
 }
 
 const initialData: DB = {
@@ -62,7 +73,8 @@ const initialData: DB = {
     { id: '1', name: 'Cash', group: 'Cash-in-hand', openingBalance: 0, balanceType: 'Dr', branchId: '101' },
     { id: '2', name: 'Tithe Collection', group: 'Direct Incomes', openingBalance: 0, balanceType: 'Cr', branchId: '101' }
   ],
-  vouchers: []
+  vouchers: [],
+  auditLogs: []
 };
 
 export async function getDB(): Promise<DB> {
