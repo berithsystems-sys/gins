@@ -59,8 +59,10 @@ if (file_exists('index.html')) {
     if (strpos($content, '<div id="root"></div>') !== false) {
         echo "React Root div found in index.html.<br>";
     }
-    if (strpos($content, 'href="/assets/') !== false || strpos($content, 'src="/assets/') !== false) {
-        echo "<span class='error'>[WARNING]</span> index.html uses absolute paths (starts with /). This might break in subfolders like /EBC_TALLY/.<br>";
+    if (strpos($content, 'src="./assets/') !== false) {
+        echo "<span class='success'>[OK]</span> index.html uses relative paths. Correct for builds.<br>";
+    } else {
+        echo "<span class='error'>[ERROR]</span> your index.html seems like the SOURCE file, not the BUILD file. Please upload the contents of the 'dist' folder.<br>";
     }
 } else {
     echo "<span class='error'>[CRITICAL]</span> No index.html found. The browser has nothing to render.";
