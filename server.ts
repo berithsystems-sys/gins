@@ -27,6 +27,18 @@ async function startServer() {
     res.json(newLedger);
   });
 
+  app.put("/api/ledgers/:id", async (req, res) => {
+    const db = await getDB();
+    const index = db.ledgers.findIndex(l => l.id === req.params.id);
+    if (index !== -1) {
+      db.ledgers[index] = { ...db.ledgers[index], ...req.body };
+      await saveDB(db);
+      res.json(db.ledgers[index]);
+    } else {
+      res.status(404).json({ error: "Ledger not found" });
+    }
+  });
+
   app.get("/api/vouchers", async (req, res) => {
     const db = await getDB();
     res.json(db.vouchers);
