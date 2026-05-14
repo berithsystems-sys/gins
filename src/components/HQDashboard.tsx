@@ -14,7 +14,7 @@ interface HQDashboardProps {
 export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
   const [branches, setBranches] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
-  const [newBranch, setNewBranch] = useState({ name: '', code: '', location: '' });
+  const [newBranch, setNewBranch] = useState({ name: '', code: '', location: '', email: '', password: '' });
 
   useEffect(() => {
     fetch('api/branches').then(res => res.json()).then(data => setBranches(data));
@@ -28,9 +28,13 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
       body: JSON.stringify(newBranch)
     });
     const data = await res.json();
-    setBranches([...branches, data]);
-    setShowAdd(false);
-    setNewBranch({ name: '', code: '', location: '' });
+    if (res.ok) {
+      setBranches([...branches, data]);
+      setShowAdd(false);
+      setNewBranch({ name: '', code: '', location: '', email: '', password: '' });
+    } else {
+      alert(data.error || 'Failed to create branch');
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -170,6 +174,30 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
                     className="w-full border-2 p-3 outline-none focus:border-tally-teal uppercase text-sm font-bold mt-1"
                     value={newBranch.location}
                     onChange={e => setNewBranch({...newBranch, location: e.target.value})}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Admin Email</label>
+                  <input 
+                    type="email" 
+                    placeholder="branch@church.com" 
+                    className="w-full border-2 p-3 outline-none focus:border-tally-teal text-sm font-bold mt-1"
+                    value={newBranch.email}
+                    onChange={e => setNewBranch({...newBranch, email: e.target.value})}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Admin Password</label>
+                  <input 
+                    type="password" 
+                    placeholder="••••••••" 
+                    className="w-full border-2 p-3 outline-none focus:border-tally-teal text-sm font-bold mt-1"
+                    value={newBranch.password}
+                    onChange={e => setNewBranch({...newBranch, password: e.target.value})}
                     required
                   />
                 </div>

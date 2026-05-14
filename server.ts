@@ -155,9 +155,30 @@ async function startServer() {
   });
 
   app.post("/api/branches", async (req, res) => {
-    const newBranch = { ...req.body, id: Date.now().toString() };
-    await db('branches').insert(newBranch);
-    res.json(newBranch);
+    const { email, password, ...branchData } = req.body;
+    const branchId = Date.now().toString();
+    const newBranch = { ...branchData, id: branchId };
+    
+    try {
+      await db.transaction(async (trx) => {
+        // Create branch
+        await trx('branches').insert(newBranch);
+        
+        // Create corresponding user
+        await trx('users').insert({
+          id: Date.now().toString() + "_user",
+          username: email,
+          password: password,
+          role: 'BRANCH',
+          branchId: branchId
+        });
+      });
+      
+      res.json(newBranch);
+    } catch (err: any) {
+      console.error("Failed to create branch and user:", err);
+      res.status(500).json({ error: "Failed to create branch", details: err.message });
+    }
   });
 
   app.delete("/api/branches/:id", async (req, res) => {
