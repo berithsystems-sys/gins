@@ -24,6 +24,39 @@ async function startServer() {
     res.json({ status: "ok", service: "Tally Prime ERP", db: db.client.config.client });
   });
 
+  // Debug endpoint (Developer only)
+  app.get("/api/debug", async (req, res) => {
+    try {
+      const users = await db('users').select('username', 'role', 'branchId');
+      const branches = await db('branches').select('*');
+      res.json({
+        status: "success",
+        database: {
+          client: db.client.config.client,
+          host: (db.client.config.connection as any).host || 'local',
+          dbName: (db.client.config.connection as any).database || 'sqlite'
+        },
+        counts: {
+          users: users.length,
+          branches: branches.length
+        },
+        users,
+        branches,
+        env: {
+          NODE_ENV: process.env.NODE_ENV,
+          DB_CLIENT: process.env.DB_CLIENT,
+          DB_HOST: process.env.DB_HOST ? `${process.env.DB_HOST.substring(0, 3)}...` : 'not set'
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ 
+        status: "error", 
+        message: err.message,
+        hint: "This often happens if the database connection failed."
+      });
+    }
+  });
+
   // Auth
   app.post("/api/login", async (req, res) => {
     const { username, password, code } = req.body;

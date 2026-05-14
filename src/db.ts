@@ -103,13 +103,18 @@ export async function initDB() {
   }
 
   // Ensure initial users exist (Seed even if table existed but was empty)
-  const userCount = await db('users').count('id as count').first();
-  if (userCount && (userCount as any).count === 0) {
-    console.log("Seeding default users...");
-    await db('users').insert([
-      { id: '1', username: 'admin@tally.com', password: 'password', role: 'HQ' },
-      { id: '2', username: 'branch@tally.com', password: 'password', role: 'BRANCH', branchId: '101' }
-    ]);
+  try {
+    const existingUsers = await db('users').select('id').limit(1);
+    if (existingUsers.length === 0) {
+      console.log("Seeding default users...");
+      await db('users').insert([
+        { id: '1', username: 'admin@tally.com', password: 'password', role: 'HQ' },
+        { id: '2', username: 'branch@tally.com', password: 'password', role: 'BRANCH', branchId: '101' }
+      ]);
+      console.log("Default users seeded.");
+    }
+  } catch (err) {
+    console.error("Error during user seeding:", err);
   }
 
   // Ledgers
