@@ -16,7 +16,7 @@ async function startServer() {
   console.log("Starting server process...");
   
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
+  const PORT = 3000;
   const HOST = '0.0.0.0';
 
   console.log(`Port Config: ${PORT} (from env.PORT: ${process.env.PORT})`);
@@ -236,10 +236,7 @@ async function startServer() {
   }
 
   app.listen(PORT, HOST, async () => {
-    console.log(`>>> Tally ERP Server is live!`);
-    console.log(`>>> Local: http://localhost:${PORT}`);
-    console.log(`>>> Network: http://${HOST}:${PORT}`);
-    console.log(`>>> Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`>>> Tally ERP Server is live on port ${PORT}`);
 
     try {
       console.log("Initializing database connection in background...");

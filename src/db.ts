@@ -54,47 +54,21 @@ export interface AuditLog {
   details?: string;
 }
 
-console.log('--- Environment Check ---');
-console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('DB_CLIENT:', process.env.DB_CLIENT);
-console.log('PORT:', process.env.PORT);
-console.log('-------------------------');
-
 // Knex Configuration
 const dbUser = process.env.DB_USER || process.env.DB_USERNAME;
 const dbName = process.env.DB_NAME || process.env.DB_DATABASE;
 const dbHost = process.env.DB_HOST;
-let dbClient = process.env.DB_CLIENT || 'sqlite3';
+let dbClient = process.env.DB_CLIENT || 'better-sqlite3';
 
-// Validate DB_CLIENT - force sqlite3 if mysql2 isn't explicitly and correctly set
-if (dbClient !== 'mysql2' && dbClient !== 'sqlite3') {
-  console.warn(`WARNING: Invalid DB_CLIENT "${dbClient}" detected. Falling back to sqlite3.`);
-  dbClient = 'sqlite3';
+// AI Studio environment check: default to better-sqlite3 if mysql2 isn't remote
+if (dbClient !== 'mysql2') {
+  dbClient = 'better-sqlite3';
 }
 
-// FORCE SQLite if host is localhost/127.0.0.1 in AI Studio environment
+// FORCE better-sqlite3 if host is localhost/127.0.0.1 in AI Studio environment
 if (dbClient === 'mysql2' && (!dbHost || dbHost === 'localhost' || dbHost === '127.0.0.1' || dbHost === '::1')) {
-  console.warn('CRITICAL: Detected attempt to use MySQL on localhost. Falling back to SQLite for stability.');
-  dbClient = 'sqlite3';
+  dbClient = 'better-sqlite3';
 }
-
-console.log('--- Database Config Debug ---');
-console.log('Final Client Choice:', dbClient);
-if (dbClient === 'sqlite3') {
-  console.log('INFO: Using SQLite3 (database.sqlite)');
-} else {
-  if (!dbHost || dbHost === 'localhost' || dbHost === '127.0.0.1' || dbHost === '::1') {
-    console.warn('CRITICAL WARNING: Connecting to MySQL on localhost/127.0.0.1/::1.');
-    console.warn('This environment (AI Studio) DOES NOT have its own MySQL server.');
-    console.warn('If your database is on Hostinger, you MUST use their Remote MySQL Hostname.');
-    console.warn('Example: mysql.hostinger.com or your server IP.');
-  }
-  console.log('Host:', dbHost || '127.0.0.1 (Local - Likely will fail for remote DB)');
-  console.log('User:', dbUser);
-  console.log('Database:', dbName);
-  console.log('Port:', process.env.DB_PORT || 3306);
-}
-console.log('-----------------------------');
 
 export const db = knex({
   client: dbClient,
