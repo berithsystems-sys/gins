@@ -38,7 +38,10 @@ export interface Ledger {
   openingBalance: number;
   balanceType: 'Dr' | 'Cr';
   branchId: string;
+  gstType?: string;
   gstin?: string;
+  email?: string;
+  pan?: string;
 }
 
 export interface CostCentre {
@@ -221,6 +224,9 @@ export async function initDB() {
       table.float('openingBalance').defaultTo(0);
       table.string('balanceType').notNullable();
       table.string('gstin');
+      table.string('gstType');
+      table.string('email');
+      table.string('pan');
       table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
     });
     // Seed initial ledgers
@@ -270,5 +276,20 @@ export async function initDB() {
       table.string('branchId');
       table.string('details');
     });
+  }
+
+  // Migration for new columns if table already existed
+  try {
+    const columns = await db('ledgers').columnInfo();
+    if (!columns.gstType) {
+      await db.schema.table('ledgers', (table) => {
+        table.string('gstType');
+        table.string('email');
+        table.string('pan');
+      });
+      console.log("Migrated ledgers table with new columns.");
+    }
+  } catch (e) {
+    console.error("Migration failed:", e);
   }
 }

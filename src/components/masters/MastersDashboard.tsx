@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import AccountGroupScreen from './AccountGroupScreen';
 import LedgerScreen from '../LedgerScreen';
+import CostCentreScreen from './CostCentreScreen';
+import EmployeeScreen from './EmployeeScreen';
 
 type MasterTab = 'ACCOUNT_GROUPS' | 'LEDGERS' | 'COST_CENTRES' | 'EMPLOYEES';
 
@@ -57,8 +59,8 @@ export default function MastersDashboard({ branchId }: { branchId?: string }) {
         
         {activeTab === 'ACCOUNT_GROUPS' && <AccountGroupScreen branchId={branchId} />}
         {activeTab === 'LEDGERS' && <LedgerScreen branchId={branchId} />}
-        {activeTab === 'COST_CENTRES' && <div className="text-xs italic text-gray-400">Cost Centres screen placeholder</div>}
-        {activeTab === 'EMPLOYEES' && <div className="text-xs italic text-gray-400">Payroll screen placeholder</div>}
+        {activeTab === 'COST_CENTRES' && <CostCentreScreen branchId={branchId} />}
+        {activeTab === 'EMPLOYEES' && <EmployeeScreen branchId={branchId} />}
       </div>
     </div>
   );

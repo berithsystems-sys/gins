@@ -30,6 +30,8 @@ import HQDashboard from './components/HQDashboard';
 import AnalyticsScreen from './components/AnalyticsScreen';
 import AuditLogScreen from './components/AuditLogScreen';
 import MastersDashboard from './components/masters/MastersDashboard';
+import CompanyScreen from './components/CompanyScreen';
+import DataScreen from './components/DataScreen';
 
 type User = {
   id: string;
@@ -415,6 +417,95 @@ export default function App() {
               {currentScreen === 'AUDIT' && <AuditLogScreen branchId={selectedBranchId} />}
               {currentScreen === 'BANKING' && <div className="p-10 text-center font-bold text-tally-teal uppercase italic">Banking Module - Coming Soon</div>}
               {currentScreen === 'PAYROLL' && <div className="p-10 text-center font-bold text-tally-teal uppercase italic">Payroll Module - Coming Soon</div>}
+              {currentScreen === 'COMPANY' && <CompanyScreen branchId={selectedBranchId} />}
+              {currentScreen === 'DATA' && <DataScreen />}
+              {currentScreen === 'IMPORT' && (
+                <div className="p-10 space-y-6 max-w-xl mx-auto">
+                  <h3 className="text-lg font-bold uppercase text-tally-teal border-b-2 border-tally-teal mb-4">Import Data (Masters/Transactions)</h3>
+                  <div className="space-y-4 border p-6 bg-white shadow">
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Source File Path (Local/.xml)</label>
+                      <input type="text" className="w-full border p-2 text-xs focus:border-tally-teal outline-none" placeholder="C:\TallyPrime\Import\Masters.xml" />
+                    </div>
+                    <div className="space-y-2">
+                       <div className="text-[10px] font-bold text-gray-400 uppercase">Behavior for duplicates</div>
+                       <select className="w-full border p-2 text-xs outline-none">
+                         <option>Ignore Duplicates</option>
+                         <option>Modify with New Data</option>
+                         <option>Force Import (Overwrite)</option>
+                       </select>
+                    </div>
+                    <button className="w-full bg-tally-teal text-white py-2 text-xs font-bold uppercase mt-4">Import Now</button>
+                  </div>
+                </div>
+              )}
+              {currentScreen === 'EXPORT' && (
+                <div className="p-10 space-y-6 max-w-xl mx-auto">
+                   <h3 className="text-lg font-bold uppercase text-tally-teal border-b-2 border-tally-teal mb-4">Export Configuration</h3>
+                   <div className="space-y-4 border p-6 bg-white shadow">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-400">FORMAT</label>
+                          <select className="w-full border p-2 text-xs outline-none">
+                             <option>XML (Data Interchange)</option>
+                             <option>Excel (Spreadsheet)</option>
+                             <option>PDF (Readable Document)</option>
+                             <option>JPEG (Image)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-400">DATA TO EXPORT</label>
+                          <select className="w-full border p-2 text-xs outline-none">
+                             <option>All Masters</option>
+                             <option>All Transactions</option>
+                             <option>Day Book Only</option>
+                             <option>Trial Balance</option>
+                          </select>
+                        </div>
+                      </div>
+                      <button className="w-full bg-tally-teal text-white py-2 text-xs font-bold uppercase mt-4">Send Export</button>
+                   </div>
+                </div>
+              )}
+              {currentScreen === 'PRINT' && (
+                <div className="p-20 text-center space-y-4">
+                   <div className="w-20 h-20 bg-tally-teal/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <FileText className="w-10 h-10 text-tally-teal" />
+                   </div>
+                   <h3 className="text-xl font-black uppercase text-tally-teal">Print Spooler</h3>
+                   <p className="text-xs text-gray-400 max-w-xs mx-auto italic">Generating printable buffers for all branch reports. Ensure your printer is connected via Tally Gateway.</p>
+                   <button onClick={() => window.print()} className="bg-tally-teal text-white px-10 py-2 text-xs font-bold uppercase shadow-xl mt-4">Execute Local Print</button>
+                </div>
+              )}
+              {currentScreen === 'GOTO' && (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+                  <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white w-[400px] border-4 border-tally-teal shadow-2xl overflow-hidden">
+                    <div className="bg-tally-teal text-white px-4 py-1 text-[10px] font-bold uppercase flex justify-between items-center">
+                       <span>Go To / Switch To</span>
+                       <button onClick={() => setCurrentScreen('GATEWAY')} className="hover:text-red-200">X</button>
+                    </div>
+                    <div className="p-2 space-y-1">
+                       <input autoFocus type="text" placeholder="Type name of report to go to..." className="w-full border-b-2 border-tally-teal p-2 text-sm outline-none bg-blue-50/50" />
+                       <div className="max-h-[300px] overflow-y-auto">
+                          {['Balance Sheet', 'Profit & Loss A/c', 'Trial Balance', 'Day Book', 'Cash/Bank Book', 'Stock Summary', 'Ratio Analysis'].map(item => (
+                            <div 
+                              key={item} 
+                              className="px-4 py-2 hover:bg-tally-teal hover:text-white cursor-pointer text-xs font-bold border-b border-gray-50 flex justify-between group"
+                              onClick={() => {
+                                if (item === 'Day Book') setCurrentScreen('DAYBOOK');
+                                if (item === 'Balance Sheet') setCurrentScreen('REPORTS');
+                                if (item === 'Trial Balance') setCurrentScreen('REPORTS');
+                              }}
+                            >
+                               <span>{item}</span>
+                               <span className="text-[10px] text-gray-300 group-hover:text-white/50 opacity-0 group-hover:opacity-100 italic">Jump To</span>
+                            </div>
+                          ))}
+                       </div>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
               {currentScreen === 'SETTINGS' && (
                 <div className="p-8 space-y-6">
                   <div className="border p-4 bg-gray-50">
