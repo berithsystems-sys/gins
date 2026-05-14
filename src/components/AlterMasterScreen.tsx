@@ -94,14 +94,14 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
     e.preventDefault();
     const items = getVisibleItems();
     setSelectedIndex(prev => Math.min(items.length - 1, prev + 1));
-  }, { enableOnFormTags: false }, [editingItem, activeType, expandedGroups, groups, ledgers, costCentres, employees]);
+  }, { enableOnFormTags: true }, [editingItem, activeType, expandedGroups, groups, ledgers, costCentres, employees]);
 
   useHotkeys('up', (e) => {
     if (editingItem) return;
     e.preventDefault();
     const items = getVisibleItems();
     setSelectedIndex(prev => Math.max(0, prev - 1));
-  }, { enableOnFormTags: false }, [editingItem, activeType, expandedGroups, groups, ledgers, costCentres, employees]);
+  }, { enableOnFormTags: true }, [editingItem, activeType, expandedGroups, groups, ledgers, costCentres, employees]);
 
   useHotkeys('enter', (e) => {
     if (editingItem) return;
@@ -115,7 +115,7 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
         setEditingItem(item.data);
       }
     }
-  }, { enableOnFormTags: false }, [selectedIndex, editingItem, activeType, expandedGroups, groups, ledgers, costCentres, employees]);
+  }, { enableOnFormTags: true }, [selectedIndex, editingItem, activeType, expandedGroups, groups, ledgers, costCentres, employees]);
 
   useHotkeys('esc', () => {
     if (editingItem) setEditingItem(null);

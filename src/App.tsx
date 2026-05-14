@@ -121,7 +121,7 @@ export default function App() {
     setCurrentScreen('GOTO');
     setGotoSearch('');
     setGotoHighlightedIdx(0);
-  });
+  }, { enableOnFormTags: true });
 
   const handleGotoSelect = (item: string) => {
     if (item === 'Day Book') setCurrentScreen('DAYBOOK');
@@ -133,6 +133,7 @@ export default function App() {
     else if (item === 'Admin Panel') setCurrentScreen('ADMIN');
     else if (item === 'Ratio Analysis') setCurrentScreen('RATIO');
     else if (item === 'Cash/Bank Book') setCurrentScreen('BANKING');
+    setCurrentScreen('GATEWAY'); // close goto after selection
   };
 
   useHotkeys('up', (e) => {
@@ -142,7 +143,7 @@ export default function App() {
       e.preventDefault();
       setGotoHighlightedIdx(prev => Math.max(0, prev - 1));
     }
-  }, { enableOnFormTags: true });
+  }, { enableOnFormTags: true }, [currentScreen]);
   
   useHotkeys('down', (e) => {
     if (currentScreen === 'GATEWAY') {
@@ -152,7 +153,7 @@ export default function App() {
       const filtered = getFilteredGotoOptions();
       setGotoHighlightedIdx(prev => Math.min(filtered.length - 1, prev + 1));
     }
-  }, { enableOnFormTags: true });
+  }, { enableOnFormTags: true }, [currentScreen, gotoSearch]);
 
   useHotkeys('enter', (e) => {
     if (currentScreen === 'GATEWAY') {
@@ -174,7 +175,7 @@ export default function App() {
         handleGotoSelect(filtered[gotoHighlightedIdx]);
       }
     }
-  }, { enableOnFormTags: true });
+  }, { enableOnFormTags: true }, [currentScreen, selectedIndex, gotoHighlightedIdx, gotoSearch]);
 
   const handleBack = () => {
     if (showCalculator) {
@@ -193,8 +194,12 @@ export default function App() {
     }
 
     if (currentScreen === 'GATEWAY') {
-      if (user?.role === 'HQ') setCurrentScreen('HQ');
-    } else if (['VOUCHER', 'LEDGER', 'ALTER', 'DAYBOOK', 'BANKING', 'BALANCE_SHEET', 'PL_ACCOUNT', 'RATIO', 'CHART', 'AUDIT', 'COMPANY', 'DATA', 'IMPORT', 'EXPORT', 'PRINT', 'EMAIL', 'SETTINGS', 'ADMIN'].includes(currentScreen)) {
+      // Do nothing on ESC in Gateway to stay in the same company as requested
+      // In Tally this would normally prompt "Quit? Yes/No"
+      return;
+    }
+
+    if (['VOUCHER', 'LEDGER', 'ALTER', 'DAYBOOK', 'BANKING', 'BALANCE_SHEET', 'PL_ACCOUNT', 'RATIO', 'CHART', 'AUDIT', 'COMPANY', 'DATA', 'IMPORT', 'EXPORT', 'PRINT', 'EMAIL', 'SETTINGS', 'ADMIN'].includes(currentScreen)) {
       setCurrentScreen('GATEWAY');
     } else {
       if (user?.role === 'HQ') setCurrentScreen('HQ');
@@ -202,7 +207,10 @@ export default function App() {
     }
   };
 
-  useHotkeys('esc', handleBack);
+  useHotkeys('esc', (e) => {
+    e.preventDefault();
+    handleBack();
+  }, { enableOnFormTags: true }, [showCalculator, showDateModal, currentScreen, user]);
 
   useHotkeys('v', () => setCurrentScreen('VOUCHER'));
   useHotkeys('c', () => setCurrentScreen('LEDGER'));
@@ -261,7 +269,87 @@ export default function App() {
   if (!user) return <LoginScreen onLogin={setUser} />;
 
   return (
-    <div className="flex flex-col h-screen bg-tally-bg overflow-hidden uppercase">
+    <div className="flex flex-col h-screen bg-tally-bg overflow-hidden uppercase relative">
+      {/* Global Modals */}
+      <AnimatePresence>
+        {showDateModal && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[110]">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-[300px] border-4 border-tally-teal shadow-2xl overflow-hidden">
+              <div className="bg-tally-teal text-white px-4 py-1 text-[10px] font-bold uppercase flex justify-between items-center">
+                 <span>Change Date</span>
+                 <button onClick={() => setShowDateModal(false)} className="hover:text-red-200 text-xs">×</button>
+              </div>
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (dateInput) {
+                    setCurrentDate(dateInput);
+                    setShowDateModal(false);
+                    setCurrentScreen('DAYBOOK');
+                  }
+                }}
+                className="p-6 space-y-4"
+              >
+                 <div className="space-y-1">
+                   <label className="text-[10px] font-black text-gray-400 uppercase">New Date</label>
+                   <input 
+                     autoFocus 
+                     type="date" 
+                     className="w-full border-2 border-tally-teal p-2 text-sm outline-none font-bold italic" 
+                     value={dateInput}
+                     onChange={(e) => setDateInput(e.target.value)}
+                   />
+                 </div>
+                 <div className="flex justify-end pt-2">
+                    <button type="submit" className="bg-tally-teal text-white px-4 py-1 text-[11px] font-bold uppercase hover:bg-tally-teal/90">Accept (Enter)</button>
+                 </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {currentScreen === 'GOTO' && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[110]">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-[400px] border-4 border-tally-teal shadow-2xl overflow-hidden">
+              <div className="bg-tally-teal text-white px-4 py-1 text-[10px] font-bold uppercase flex justify-between items-center">
+                 <span>Go To / Switch To</span>
+                 <button onClick={() => setCurrentScreen('GATEWAY')} className="hover:text-red-200">ESC: Close</button>
+              </div>
+              <div className="p-2 space-y-1">
+                 <input 
+                   autoFocus 
+                   type="text" 
+                   placeholder="Type name of report up here..." 
+                   className="w-full border-b-2 border-tally-teal p-2 text-sm outline-none bg-blue-50/50" 
+                   value={gotoSearch}
+                   onChange={(e) => {
+                     setGotoSearch(e.target.value);
+                     setGotoHighlightedIdx(0);
+                   }}
+                 />
+                 <div className="max-h-[300px] overflow-y-auto">
+                    {getFilteredGotoOptions().map((item, idx) => (
+                      <div 
+                        key={item} 
+                        className={`px-4 py-2 cursor-pointer text-xs font-bold border-b border-gray-50 flex justify-between group transition-colors ${
+                          gotoHighlightedIdx === idx ? 'bg-tally-accent text-black' : 'hover:bg-tally-teal hover:text-white'
+                        }`}
+                        onMouseEnter={() => setGotoHighlightedIdx(idx)}
+                        onClick={() => {
+                          handleGotoSelect(item);
+                        }}
+                      >
+                         <span>{item}</span>
+                         <span className="text-[10px] text-gray-300 group-hover:text-white/50 opacity-0 group-hover:opacity-100 italic">Select</span>
+                      </div>
+                    ))}
+                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Top Header Bar */}
       <header className="bg-tally-header text-white h-[35px] flex items-center justify-between px-2 text-[12px] border-b border-tally-hotkey">
         <div className="flex items-center gap-6">
@@ -571,81 +659,6 @@ export default function App() {
                    <h3 className="text-xl font-black uppercase text-tally-teal">Print Spooler</h3>
                    <p className="text-xs text-gray-400 max-w-xs mx-auto italic">Generating printable buffers for all branch reports. Ensure your printer is connected via Tally Gateway.</p>
                    <button onClick={() => window.print()} className="bg-tally-teal text-white px-10 py-2 text-xs font-bold uppercase shadow-xl mt-4">Execute Local Print</button>
-                </div>
-              )}
-              {showDateModal && (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[110]">
-                  <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white w-[300px] border-4 border-tally-teal shadow-2xl overflow-hidden">
-                    <div className="bg-tally-teal text-white px-4 py-1 text-[10px] font-bold uppercase flex justify-between items-center">
-                       <span>Change Date</span>
-                       <button onClick={() => setShowDateModal(false)} className="hover:text-red-200 text-xs">×</button>
-                    </div>
-                    <form 
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (dateInput) {
-                          setCurrentDate(dateInput);
-                          setShowDateModal(false);
-                          setCurrentScreen('DAYBOOK');
-                        }
-                      }}
-                      className="p-6 space-y-4"
-                    >
-                       <div className="space-y-1">
-                         <label className="text-[10px] font-black text-gray-400 uppercase">New Date</label>
-                         <input 
-                           autoFocus 
-                           type="date" 
-                           className="w-full border-2 border-tally-teal p-2 text-sm outline-none font-bold italic" 
-                           value={dateInput}
-                           onChange={(e) => setDateInput(e.target.value)}
-                         />
-                       </div>
-                       <div className="flex justify-end pt-2">
-                          <button type="submit" className="bg-tally-teal text-white px-4 py-1 text-[11px] font-bold uppercase hover:bg-tally-teal/90">Accept (Enter)</button>
-                       </div>
-                    </form>
-                  </motion.div>
-                </div>
-              )}
-              {currentScreen === 'GOTO' && (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100]">
-                  <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white w-[400px] border-4 border-tally-teal shadow-2xl overflow-hidden">
-                    <div className="bg-tally-teal text-white px-4 py-1 text-[10px] font-bold uppercase flex justify-between items-center">
-                       <span>Go To / Switch To</span>
-                       <button onClick={() => setCurrentScreen('GATEWAY')} className="hover:text-red-200">ESC: Close</button>
-                    </div>
-                    <div className="p-2 space-y-1">
-                       <input 
-                         autoFocus 
-                         type="text" 
-                         placeholder="Type name of report up here..." 
-                         className="w-full border-b-2 border-tally-teal p-2 text-sm outline-none bg-blue-50/50" 
-                         value={gotoSearch}
-                         onChange={(e) => {
-                           setGotoSearch(e.target.value);
-                           setGotoHighlightedIdx(0);
-                         }}
-                       />
-                       <div className="max-h-[300px] overflow-y-auto">
-                          {getFilteredGotoOptions().map((item, idx) => (
-                            <div 
-                              key={item} 
-                              className={`px-4 py-2 cursor-pointer text-xs font-bold border-b border-gray-50 flex justify-between group transition-colors ${
-                                gotoHighlightedIdx === idx ? 'bg-tally-accent text-black' : 'hover:bg-tally-teal hover:text-white'
-                              }`}
-                              onMouseEnter={() => setGotoHighlightedIdx(idx)}
-                              onClick={() => {
-                                handleGotoSelect(item);
-                              }}
-                            >
-                               <span>{item}</span>
-                               <span className="text-[10px] text-gray-300 group-hover:text-white/50 opacity-0 group-hover:opacity-100 italic">Select</span>
-                            </div>
-                          ))}
-                       </div>
-                    </div>
-                  </motion.div>
                 </div>
               )}
               {currentScreen === 'SETTINGS' && (
