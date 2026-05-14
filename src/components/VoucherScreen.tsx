@@ -18,7 +18,7 @@ export default function VoucherScreen({ branchId }: { branchId?: string }) {
   const [entries, setEntries] = useState([{ ledgerId: '', amount: '', type: 'Dr' as 'Dr' | 'Cr' }]);
 
   useEffect(() => {
-    fetch(`/api/ledgers${branchId ? `?branchId=${branchId}` : ''}`)
+    fetch(`api/ledgers${branchId ? `?branchId=${branchId}` : ''}`)
       .then(res => res.json())
       .then(data => setLedgers(data));
     
@@ -41,7 +41,7 @@ export default function VoucherScreen({ branchId }: { branchId?: string }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const totalAmount = entries.reduce((acc, curr) => acc + Number(curr.amount), 0) / 2; // Rough validation
-    const response = await fetch('/api/vouchers', {
+    const response = await fetch('api/vouchers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 

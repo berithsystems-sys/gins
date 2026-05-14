@@ -12,7 +12,7 @@ export default function AuditLogScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/audit').then(res => res.json()).then(data => {
+    fetch('api/audit').then(res => res.json()).then(data => {
       setLogs(data);
       setLoading(false);
     });

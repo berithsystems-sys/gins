@@ -17,12 +17,12 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
   const [newBranch, setNewBranch] = useState({ name: '', code: '', location: '' });
 
   useEffect(() => {
-    fetch('/api/branches').then(res => res.json()).then(data => setBranches(data));
+    fetch('api/branches').then(res => res.json()).then(data => setBranches(data));
   }, []);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch('/api/branches', {
+    const res = await fetch('api/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newBranch)
@@ -35,7 +35,7 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure? All data related to this church branch will be deleted.')) return;
-    await fetch(`/api/branches/${id}`, { method: 'DELETE' });
+    await fetch(`api/branches/${id}`, { method: 'DELETE' });
     setBranches(branches.filter(b => b.id !== id));
   };
 
