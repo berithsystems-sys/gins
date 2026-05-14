@@ -12,7 +12,7 @@ async function startServer() {
     console.log("Database initialization check complete.");
   } catch (error) {
     console.error("CRITICAL: Failed during database initialization:", error);
-    process.exit(1); // Kill process if DB can't even initialize structural checks
+    console.log("INFO: The server will remain running to allow debugging, but database operations may fail.");
   }
   
   const app = express();
