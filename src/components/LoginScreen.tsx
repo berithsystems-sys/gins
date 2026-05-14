@@ -49,7 +49,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         className="w-full max-w-md bg-white border-4 border-tally-teal shadow-2xl overflow-hidden"
       >
         <div className="bg-tally-teal p-6 text-white text-center">
-          <h1 className="text-2xl font-bold tracking-widest uppercase">TallyPrime ERP</h1>
+          <h1 className="text-xl font-bold tracking-widest uppercase">ACCOUNTING - BERITHSYSTEMS.COM</h1>
           <p className="text-[10px] opacity-70 mt-1 uppercase">Church Administration System</p>
         </div>
         

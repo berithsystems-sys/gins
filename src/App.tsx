@@ -7,7 +7,8 @@ import React, { useState, useEffect } from 'react';
 import { useHotkeys } from './hooks/useHotkeys';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Building2 as Building, 
+  Building2, 
+  Edit3,
   BookOpen, 
   Receipt, 
   Settings, 
@@ -363,8 +364,15 @@ export default function App() {
                         onClick={() => setSelectedIndex(index)}
                         onDoubleClick={() => {
                           if (item.id === 'vouchers') setCurrentScreen('VOUCHER');
-                          if (item.id === 'create') setCurrentScreen('LEDGER');
-                          if (item.id === 'reports' || item.id === 'balance-sheet') setCurrentScreen('REPORTS');
+                          if (item.id === 'masters') setCurrentScreen('LEDGER'); 
+                          if (item.id === 'alter') setCurrentScreen('ALTER');
+                          if (item.id === 'daybook') setCurrentScreen('DAYBOOK');
+                          if (item.id === 'banking') setCurrentScreen('BANKING');
+                          if (item.id === 'balance_sheet') setCurrentScreen('BALANCE_SHEET');
+                          if (item.id === 'pl_account') setCurrentScreen('PL_ACCOUNT');
+                          if (item.id === 'ratio_analysis') setCurrentScreen('RATIO');
+                          if (item.id === 'chart') setCurrentScreen('CHART');
+                          if (item.id === 'audit') setCurrentScreen('AUDIT');
                         }}
                       >
                         <div className="flex gap-2">
@@ -649,7 +657,7 @@ export default function App() {
 
         <div className="h-[24px] bg-tally-status text-white text-[11px] flex items-center px-2 justify-between">
           <div className="flex gap-4 uppercase font-bold tracking-tight">
-            <span>TALLY PRIME CLONE</span>
+            <span>ACCOUNTING - BERITHSYSTEMS.COM</span>
             <span className="opacity-50">|</span>
             <span>Rel. 4.0</span>
             <span className="opacity-50">|</span>
