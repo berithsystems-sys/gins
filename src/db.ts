@@ -71,12 +71,13 @@ console.log('Final Client Choice:', dbClient);
 if (dbClient === 'sqlite3') {
   console.log('INFO: Using SQLite3 (database.sqlite)');
 } else {
-  if (!dbHost || dbHost === 'localhost' || dbHost === '127.0.0.1') {
-    console.warn('CRITICAL WARNING: You are trying to use MySQL on localhost/127.0.0.1.');
-    console.warn('This environment DOES NOT have a local MySQL server.');
-    console.warn('Please provide a remote database host in the DB_HOST environment variable.');
+  if (!dbHost || dbHost === 'localhost' || dbHost === '127.0.0.1' || dbHost === '::1') {
+    console.warn('CRITICAL WARNING: Connecting to MySQL on localhost/127.0.0.1/::1.');
+    console.warn('This environment (AI Studio) DOES NOT have its own MySQL server.');
+    console.warn('If your database is on Hostinger, you MUST use their Remote MySQL Hostname.');
+    console.warn('Example: mysql.hostinger.com or your server IP.');
   }
-  console.log('Host:', dbHost || '127.0.0.1 (Default)');
+  console.log('Host:', dbHost || '127.0.0.1 (Local - Likely will fail for remote DB)');
   console.log('User:', dbUser);
   console.log('Database:', dbName);
   console.log('Port:', process.env.DB_PORT || 3306);
