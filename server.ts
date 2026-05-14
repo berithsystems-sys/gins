@@ -6,14 +6,6 @@ import { db, initDB } from "./src/db.ts";
 
 async function startServer() {
   console.log("Starting server process...");
-  try {
-    console.log("Initializing database connection...");
-    await initDB();
-    console.log("Database initialization check complete.");
-  } catch (error) {
-    console.error("CRITICAL: Failed during database initialization:", error);
-    console.log("INFO: The server will remain running to allow debugging, but database operations may fail.");
-  }
   
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
@@ -218,11 +210,19 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, HOST, () => {
+  app.listen(PORT, HOST, async () => {
     console.log(`>>> Tally ERP Server is live!`);
     console.log(`>>> Local: http://localhost:${PORT}`);
     console.log(`>>> Network: http://${HOST}:${PORT}`);
     console.log(`>>> Environment: ${process.env.NODE_ENV || 'development'}`);
+
+    try {
+      console.log("Initializing database connection in background...");
+      await initDB();
+      console.log("Database initialized successfully.");
+    } catch (error) {
+      console.error("DB Initialization Error:", error);
+    }
   });
 }
 
