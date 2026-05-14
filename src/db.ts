@@ -63,10 +63,16 @@ export const db = knex({
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
+    connectTimeout: 5000, // 5 seconds
   } : {
     filename: path.join(process.cwd(), 'database.sqlite')
   },
   useNullAsDefault: true,
+  pool: {
+    min: 0,
+    max: 10,
+    acquireTimeoutMillis: 5000,
+  }
 });
 
 export async function initDB() {
@@ -96,8 +102,8 @@ export async function initDB() {
     });
     // Seed initial users
     await db('users').insert([
-      { id: '1', username: 'hq_admin', password: 'password', role: 'HQ' },
-      { id: '2', username: 'branch_a', password: 'password', role: 'BRANCH', branchId: '101' }
+      { id: '1', username: 'admin@tally.com', password: 'password', role: 'HQ' },
+      { id: '2', username: 'branch@tally.com', password: 'password', role: 'BRANCH', branchId: '101' }
     ]);
   }
 
