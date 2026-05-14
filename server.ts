@@ -5,9 +5,17 @@ import { createServer as createViteServer } from "vite";
 import { db, initDB } from "./src/db.ts";
 
 async function startServer() {
-  await initDB();
+  try {
+    console.log("Initializing database connection...");
+    await initDB();
+    console.log("Database initialized successfully.");
+  } catch (error) {
+    console.error("CRITICAL: Failed to initialize database:", error);
+    console.warn("The server will start, but database-dependent routes will fail.");
+  }
+  
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json());
 

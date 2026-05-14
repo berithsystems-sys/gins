@@ -51,7 +51,7 @@ export default function DayBookScreen({ branchId }: { branchId?: string }) {
               <tr><td colSpan={5} className="p-4 text-center italic text-gray-400">Loading vouchers...</td></tr>
             ) : vouchers.length === 0 ? (
               <tr><td colSpan={5} className="p-4 text-center italic text-gray-400">No vouchers entered today</td></tr>
-            ) : vouchers.map(v => (
+            ) : vouchers.map((v, idx) => (
               <tr key={v.id} className="hover:bg-tally-accent/10 cursor-pointer transition-colors">
                 <td className="px-4 py-2">{format(new Date(v.date), 'dd-MMM-yy')}</td>
                 <td className="px-4 py-2 font-medium">{v.narration || 'No Narration'}</td>
