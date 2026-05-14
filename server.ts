@@ -106,9 +106,26 @@ async function startServer() {
       });
       
       res.json(user);
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: "Database error during login" });
+    } catch (err: any) {
+      console.error("Login Database Error:", err);
+      
+      let errorMessage = "Database error during login";
+      let hint = "";
+
+      if (err.code === 'ECONNREFUSED' || err.code === 'ER_ACCESS_DENIED_ERROR') {
+        const currentHost = (db.client.config.connection as any).host;
+        if (currentHost === 'localhost' || currentHost === '127.0.0.1' || currentHost === '::1') {
+          hint = "CRITICAL: You are trying to connect to MySQL on 'localhost'. This environment (AI Studio) DOES NOT have a MySQL server. You MUST use your remote database hostname (e.g., mysql.hostinger.com) in your environment variables.";
+        } else {
+          hint = "Could not connect to your remote database. Please verify your DB_HOST, DB_USER, and DB_PASSWORD are correct and that Remote MySQL is enabled on your host.";
+        }
+      }
+
+      res.status(500).json({ 
+        error: errorMessage, 
+        details: err.message,
+        hint: hint || "Check your database connection settings in the environment variables."
+      });
     }
   });
 
