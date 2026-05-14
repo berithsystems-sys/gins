@@ -224,6 +224,16 @@ async function startServer() {
     res.json(newGroup);
   });
 
+  app.put("/api/account-groups/:id", async (req, res) => {
+    await db('account_groups').where({ id: req.params.id }).update(req.body);
+    res.json({ success: true });
+  });
+
+  app.delete("/api/account-groups/:id", async (req, res) => {
+    await db('account_groups').where({ id: req.params.id }).delete();
+    res.json({ success: true });
+  });
+
   // Cost Centres
   app.get("/api/cost-centres", async (req, res) => {
     const { branchId } = req.query;
@@ -238,6 +248,16 @@ async function startServer() {
     res.json(newCC);
   });
 
+  app.put("/api/cost-centres/:id", async (req, res) => {
+    await db('cost_centres').where({ id: req.params.id }).update(req.body);
+    res.json({ success: true });
+  });
+
+  app.delete("/api/cost-centres/:id", async (req, res) => {
+    await db('cost_centres').where({ id: req.params.id }).delete();
+    res.json({ success: true });
+  });
+
   // Employees
   app.get("/api/employees", async (req, res) => {
     const { branchId } = req.query;
@@ -250,6 +270,16 @@ async function startServer() {
     const newEmployee = { id: Date.now().toString(), ...req.body };
     await db('employees').insert(newEmployee);
     res.json(newEmployee);
+  });
+
+  app.put("/api/employees/:id", async (req, res) => {
+    await db('employees').where({ id: req.params.id }).update(req.body);
+    res.json({ success: true });
+  });
+
+  app.delete("/api/employees/:id", async (req, res) => {
+    await db('employees').where({ id: req.params.id }).delete();
+    res.json({ success: true });
   });
 
   app.get("/api/ledgers", async (req, res) => {
@@ -272,6 +302,22 @@ async function startServer() {
     delete (newLedger as any).group;
     await db('ledgers').insert(newLedger);
     res.json(newLedger);
+  });
+
+  app.put("/api/ledgers/:id", async (req, res) => {
+    const { group, ...rest } = req.body;
+    const updateData = { 
+      ...rest,
+      group_name: group || rest.group_name
+    };
+    delete (updateData as any).group;
+    await db('ledgers').where({ id: req.params.id }).update(updateData);
+    res.json({ success: true });
+  });
+
+  app.delete("/api/ledgers/:id", async (req, res) => {
+    await db('ledgers').where({ id: req.params.id }).delete();
+    res.json({ success: true });
   });
 
   app.get("/api/vouchers", async (req, res) => {

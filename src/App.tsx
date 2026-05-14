@@ -23,13 +23,16 @@ import {
 } from 'lucide-react';
 import VoucherScreen from './components/VoucherScreen';
 import LedgerScreen from './components/LedgerScreen';
-import ReportsScreen from './components/ReportsScreen';
 import DayBookScreen from './components/DayBookScreen';
+import BalanceSheetScreen from './components/BalanceSheetScreen';
+import PLScreen from './components/PLScreen';
+import BankingScreen from './components/BankingScreen';
 import LoginScreen from './components/LoginScreen';
 import HQDashboard from './components/HQDashboard';
 import AnalyticsScreen from './components/AnalyticsScreen';
 import AuditLogScreen from './components/AuditLogScreen';
 import MastersDashboard from './components/masters/MastersDashboard';
+import AlterMasterScreen from './components/AlterMasterScreen';
 import CompanyScreen from './components/CompanyScreen';
 import DataScreen from './components/DataScreen';
 
@@ -49,20 +52,22 @@ type MenuOption = {
 };
 
 const GATEWAY_MENU: MenuOption[] = [
-  { id: 'masters', label: 'Masters (Accounts Info)', key: 'M', icon: <Building className="w-4 h-4" /> },
+  { id: 'masters', label: 'Create', key: 'C', icon: <PlusCircle className="w-4 h-4" /> },
+  { id: 'alter', label: 'Alter', key: 'A', icon: <Edit3 className="w-4 h-4" /> },
+  { id: 'chart', label: 'Chart of Accounts', key: 'H', icon: <Building2 className="w-4 h-4" /> },
   { id: 'vouchers', label: 'Vouchers', key: 'V', icon: <Receipt className="w-4 h-4" />, shortcut: 'F4-F9' },
   { id: 'daybook', label: 'Day Book', key: 'K', icon: <BookOpen className="w-4 h-4" /> },
-  { id: 'reports', label: 'Financial Reports', key: 'R', icon: <FileText className="w-4 h-4" /> },
-  { id: 'analytics', label: 'MIS Reports (AI)', key: 'A', icon: <BarChart3 className="w-4 h-4" /> },
-  { id: 'banking', label: 'Banking', key: 'B', icon: <Wallet className="w-4 h-4" /> },
-  { id: 'payroll', label: 'Payroll', key: 'P', icon: <Users className="w-4 h-4" /> },
+  { id: 'banking', label: 'Banking', key: 'N', icon: <Wallet className="w-4 h-4" /> },
+  { id: 'balance_sheet', label: 'Balance Sheet', key: 'B', icon: <FileText className="w-4 h-4" /> },
+  { id: 'pl_account', label: 'Profit & Loss A/c', key: 'P', icon: <FileText className="w-4 h-4" /> },
+  { id: 'ratio_analysis', label: 'Ratio Analysis', key: 'R', icon: <BarChart3 className="w-4 h-4" /> },
   { id: 'audit', label: 'Audit Logs', key: 'L', icon: <ShieldCheck className="w-4 h-4" /> },
-  { id: 'backup', label: 'Data Utility', key: 'U', icon: <Database className="w-4 h-4" /> },
 ];
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'HQ' | 'ANALYTICS' | 'AUDIT' | 'BANKING' | 'PAYROLL' | 'DAYBOOK' | 'COMPANY' | 'DATA' | 'EXCHANGE' | 'GOTO' | 'IMPORT' | 'EXPORT' | 'PRINT' | 'EMAIL' | 'SETTINGS'>('GATEWAY');
+  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'HQ' | 'ANALYTICS' | 'AUDIT' | 'BANKING' | 'PAYROLL' | 'DAYBOOK' | 'COMPANY' | 'DATA' | 'EXCHANGE' | 'GOTO' | 'IMPORT' | 'EXPORT' | 'PRINT' | 'EMAIL' | 'SETTINGS' | 'ALTER' | 'BALANCE_SHEET' | 'PL_ACCOUNT' | 'RATIO' | 'CHART'>('GATEWAY');
+  const [voucherType, setVoucherType] = useState('Payment');
   const [selectedBranchId, setSelectedBranchId] = useState<string | undefined>(undefined);
   const [branches, setBranches] = useState<any[]>([]);
   const [allLedgers, setAllLedgers] = useState<any[]>([]);
@@ -114,12 +119,14 @@ export default function App() {
       const selectedId = GATEWAY_MENU[selectedIndex].id;
       if (selectedId === 'vouchers') setCurrentScreen('VOUCHER');
       if (selectedId === 'masters') setCurrentScreen('LEDGER'); 
-      if (selectedId === 'reports') setCurrentScreen('REPORTS');
+      if (selectedId === 'alter') setCurrentScreen('ALTER');
       if (selectedId === 'daybook') setCurrentScreen('DAYBOOK');
-      if (selectedId === 'analytics') setCurrentScreen('ANALYTICS');
-      if (selectedId === 'audit') setCurrentScreen('AUDIT');
       if (selectedId === 'banking') setCurrentScreen('BANKING');
-      if (selectedId === 'payroll') setCurrentScreen('PAYROLL');
+      if (selectedId === 'balance_sheet') setCurrentScreen('BALANCE_SHEET');
+      if (selectedId === 'pl_account') setCurrentScreen('PL_ACCOUNT');
+      if (selectedId === 'ratio_analysis') setCurrentScreen('RATIO');
+      if (selectedId === 'chart') setCurrentScreen('CHART');
+      if (selectedId === 'audit') setCurrentScreen('AUDIT');
       if (selectedId === 'backup') {
         const confirmBackup = window.confirm("Download a local backup of the entire church database?");
         if (confirmBackup) {
@@ -145,13 +152,15 @@ export default function App() {
   });
 
   useHotkeys('v', () => setCurrentScreen('VOUCHER'));
-  useHotkeys('m', () => setCurrentScreen('LEDGER'));
-  useHotkeys('r', () => setCurrentScreen('REPORTS')); 
+  useHotkeys('c', () => setCurrentScreen('LEDGER'));
+  useHotkeys('a', () => setCurrentScreen('ALTER'));
   useHotkeys('k', () => setCurrentScreen('DAYBOOK'));
-  useHotkeys('a', () => setCurrentScreen('ANALYTICS'));
+  useHotkeys('n', () => setCurrentScreen('BANKING'));
+  useHotkeys('b', () => setCurrentScreen('BALANCE_SHEET'));
+  useHotkeys('p', () => setCurrentScreen('PL_ACCOUNT'));
+  useHotkeys('r', () => setCurrentScreen('RATIO'));
+  useHotkeys('h', () => setCurrentScreen('CHART'));
   useHotkeys('l', () => setCurrentScreen('AUDIT'));
-  useHotkeys('b', () => setCurrentScreen('BANKING'));
-  useHotkeys('p', () => setCurrentScreen('PAYROLL'));
   useHotkeys('ctrl+n', () => setShowCalculator(true));
   useHotkeys('alt+f1', () => setUser(null)); // Logout
   useHotkeys('alt+k', () => setCurrentScreen('COMPANY'));
@@ -383,9 +392,13 @@ export default function App() {
               <div className="flex justify-between items-center mb-6 border-b border-tally-teal/20 pb-2">
                 <h1 className="text-lg font-bold text-tally-teal uppercase flex items-center gap-2">
                   <div className="w-1 h-6 bg-tally-teal"></div>
-                  {currentScreen === 'VOUCHER' && 'Accounting Voucher Creation'}
-                  {currentScreen === 'LEDGER' && 'Masters Management'}
-                  {currentScreen === 'REPORTS' && 'Financial Reports'}
+                  {currentScreen === 'VOUCHER' && `${voucherType} Voucher Creation`}
+                  {currentScreen === 'LEDGER' && 'Masters Management (Create)'}
+                  {currentScreen === 'ALTER' && 'Masters Management (Alter)'}
+                  {currentScreen === 'CHART' && 'Chart of Accounts'}
+                  {currentScreen === 'BALANCE_SHEET' && 'Balance Sheet'}
+                  {currentScreen === 'PL_ACCOUNT' && 'Profit & Loss A/c'}
+                  {currentScreen === 'RATIO' && 'Ratio Analysis'}
                   {currentScreen === 'DAYBOOK' && 'Day Book'}
                   {currentScreen === 'ANALYTICS' && 'Visual Data Analytics'}
                   {currentScreen === 'AUDIT' && 'Security Audit Dashboard'}
@@ -409,13 +422,17 @@ export default function App() {
                 </button>
               </div>
 
-              {currentScreen === 'VOUCHER' && <VoucherScreen branchId={selectedBranchId} />}
+              {currentScreen === 'VOUCHER' && <VoucherScreen branchId={selectedBranchId} onTypeChange={setVoucherType} />}
               {currentScreen === 'LEDGER' && <MastersDashboard branchId={selectedBranchId} />}
-              {currentScreen === 'REPORTS' && <ReportsScreen branchId={selectedBranchId} />}
+              {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} />}
+              {currentScreen === 'BALANCE_SHEET' && <BalanceSheetScreen branchId={selectedBranchId} />}
+              {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} />}
+              {currentScreen === 'CHART' && <AlterMasterScreen branchId={selectedBranchId} />} {/* Chart of accounts is similar list */}
+              {currentScreen === 'RATIO' && <div className="p-20 text-center font-black text-tally-teal uppercase italic border">Ratio Analysis - Coming Soon</div>}
               {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} />}
               {currentScreen === 'ANALYTICS' && <AnalyticsScreen branches={branches} ledgers={allLedgers} vouchers={allVouchers} />}
               {currentScreen === 'AUDIT' && <AuditLogScreen branchId={selectedBranchId} />}
-              {currentScreen === 'BANKING' && <div className="p-10 text-center font-bold text-tally-teal uppercase italic">Banking Module - Coming Soon</div>}
+              {currentScreen === 'BANKING' && <BankingScreen branchId={selectedBranchId} />}
               {currentScreen === 'PAYROLL' && <div className="p-10 text-center font-bold text-tally-teal uppercase italic">Payroll Module - Coming Soon</div>}
               {currentScreen === 'COMPANY' && <CompanyScreen branchId={selectedBranchId} />}
               {currentScreen === 'DATA' && <DataScreen />}

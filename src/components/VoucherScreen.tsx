@@ -15,31 +15,50 @@ interface CostCentre {
   name: string;
 }
 
-export default function VoucherScreen({ branchId }: { branchId?: string }) {
+export default function VoucherScreen({ branchId, onTypeChange }: { branchId?: string; onTypeChange?: (type: string) => void }) {
   const [ledgers, setLedgers] = useState<Ledger[]>([]);
   const [costCentres, setCostCentres] = useState<CostCentre[]>([]);
   const [type, setType] = useState<'Contra' | 'Payment' | 'Receipt' | 'Journal' | 'Sales' | 'Purchase'>('Payment');
   const [date, setDate] = useState('2026-05-12');
   const [narration, setNarration] = useState('');
   const [entries, setEntries] = useState([{ ledgerId: '', costCentreId: '', amount: '', type: 'Dr' as 'Dr' | 'Cr' }]);
+  const [ledgerBalances, setLedgerBalances] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const query = branchId ? `?branchId=${branchId}` : '';
-    fetch(`api/ledgers${query}`).then(res => res.json()).then(setLedgers);
+    fetch(`api/ledgers${query}`).then(res => res.json()).then(data => {
+      setLedgers(data);
+      const balances: Record<string, number> = {};
+      data.forEach((l: any) => {
+        balances[l.id] = l.openingBalance * (l.balanceType === 'Cr' ? -1 : 1);
+      });
+      setLedgerBalances(balances);
+    });
     fetch(`api/cost-centres${query}`).then(res => res.json()).then(setCostCentres);
     
     // Internal Voucher Hotkeys
     const handler = (event: KeyboardEvent) => {
-      if (event.key === 'F4') setType('Contra');
-      if (event.key === 'F5') setType('Payment');
-      if (event.key === 'F6') setType('Receipt');
-      if (event.key === 'F7') setType('Journal');
-      if (event.key === 'F8') setType('Sales');
-      if (event.key === 'F9') setType('Purchase');
+      let newType: any = null;
+      if (event.key === 'F4') newType = 'Contra';
+      if (event.key === 'F5') newType = 'Payment';
+      if (event.key === 'F6') newType = 'Receipt';
+      if (event.key === 'F7') newType = 'Journal';
+      if (event.key === 'F8') newType = 'Sales';
+      if (event.key === 'F9') newType = 'Purchase';
+      
+      if (newType) {
+        setType(newType);
+        if (onTypeChange) onTypeChange(newType);
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [branchId]);
+  }, [branchId, onTypeChange]);
+
+  const handleTypeChange = (t: typeof type) => {
+    setType(t);
+    if (onTypeChange) onTypeChange(t);
+  };
 
   const handleAddEntry = () => {
     setEntries([...entries, { ledgerId: '', costCentreId: '', amount: '', type: 'Dr' }]);
@@ -83,7 +102,7 @@ export default function VoucherScreen({ branchId }: { branchId?: string }) {
             <button 
               key={t}
               type="button" 
-              onClick={() => setType(t as any)}
+              onClick={() => handleTypeChange(t as any)}
               className={`px-3 py-1 text-[10px] font-bold border rounded transition-colors ${type === t ? 'bg-tally-teal text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
             >
               F{idx + 4}: {t}
@@ -130,19 +149,37 @@ export default function VoucherScreen({ branchId }: { branchId?: string }) {
                   </select>
                 </td>
                 <td className="px-2 py-1">
-                  <select
-                    value={entry.ledgerId}
-                    onChange={(e) => {
-                      const newEntries = [...entries];
-                      newEntries[idx].ledgerId = e.target.value;
-                      setEntries(newEntries);
-                    }}
-                    className="w-full focus:outline-none font-bold bg-transparent italic"
-                    required
-                  >
-                    <option value="">Select Ledger...</option>
-                    {ledgers.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                  </select>
+                  <div className="relative group">
+                    <input 
+                      list={`ledgers-list-${idx}`}
+                      value={ledgers.find(l => l.id === entry.ledgerId)?.name || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const match = ledgers.find(l => l.name === val);
+                        const newEntries = [...entries];
+                        newEntries[idx].ledgerId = match ? match.id : '';
+                        setEntries(newEntries);
+                      }}
+                      className="w-full focus:outline-none font-bold bg-transparent italic border-b border-transparent focus:border-tally-teal"
+                      placeholder="Type ledger name..."
+                      required
+                    />
+                    <datalist id={`ledgers-list-${idx}`}>
+                      {ledgers.map(l => (
+                        <option key={l.id} value={l.name}>
+                          {l.name}
+                        </option>
+                      ))}
+                    </datalist>
+                    {entry.ledgerId && (
+                      <div className="text-[9px] font-bold text-gray-400 mt-0.5 flex justify-between">
+                         <span className="uppercase tracking-widest">Balance:</span>
+                         <span className={ledgerBalances[entry.ledgerId] >= 0 ? 'text-blue-600' : 'text-red-600'}>
+                           ₹ {Math.abs(ledgerBalances[entry.ledgerId]).toLocaleString()} {ledgerBalances[entry.ledgerId] >= 0 ? 'Dr' : 'Cr'}
+                         </span>
+                      </div>
+                    )}
+                  </div>
                 </td>
                 <td className="px-2 py-1">
                   <select
