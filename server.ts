@@ -27,15 +27,32 @@ async function startServer() {
   // Auth
   app.post("/api/login", async (req, res) => {
     const { username, password, code } = req.body;
+    console.log(`Login attempt: user="${username}", hasPassword=${!!password}, branchCode="${code || 'N/A'}"`);
     
     try {
       const user = await db('users').where({ username, password }).first();
       
-      if (!user) return res.status(401).json({ error: "Invalid credentials" });
+      if (!user) {
+        console.warn(`Login failed: No user found for credentials matching "${username}"`);
+        // Check if user exists at all without password to narrow down the issue
+        const userExists = await db('users').where({ username }).first();
+        if (userExists) {
+          console.warn(`Debug: User "${username}" exists, but password did not match.`);
+        } else {
+          console.warn(`Debug: User "${username}" does not exist in the database.`);
+          // list users for debug (HQ Only or in dev)
+          const allUsers = await db('users').select('username').limit(5);
+          console.log(`Available users: ${allUsers.map(u => u.username).join(', ')}`);
+        }
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
       
+      console.log(`Login success: user="${user.username}", role="${user.role}"`);
+
       if (user.role === 'BRANCH') {
         const branch = await db('branches').where({ id: user.branchId }).first();
         if (!branch || (code && branch.code !== code)) {
+          console.warn(`Login failed: Branch validation failed for user ${username}. BranchId: ${user.branchId}`);
           return res.status(401).json({ error: "Invalid Branch Code" });
         }
       }

@@ -100,7 +100,12 @@ export async function initDB() {
       table.string('role').notNullable();
       table.string('branchId').references('id').inTable('branches');
     });
-    // Seed initial users
+  }
+
+  // Ensure initial users exist (Seed even if table existed but was empty)
+  const userCount = await db('users').count('id as count').first();
+  if (userCount && (userCount as any).count === 0) {
+    console.log("Seeding default users...");
     await db('users').insert([
       { id: '1', username: 'admin@tally.com', password: 'password', role: 'HQ' },
       { id: '2', username: 'branch@tally.com', password: 'password', role: 'BRANCH', branchId: '101' }
