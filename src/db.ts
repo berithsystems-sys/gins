@@ -54,6 +54,12 @@ export interface AuditLog {
   details?: string;
 }
 
+console.log('--- Environment Check ---');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('DB_CLIENT:', process.env.DB_CLIENT);
+console.log('PORT:', process.env.PORT);
+console.log('-------------------------');
+
 // Knex Configuration
 const dbUser = process.env.DB_USER || process.env.DB_USERNAME;
 const dbName = process.env.DB_NAME || process.env.DB_DATABASE;

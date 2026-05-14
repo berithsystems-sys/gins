@@ -4,6 +4,14 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { db, initDB } from "./src/db.ts";
 
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('UNHANDLED REJECTION at:', promise, 'reason:', reason);
+});
+
 async function startServer() {
   console.log("Starting server process...");
   
