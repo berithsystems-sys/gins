@@ -5,17 +5,21 @@ import { createServer as createViteServer } from "vite";
 import { db, initDB } from "./src/db.ts";
 
 async function startServer() {
+  console.log("Starting server process...");
   try {
     console.log("Initializing database connection...");
     await initDB();
-    console.log("Database initialized successfully.");
+    console.log("Database initialization check complete.");
   } catch (error) {
-    console.error("CRITICAL: Failed to initialize database:", error);
-    console.warn("The server will start, but database-dependent routes will fail.");
+    console.error("CRITICAL: Failed during database initialization:", error);
+    process.exit(1); // Kill process if DB can't even initialize structural checks
   }
   
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
+  const HOST = '0.0.0.0';
+
+  console.log(`Port Config: ${PORT} (from env.PORT: ${process.env.PORT})`);
 
   app.use(express.json());
 
@@ -214,8 +218,11 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  app.listen(PORT, HOST, () => {
+    console.log(`>>> Tally ERP Server is live!`);
+    console.log(`>>> Local: http://localhost:${PORT}`);
+    console.log(`>>> Network: http://${HOST}:${PORT}`);
+    console.log(`>>> Environment: ${process.env.NODE_ENV || 'development'}`);
   });
 }
 

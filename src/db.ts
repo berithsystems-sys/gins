@@ -55,14 +55,31 @@ export interface AuditLog {
 }
 
 // Knex Configuration
+const dbUser = process.env.DB_USER || process.env.DB_USERNAME;
+const dbName = process.env.DB_NAME || process.env.DB_DATABASE;
+const dbHost = process.env.DB_HOST || 'localhost';
+const dbClient = process.env.DB_CLIENT || 'sqlite3';
+
+console.log('--- Database Config Debug ---');
+console.log('Detected Client:', dbClient);
+if (dbClient === 'sqlite3') {
+  console.log('INFO: No MySQL client detected, falling back to SQLite3 (database.sqlite)');
+} else {
+  console.log('Host:', dbHost);
+  console.log('User:', dbUser);
+  console.log('Database:', dbName);
+  console.log('Port:', process.env.DB_PORT || 3306);
+}
+console.log('-----------------------------');
+
 export const db = knex({
-  client: process.env.DB_CLIENT || 'sqlite3',
-  connection: process.env.DB_CLIENT === 'mysql2' ? {
-    host: process.env.DB_HOST,
+  client: dbClient,
+  connection: dbClient === 'mysql2' ? {
+    host: dbHost,
     port: Number(process.env.DB_PORT) || 3306,
-    user: process.env.DB_USER,
+    user: dbUser,
     password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
+    database: dbName,
     connectTimeout: 5000, // 5 seconds
   } : {
     filename: path.join(process.cwd(), 'database.sqlite')
