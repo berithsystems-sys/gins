@@ -15,7 +15,7 @@ interface Voucher {
   amount: number;
 }
 
-export default function DayBookScreen({ branchId }: { branchId?: string }) {
+export default function DayBookScreen({ branchId, initialDate }: { branchId?: string; initialDate?: string }) {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -23,16 +23,22 @@ export default function DayBookScreen({ branchId }: { branchId?: string }) {
     fetch(`/api/vouchers${branchId ? `?branchId=${branchId}` : ''}`)
       .then(res => res.json())
       .then(data => {
-        setVouchers(data);
+        let filtered = data;
+        if (initialDate) {
+          filtered = data.filter((v: any) => v.date === initialDate);
+        }
+        setVouchers(filtered);
         setLoading(false);
       });
-  }, [branchId]);
+  }, [branchId, initialDate]);
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center bg-tally-teal text-white p-2">
         <span className="text-xs font-bold uppercase tracking-widest">Day Book</span>
-        <span className="text-[10px] opacity-70">1-Apr-2024 to 31-Mar-2025</span>
+        <span className="text-[10px] opacity-70">
+          {initialDate ? format(new Date(initialDate), 'dd-MMM-yyyy') : 'All Vouchers'}
+        </span>
       </div>
 
       <div className="border border-tally-teal/20 overflow-hidden bg-white shadow-sm">

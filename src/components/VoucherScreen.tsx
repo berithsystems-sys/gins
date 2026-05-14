@@ -15,11 +15,11 @@ interface CostCentre {
   name: string;
 }
 
-export default function VoucherScreen({ branchId, onTypeChange, initialType }: { branchId?: string; onTypeChange?: (type: string) => void; initialType?: string }) {
+export default function VoucherScreen({ branchId, onTypeChange, initialType, initialDate }: { branchId?: string; onTypeChange?: (type: string) => void; initialType?: string; initialDate?: string }) {
   const [ledgers, setLedgers] = useState<Ledger[]>([]);
   const [costCentres, setCostCentres] = useState<CostCentre[]>([]);
   const [type, setType] = useState<'Contra' | 'Payment' | 'Receipt' | 'Journal' | 'Sales' | 'Purchase'>((initialType as any) || 'Payment');
-  const [date, setDate] = useState('2026-05-12');
+  const [date, setDate] = useState(initialDate || '2026-05-12');
   const [narration, setNarration] = useState('');
   const [entries, setEntries] = useState([{ ledgerId: '', costCentreId: '', amount: '', type: 'Dr' as 'Dr' | 'Cr', tempSearch: '' }]);
   const [ledgerBalances, setLedgerBalances] = useState<Record<string, number>>({});
@@ -27,6 +27,13 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType }: {
   useEffect(() => {
     if (initialType) setType(initialType as any);
   }, [initialType]);
+
+  useEffect(() => {
+    if (initialDate) setDate(initialDate);
+  }, [initialDate]);
+
+  const [activeDropdownIdx, setActiveDropdownIdx] = useState<number | null>(null);
+  const [highlightedIdx, setHighlightedIdx] = useState(0);
 
   useEffect(() => {
     const query = branchId ? `?branchId=${branchId}` : '';
@@ -40,6 +47,42 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType }: {
     });
     fetch(`api/cost-centres${query}`).then(res => res.json()).then(setCostCentres);
   }, [branchId]);
+
+  const handleSelectLedger = (idx: number, ledger: Ledger) => {
+    const newEntries = [...entries];
+    newEntries[idx].ledgerId = ledger.id;
+    newEntries[idx].tempSearch = ledger.name;
+    setEntries(newEntries);
+    setActiveDropdownIdx(null);
+  };
+
+  const getFilteredLedgers = (searchTerm: string) => {
+    const search = searchTerm?.toLowerCase() || '';
+    return ledgers.filter(l => l.name.toLowerCase().includes(search));
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, entryIdx: number) => {
+    const filtered = getFilteredLedgers(entries[entryIdx].tempSearch || '');
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIdx(prev => Math.min(filtered.length - 1, prev + 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIdx(prev => Math.max(0, prev - 1));
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      if (filtered.length > 0 && activeDropdownIdx !== null) {
+        // Only prevent default if we have results to pick from
+        const selected = filtered[highlightedIdx];
+        if (selected) {
+          e.preventDefault();
+          handleSelectLedger(entryIdx, selected);
+        }
+      }
+    } else if (e.key === 'Escape') {
+      setActiveDropdownIdx(null);
+    }
+  };
 
   const handleTypeChange = (t: typeof type) => {
     setType(t);
@@ -135,7 +178,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType }: {
                   </select>
                 </td>
                 <td className="px-2 py-1">
-                  <div className="relative group">
+                  <div className="relative">
                     <input 
                       type="text"
                       value={entry.tempSearch || ledgers.find(l => l.id === entry.ledgerId)?.name || ''}
@@ -146,34 +189,38 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType }: {
                         newEntries[idx].tempSearch = val;
                         newEntries[idx].ledgerId = match ? match.id : '';
                         setEntries(newEntries);
+                        setHighlightedIdx(0);
                       }}
+                      onFocus={() => {
+                        setActiveDropdownIdx(idx);
+                        setHighlightedIdx(0);
+                      }}
+                      onBlur={() => {
+                        // Small delay to allow onMouseDown on items to fire
+                        setTimeout(() => setActiveDropdownIdx(null), 200);
+                      }}
+                      onKeyDown={(e) => handleKeyDown(e, idx)}
                       className="w-full focus:outline-none font-bold bg-transparent italic border-b border-transparent focus:border-tally-teal"
                       placeholder="Type ledger name..."
                       required
                     />
                     {/* Custom search results */}
-                    <div className="hidden group-focus-within:block absolute z-[60] left-0 mt-1 w-64 bg-white border-2 border-tally-teal shadow-2xl max-h-48 overflow-auto">
-                       {ledgers
-                        .filter(l => {
-                          const search = entry.tempSearch?.toLowerCase() || '';
-                          return l.name.toLowerCase().includes(search);
-                        })
-                        .map(l => (
-                         <div 
-                           key={l.id} 
-                           onMouseDown={() => {
-                             const newEntries = [...entries];
-                             newEntries[idx].ledgerId = l.id;
-                             newEntries[idx].tempSearch = l.name;
-                             setEntries(newEntries);
-                           }}
-                           className="px-2 py-1.5 hover:bg-tally-accent text-xs font-bold border-b last:border-0 cursor-pointer flex justify-between uppercase"
-                         >
-                            <span>{l.name}</span>
-                            <span className="text-[9px] opacity-40">₹ {Math.abs(ledgerBalances[l.id] || 0)} {ledgerBalances[l.id] >= 0 ? 'Dr' : 'Cr'}</span>
-                         </div>
-                       ))}
-                    </div>
+                    {activeDropdownIdx === idx && (
+                      <div className="absolute z-[60] left-0 mt-1 w-64 bg-white border-2 border-tally-teal shadow-2xl max-h-48 overflow-auto">
+                        {getFilteredLedgers(entry.tempSearch || '').map((l, lIdx) => (
+                          <div 
+                            key={l.id} 
+                            onMouseDown={() => handleSelectLedger(idx, l)}
+                            className={`px-2 py-1.5 text-xs font-bold border-b last:border-0 cursor-pointer flex justify-between uppercase transition-colors ${
+                              highlightedIdx === lIdx ? 'bg-tally-accent text-black' : 'hover:bg-tally-accent/10'
+                            }`}
+                          >
+                             <span>{l.name}</span>
+                             <span className="text-[9px] opacity-40">₹ {Math.abs(ledgerBalances[l.id] || 0)} {ledgerBalances[l.id] >= 0 ? 'Dr' : 'Cr'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {entry.ledgerId && (
                       <div className="text-[9px] font-bold text-gray-400 mt-0.5 flex justify-between">
                          <span className="uppercase tracking-widest">Balance:</span>

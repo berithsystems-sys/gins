@@ -16,6 +16,24 @@ export default function MastersDashboard({ branchId }: { branchId?: string }) {
     { id: 'EMPLOYEES', label: 'Employees', section: 'Payroll Information' },
   ];
 
+  React.useEffect(() => {
+    const handleKeys = (e: KeyboardEvent) => {
+      // Check if we are focusing an input (creation forms)
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+
+      const currentIdx = tabs.findIndex(t => t.id === activeTab);
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveTab(tabs[Math.min(tabs.length - 1, currentIdx + 1)].id);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveTab(tabs[Math.max(0, currentIdx - 1)].id);
+      }
+    };
+    window.addEventListener('keydown', handleKeys);
+    return () => window.removeEventListener('keydown', handleKeys);
+  }, [activeTab]);
+
   return (
     <div className="flex h-full gap-6">
       {/* Sidebar for Masters */}

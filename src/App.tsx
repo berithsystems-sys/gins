@@ -71,6 +71,7 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'HQ' | 'ANALYTICS' | 'AUDIT' | 'BANKING' | 'PAYROLL' | 'DAYBOOK' | 'COMPANY' | 'DATA' | 'EXCHANGE' | 'GOTO' | 'IMPORT' | 'EXPORT' | 'PRINT' | 'EMAIL' | 'SETTINGS' | 'ALTER' | 'BALANCE_SHEET' | 'PL_ACCOUNT' | 'RATIO' | 'CHART' | 'ADMIN'>('GATEWAY');
   const [voucherType, setVoucherType] = useState('Payment');
   const [selectedBranchId, setSelectedBranchId] = useState<string | undefined>(undefined);
+  const [currentDate, setCurrentDate] = useState('2026-05-12');
   const [branches, setBranches] = useState<any[]>([]);
   const [allLedgers, setAllLedgers] = useState<any[]>([]);
   const [allVouchers, setAllVouchers] = useState<any[]>([]);
@@ -105,15 +106,48 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
+  const [gotoSearch, setGotoSearch] = useState('');
+  const [gotoHighlightedIdx, setGotoHighlightedIdx] = useState(0);
+
+  const getFilteredGotoOptions = () => {
+    const options = ['Balance Sheet', 'Profit & Loss A/c', 'Trial Balance', 'Day Book', 'Cash/Bank Book', 'Stock Summary', 'Ratio Analysis', 'Audit Logs', 'Admin Panel', 'Banking'];
+    return options.filter(o => o.toLowerCase().includes(gotoSearch.toLowerCase()));
+  };
+
+  useHotkeys('g', () => {
+    if (currentScreen === 'GATEWAY' || currentScreen === 'HQ') {
+      setCurrentScreen('GOTO');
+      setGotoSearch('');
+      setGotoHighlightedIdx(0);
+    }
+  });
+
+  const handleGotoSelect = (item: string) => {
+    if (item === 'Day Book') setCurrentScreen('DAYBOOK');
+    else if (item === 'Balance Sheet') setCurrentScreen('BALANCE_SHEET');
+    else if (item === 'Profit & Loss A/c') setCurrentScreen('PL_ACCOUNT');
+    else if (item === 'Trial Balance') setCurrentScreen('REPORTS');
+    else if (item === 'Banking') setCurrentScreen('BANKING');
+    else if (item === 'Audit Logs') setCurrentScreen('AUDIT');
+    else if (item === 'Admin Panel') setCurrentScreen('ADMIN');
+    else if (item === 'Ratio Analysis') setCurrentScreen('RATIO');
+    else if (item === 'Cash/Bank Book') setCurrentScreen('BANKING');
+  };
+
   useHotkeys('up', () => {
     if (currentScreen === 'GATEWAY') {
       setSelectedIndex(prev => Math.max(0, prev - 1));
+    } else if (currentScreen === 'GOTO') {
+      setGotoHighlightedIdx(prev => Math.max(0, prev - 1));
     }
   });
   
   useHotkeys('down', () => {
     if (currentScreen === 'GATEWAY') {
       setSelectedIndex(prev => Math.min(GATEWAY_MENU.length - 1, prev + 1));
+    } else if (currentScreen === 'GOTO') {
+      const filtered = getFilteredGotoOptions();
+      setGotoHighlightedIdx(prev => Math.min(filtered.length - 1, prev + 1));
     }
   });
 
@@ -130,29 +164,34 @@ export default function App() {
       if (selectedId === 'ratio_analysis') setCurrentScreen('RATIO');
       if (selectedId === 'chart') setCurrentScreen('CHART');
       if (selectedId === 'audit') setCurrentScreen('AUDIT');
-      if (selectedId === 'backup') {
-        const confirmBackup = window.confirm("Download a local backup of the entire church database?");
-        if (confirmBackup) {
-          fetch('api/export').then(res => res.blob()).then(blob => {
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `tally_church_backup_${new Date().toISOString().split('T')[0]}.json`;
-            a.click();
-          });
-        }
+    } else if (currentScreen === 'GOTO') {
+      const filtered = getFilteredGotoOptions();
+      if (filtered[gotoHighlightedIdx]) {
+        handleGotoSelect(filtered[gotoHighlightedIdx]);
       }
     }
   });
 
-  useHotkeys('esc', () => {
+  const handleBack = () => {
     if (showCalculator) {
       setShowCalculator(false);
+      return;
+    }
+
+    if (currentScreen === 'GATEWAY') {
+      if (user?.role === 'HQ') setCurrentScreen('HQ');
+      else setCurrentScreen('GATEWAY'); // Stay here or quit? Tally usually quits.
+    } else if (['VOUCHER', 'LEDGER', 'ALTER', 'DAYBOOK', 'BANKING', 'BALANCE_SHEET', 'PL_ACCOUNT', 'RATIO', 'CHART', 'AUDIT', 'COMPANY', 'DATA', 'IMPORT', 'EXPORT', 'PRINT', 'EMAIL', 'SETTINGS', 'ADMIN'].includes(currentScreen)) {
+      setCurrentScreen('GATEWAY');
+    } else if (currentScreen === 'GOTO') {
+      setCurrentScreen('GATEWAY');
     } else {
       if (user?.role === 'HQ') setCurrentScreen('HQ');
       else setCurrentScreen('GATEWAY');
     }
-  });
+  };
+
+  useHotkeys('esc', handleBack);
 
   useHotkeys('v', () => setCurrentScreen('VOUCHER'));
   useHotkeys('c', () => setCurrentScreen('LEDGER'));
@@ -177,7 +216,13 @@ export default function App() {
   useHotkeys('alt+s', () => setCurrentScreen('SETTINGS'));
 
   // Global Function Keys (Tally Style)
-  useHotkeys('f2', () => alert('Date: 12-May-2026'));
+  useHotkeys('f2', () => {
+    const newDate = prompt('Enter Current Date (YYYY-MM-DD):', currentDate);
+    if (newDate) {
+      setCurrentDate(newDate);
+      setCurrentScreen('DAYBOOK');
+    }
+  });
   useHotkeys('f3', () => {
     const branch = branches.find(b => b.id === selectedBranchId);
     alert(`Current Church: ${branch ? branch.name : 'BERITHSYSTEMS HQ'}`);
@@ -439,21 +484,21 @@ export default function App() {
                   {currentScreen === 'ADMIN' && 'System Administration (HQ Only)'}
                 </h1>
                 <button 
-                  onClick={() => user.role === 'HQ' ? setCurrentScreen('HQ') : setCurrentScreen('GATEWAY')}
+                  onClick={handleBack}
                   className="text-[11px] bg-tally-bg hover:bg-gray-200 px-3 py-1 border border-tally-teal/20 rounded font-bold uppercase transition-colors"
                 >
                   ESC: Back
                 </button>
               </div>
 
-              {currentScreen === 'VOUCHER' && <VoucherScreen branchId={selectedBranchId} onTypeChange={setVoucherType} initialType={voucherType} />}
+              {currentScreen === 'VOUCHER' && <VoucherScreen branchId={selectedBranchId} onTypeChange={setVoucherType} initialType={voucherType} initialDate={currentDate} />}
               {currentScreen === 'LEDGER' && <MastersDashboard branchId={selectedBranchId} />}
               {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} />}
               {currentScreen === 'BALANCE_SHEET' && <BalanceSheetScreen branchId={selectedBranchId} />}
               {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} />}
               {currentScreen === 'CHART' && <AlterMasterScreen branchId={selectedBranchId} />} {/* Chart of accounts is similar list */}
               {currentScreen === 'RATIO' && <div className="p-20 text-center font-black text-tally-teal uppercase italic border">Ratio Analysis - Coming Soon</div>}
-              {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} />}
+              {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} initialDate={currentDate} />}
               {currentScreen === 'ANALYTICS' && <AnalyticsScreen branches={branches} ledgers={allLedgers} vouchers={allVouchers} />}
               {currentScreen === 'AUDIT' && <AuditLogScreen branchId={selectedBranchId} isAdmin={user.role === 'HQ'} />}
               {currentScreen === 'ADMIN' && <AdminPanel />}
@@ -520,27 +565,38 @@ export default function App() {
                 </div>
               )}
               {currentScreen === 'GOTO' && (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100]">
                   <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white w-[400px] border-4 border-tally-teal shadow-2xl overflow-hidden">
                     <div className="bg-tally-teal text-white px-4 py-1 text-[10px] font-bold uppercase flex justify-between items-center">
                        <span>Go To / Switch To</span>
-                       <button onClick={() => setCurrentScreen('GATEWAY')} className="hover:text-red-200">X</button>
+                       <button onClick={() => setCurrentScreen('GATEWAY')} className="hover:text-red-200">ESC: Close</button>
                     </div>
                     <div className="p-2 space-y-1">
-                       <input autoFocus type="text" placeholder="Type name of report to go to..." className="w-full border-b-2 border-tally-teal p-2 text-sm outline-none bg-blue-50/50" />
+                       <input 
+                         autoFocus 
+                         type="text" 
+                         placeholder="Type name of report up here..." 
+                         className="w-full border-b-2 border-tally-teal p-2 text-sm outline-none bg-blue-50/50" 
+                         value={gotoSearch}
+                         onChange={(e) => {
+                           setGotoSearch(e.target.value);
+                           setGotoHighlightedIdx(0);
+                         }}
+                       />
                        <div className="max-h-[300px] overflow-y-auto">
-                          {['Balance Sheet', 'Profit & Loss A/c', 'Trial Balance', 'Day Book', 'Cash/Bank Book', 'Stock Summary', 'Ratio Analysis'].map(item => (
+                          {getFilteredGotoOptions().map((item, idx) => (
                             <div 
                               key={item} 
-                              className="px-4 py-2 hover:bg-tally-teal hover:text-white cursor-pointer text-xs font-bold border-b border-gray-50 flex justify-between group"
+                              className={`px-4 py-2 cursor-pointer text-xs font-bold border-b border-gray-50 flex justify-between group transition-colors ${
+                                gotoHighlightedIdx === idx ? 'bg-tally-accent text-black' : 'hover:bg-tally-teal hover:text-white'
+                              }`}
+                              onMouseEnter={() => setGotoHighlightedIdx(idx)}
                               onClick={() => {
-                                if (item === 'Day Book') setCurrentScreen('DAYBOOK');
-                                if (item === 'Balance Sheet') setCurrentScreen('REPORTS');
-                                if (item === 'Trial Balance') setCurrentScreen('REPORTS');
+                                handleGotoSelect(item);
                               }}
                             >
                                <span>{item}</span>
-                               <span className="text-[10px] text-gray-300 group-hover:text-white/50 opacity-0 group-hover:opacity-100 italic">Jump To</span>
+                               <span className="text-[10px] text-gray-300 group-hover:text-white/50 opacity-0 group-hover:opacity-100 italic">Select</span>
                             </div>
                           ))}
                        </div>
@@ -675,6 +731,8 @@ export default function App() {
         <div className="h-[24px] bg-tally-status text-white text-[11px] flex items-center px-2 justify-between">
           <div className="flex gap-4 uppercase font-bold tracking-tight">
             <span>ACCOUNTING - BERITHSYSTEMS.COM</span>
+            <span className="opacity-50">|</span>
+            <span className="font-mono text-yellow-300">{new Date(currentDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
             <span className="opacity-50">|</span>
             <span>Rel. 4.0</span>
             <span className="opacity-50">|</span>
