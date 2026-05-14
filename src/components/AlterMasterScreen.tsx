@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Edit2, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
 
+import { useHotkeys } from '../hooks/useHotkeys';
+
 interface AlterMasterScreenProps {
   branchId?: string;
 }
@@ -14,6 +16,11 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
   const [editingItem, setEditingItem] = useState<any>(null);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [activeType]);
   const fetchData = async () => {
     const query = branchId ? `?branchId=${branchId}` : '';
     const [l, g, e, c] = await Promise.all([
@@ -67,47 +74,52 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
     ledgers: ledgers.filter(l => l.group_name === g.name)
   }));
 
-  const [selectedIndex, setSelectedIndex] = useState(0);
-
   const getVisibleItems = () => {
     if (activeType === 'LEDGER') {
       const items: any[] = [];
       groupedLedgers.forEach(group => {
-        items.push({ type: 'GROUP', data: group });
+        items.push({ type: 'GROUP', id: group.id, data: group });
         if (expandedGroups[group.id]) {
-          group.ledgers.forEach((l: any) => items.push({ type: 'LEDGER', data: l }));
+          group.ledgers.forEach((l: any) => items.push({ type: 'LEDGER', id: l.id, data: l }));
         }
       });
       return items;
-    } else if (activeType === 'GROUP') return groups.map(g => ({ type: 'GROUP', data: g }));
-    else if (activeType === 'COST_CENTRE') return costCentres.map(cc => ({ type: 'COST_CENTRE', data: cc }));
-    else return employees.map(emp => ({ type: 'EMPLOYEE', data: emp }));
+    } else if (activeType === 'GROUP') return groups.map(g => ({ type: 'GROUP', id: g.id, data: g }));
+    else if (activeType === 'COST_CENTRE') return costCentres.map(cc => ({ type: 'COST_CENTRE', id: cc.id, data: cc }));
+    else return employees.map(emp => ({ type: 'EMPLOYEE', id: emp.id, data: emp }));
   };
 
-  useEffect(() => {
-    const handleKeys = (e: KeyboardEvent) => {
-      if (editingItem) return;
-      const items = getVisibleItems();
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelectedIndex(prev => Math.min(items.length - 1, prev + 1));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelectedIndex(prev => Math.max(0, prev - 1));
-      } else if (e.key === 'Enter') {
-        const item = items[selectedIndex];
-        if (item) {
-          if (item.type === 'GROUP' && activeType === 'LEDGER') {
-             toggleGroup(item.data.id);
-          } else {
-             setEditingItem(item.data);
-          }
-        }
+  useHotkeys('down', (e) => {
+    if (editingItem) return;
+    e.preventDefault();
+    const items = getVisibleItems();
+    setSelectedIndex(prev => Math.min(items.length - 1, prev + 1));
+  }, { enableOnFormTags: false }, [editingItem, activeType, expandedGroups, groups, ledgers, costCentres, employees]);
+
+  useHotkeys('up', (e) => {
+    if (editingItem) return;
+    e.preventDefault();
+    const items = getVisibleItems();
+    setSelectedIndex(prev => Math.max(0, prev - 1));
+  }, { enableOnFormTags: false }, [editingItem, activeType, expandedGroups, groups, ledgers, costCentres, employees]);
+
+  useHotkeys('enter', (e) => {
+    if (editingItem) return;
+    e.preventDefault();
+    const items = getVisibleItems();
+    const item = items[selectedIndex];
+    if (item) {
+      if (item.type === 'GROUP' && activeType === 'LEDGER') {
+        toggleGroup(item.data.id);
+      } else {
+        setEditingItem(item.data);
       }
-    };
-    window.addEventListener('keydown', handleKeys);
-    return () => window.removeEventListener('keydown', handleKeys);
-  }, [selectedIndex, activeType, editingItem, groups, ledgers, costCentres, employees, expandedGroups]);
+    }
+  }, { enableOnFormTags: false }, [selectedIndex, editingItem, activeType, expandedGroups, groups, ledgers, costCentres, employees]);
+
+  useHotkeys('esc', () => {
+    if (editingItem) setEditingItem(null);
+  }, { enableOnFormTags: true });
 
   const toggleGroup = (groupId: string) => {
     setExpandedGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }));

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useHotkeys } from '../../hooks/useHotkeys';
 import AccountGroupScreen from './AccountGroupScreen';
 import LedgerScreen from '../LedgerScreen';
 import CostCentreScreen from './CostCentreScreen';
@@ -16,23 +17,19 @@ export default function MastersDashboard({ branchId }: { branchId?: string }) {
     { id: 'EMPLOYEES', label: 'Employees', section: 'Payroll Information' },
   ];
 
-  React.useEffect(() => {
-    const handleKeys = (e: KeyboardEvent) => {
-      // Check if we are focusing an input (creation forms)
-      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+  const currentIdx = tabs.findIndex(t => t.id === activeTab);
 
-      const currentIdx = tabs.findIndex(t => t.id === activeTab);
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setActiveTab(tabs[Math.min(tabs.length - 1, currentIdx + 1)].id);
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setActiveTab(tabs[Math.max(0, currentIdx - 1)].id);
-      }
-    };
-    window.addEventListener('keydown', handleKeys);
-    return () => window.removeEventListener('keydown', handleKeys);
-  }, [activeTab]);
+  useHotkeys('down', (e) => {
+    if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+    e.preventDefault();
+    setActiveTab(tabs[Math.min(tabs.length - 1, currentIdx + 1)].id);
+  }, {}, [activeTab, tabs]);
+
+  useHotkeys('up', (e) => {
+    if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+    e.preventDefault();
+    setActiveTab(tabs[Math.max(0, currentIdx - 1)].id);
+  }, {}, [activeTab, tabs]);
 
   return (
     <div className="flex h-full gap-6">

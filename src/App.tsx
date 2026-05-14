@@ -108,18 +108,19 @@ export default function App() {
 
   const [gotoSearch, setGotoSearch] = useState('');
   const [gotoHighlightedIdx, setGotoHighlightedIdx] = useState(0);
+  const [showDateModal, setShowDateModal] = useState(false);
+  const [dateInput, setDateInput] = useState(currentDate);
 
   const getFilteredGotoOptions = () => {
     const options = ['Balance Sheet', 'Profit & Loss A/c', 'Trial Balance', 'Day Book', 'Cash/Bank Book', 'Stock Summary', 'Ratio Analysis', 'Audit Logs', 'Admin Panel', 'Banking'];
     return options.filter(o => o.toLowerCase().includes(gotoSearch.toLowerCase()));
   };
 
-  useHotkeys('g', () => {
-    if (currentScreen === 'GATEWAY' || currentScreen === 'HQ') {
-      setCurrentScreen('GOTO');
-      setGotoSearch('');
-      setGotoHighlightedIdx(0);
-    }
+  useHotkeys('g', (e) => {
+    e.preventDefault();
+    setCurrentScreen('GOTO');
+    setGotoSearch('');
+    setGotoHighlightedIdx(0);
   });
 
   const handleGotoSelect = (item: string) => {
@@ -134,24 +135,26 @@ export default function App() {
     else if (item === 'Cash/Bank Book') setCurrentScreen('BANKING');
   };
 
-  useHotkeys('up', () => {
+  useHotkeys('up', (e) => {
     if (currentScreen === 'GATEWAY') {
       setSelectedIndex(prev => Math.max(0, prev - 1));
     } else if (currentScreen === 'GOTO') {
+      e.preventDefault();
       setGotoHighlightedIdx(prev => Math.max(0, prev - 1));
     }
-  });
+  }, { enableOnFormTags: true });
   
-  useHotkeys('down', () => {
+  useHotkeys('down', (e) => {
     if (currentScreen === 'GATEWAY') {
       setSelectedIndex(prev => Math.min(GATEWAY_MENU.length - 1, prev + 1));
     } else if (currentScreen === 'GOTO') {
+      e.preventDefault();
       const filtered = getFilteredGotoOptions();
       setGotoHighlightedIdx(prev => Math.min(filtered.length - 1, prev + 1));
     }
-  });
+  }, { enableOnFormTags: true });
 
-  useHotkeys('enter', () => {
+  useHotkeys('enter', (e) => {
     if (currentScreen === 'GATEWAY') {
       const selectedId = GATEWAY_MENU[selectedIndex].id;
       if (selectedId === 'vouchers') setCurrentScreen('VOUCHER');
@@ -165,12 +168,13 @@ export default function App() {
       if (selectedId === 'chart') setCurrentScreen('CHART');
       if (selectedId === 'audit') setCurrentScreen('AUDIT');
     } else if (currentScreen === 'GOTO') {
+      e.preventDefault();
       const filtered = getFilteredGotoOptions();
       if (filtered[gotoHighlightedIdx]) {
         handleGotoSelect(filtered[gotoHighlightedIdx]);
       }
     }
-  });
+  }, { enableOnFormTags: true });
 
   const handleBack = () => {
     if (showCalculator) {
@@ -178,12 +182,19 @@ export default function App() {
       return;
     }
 
+    if (showDateModal) {
+      setShowDateModal(false);
+      return;
+    }
+
+    if (currentScreen === 'GOTO') {
+      setCurrentScreen('GATEWAY');
+      return;
+    }
+
     if (currentScreen === 'GATEWAY') {
       if (user?.role === 'HQ') setCurrentScreen('HQ');
-      else setCurrentScreen('GATEWAY'); // Stay here or quit? Tally usually quits.
     } else if (['VOUCHER', 'LEDGER', 'ALTER', 'DAYBOOK', 'BANKING', 'BALANCE_SHEET', 'PL_ACCOUNT', 'RATIO', 'CHART', 'AUDIT', 'COMPANY', 'DATA', 'IMPORT', 'EXPORT', 'PRINT', 'EMAIL', 'SETTINGS', 'ADMIN'].includes(currentScreen)) {
-      setCurrentScreen('GATEWAY');
-    } else if (currentScreen === 'GOTO') {
       setCurrentScreen('GATEWAY');
     } else {
       if (user?.role === 'HQ') setCurrentScreen('HQ');
@@ -216,12 +227,10 @@ export default function App() {
   useHotkeys('alt+s', () => setCurrentScreen('SETTINGS'));
 
   // Global Function Keys (Tally Style)
-  useHotkeys('f2', () => {
-    const newDate = prompt('Enter Current Date (YYYY-MM-DD):', currentDate);
-    if (newDate) {
-      setCurrentDate(newDate);
-      setCurrentScreen('DAYBOOK');
-    }
+  useHotkeys('f2', (e) => {
+    e.preventDefault();
+    setDateInput(currentDate);
+    setShowDateModal(true);
   });
   useHotkeys('f3', () => {
     const branch = branches.find(b => b.id === selectedBranchId);
@@ -562,6 +571,41 @@ export default function App() {
                    <h3 className="text-xl font-black uppercase text-tally-teal">Print Spooler</h3>
                    <p className="text-xs text-gray-400 max-w-xs mx-auto italic">Generating printable buffers for all branch reports. Ensure your printer is connected via Tally Gateway.</p>
                    <button onClick={() => window.print()} className="bg-tally-teal text-white px-10 py-2 text-xs font-bold uppercase shadow-xl mt-4">Execute Local Print</button>
+                </div>
+              )}
+              {showDateModal && (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[110]">
+                  <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white w-[300px] border-4 border-tally-teal shadow-2xl overflow-hidden">
+                    <div className="bg-tally-teal text-white px-4 py-1 text-[10px] font-bold uppercase flex justify-between items-center">
+                       <span>Change Date</span>
+                       <button onClick={() => setShowDateModal(false)} className="hover:text-red-200 text-xs">×</button>
+                    </div>
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (dateInput) {
+                          setCurrentDate(dateInput);
+                          setShowDateModal(false);
+                          setCurrentScreen('DAYBOOK');
+                        }
+                      }}
+                      className="p-6 space-y-4"
+                    >
+                       <div className="space-y-1">
+                         <label className="text-[10px] font-black text-gray-400 uppercase">New Date</label>
+                         <input 
+                           autoFocus 
+                           type="date" 
+                           className="w-full border-2 border-tally-teal p-2 text-sm outline-none font-bold italic" 
+                           value={dateInput}
+                           onChange={(e) => setDateInput(e.target.value)}
+                         />
+                       </div>
+                       <div className="flex justify-end pt-2">
+                          <button type="submit" className="bg-tally-teal text-white px-4 py-1 text-[11px] font-bold uppercase hover:bg-tally-teal/90">Accept (Enter)</button>
+                       </div>
+                    </form>
+                  </motion.div>
                 </div>
               )}
               {currentScreen === 'GOTO' && (
