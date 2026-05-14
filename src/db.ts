@@ -72,6 +72,12 @@ if (dbClient !== 'mysql2' && dbClient !== 'sqlite3') {
   dbClient = 'sqlite3';
 }
 
+// FORCE SQLite if host is localhost/127.0.0.1 in AI Studio environment
+if (dbClient === 'mysql2' && (!dbHost || dbHost === 'localhost' || dbHost === '127.0.0.1' || dbHost === '::1')) {
+  console.warn('CRITICAL: Detected attempt to use MySQL on localhost. Falling back to SQLite for stability.');
+  dbClient = 'sqlite3';
+}
+
 console.log('--- Database Config Debug ---');
 console.log('Final Client Choice:', dbClient);
 if (dbClient === 'sqlite3') {
