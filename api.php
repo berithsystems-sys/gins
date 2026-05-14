@@ -103,17 +103,32 @@ if ($method === 'OPTIONS') exit;
 switch ($path) {
     case 'login':
         if ($method === 'POST') {
-            $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ? AND password = ?");
-            $stmt->execute([$input['username'], $input['password']]);
+            $username = $input['username'] ?? '';
+            $password = $input['password'] ?? '';
+            $code = $input['code'] ?? '';
+
+            if ($code) {
+                // Branch Login
+                $stmt = $pdo->prepare("SELECT u.*, b.name as branchName FROM users u 
+                                     JOIN branches b ON u.branchId = b.id 
+                                     WHERE u.username = ? AND u.password = ? AND b.code = ?");
+                $stmt->execute([$username, $password, $code]);
+            } else {
+                // HQ or General Login
+                $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ? AND password = ?");
+                $stmt->execute([$username, $password]);
+            }
+            
             $user = $stmt->fetch();
             if ($user) {
+                unset($user['password']); // Safety
                 // Log audit
                 $stmt = $pdo->prepare("INSERT INTO audit_logs (id, userId, username, action, timestamp, branchId, details) VALUES (?,?,?,?,?,?,?)");
-                $stmt->execute([time(), $user['id'], $user['username'], 'LOGIN', date('c'), $user['branchId'], 'PHP SQL LOGIN']);
+                $stmt->execute([(string)time(), $user['id'], $user['username'], 'LOGIN', date('c'), $user['branchId'] ?? 'HQ', 'PHP LOGIN SUCCESS']);
                 echo json_encode($user);
             } else {
                 http_response_code(401);
-                echo json_encode(['error' => 'Invalid credentials']);
+                echo json_encode(['error' => 'Invalid username, password, or branch code']);
             }
         }
         break;

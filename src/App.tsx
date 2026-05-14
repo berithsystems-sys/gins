@@ -76,9 +76,9 @@ export default function App() {
       setCurrentScreen('HQ');
       // Fetch global data for analytics
       Promise.all([
-        fetch('/api/branches').then(res => res.json()),
-        fetch('/api/ledgers').then(res => res.json()),
-        fetch('/api/vouchers').then(res => res.json())
+        fetch('api/branches').then(res => res.json()),
+        fetch('api/ledgers').then(res => res.json()),
+        fetch('api/vouchers').then(res => res.json())
       ]).then(([b, l, v]) => {
         setBranches(b);
         setAllLedgers(l);
@@ -122,7 +122,7 @@ export default function App() {
       if (selectedId === 'backup') {
         const confirmBackup = window.confirm("Download a local backup of the entire church database?");
         if (confirmBackup) {
-          fetch('/api/export').then(res => res.blob()).then(blob => {
+          fetch('api/export').then(res => res.blob()).then(blob => {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
