@@ -19,10 +19,45 @@ export interface Branch {
   location: string;
 }
 
+export interface AccountGroup {
+  id: string;
+  name: string;
+  under?: string; // id of parent group
+  branchId: string;
+}
+
+export interface UnitOfMeasure {
+  id: string;
+  type: 'Simple' | 'Compound';
+  symbol: string;
+  formalName: string;
+  decimalPlaces: number;
+  branchId: string;
+}
+
+export interface StockGroup {
+  id: string;
+  name: string;
+  under?: string;
+  branchId: string;
+}
+
+export interface StockItem {
+  id: string;
+  name: string;
+  alias?: string;
+  under?: string; // stock group id
+  unitId: string;
+  openingBalance: number;
+  ratePerUnit: number;
+  branchId: string;
+}
+
 export interface Ledger {
   id: string;
   name: string;
-  group_name?: string;
+  groupId?: string; 
+  group_name?: string; // Legacy support
   group?: string; // Legacy support
   openingBalance: number;
   balanceType: 'Dr' | 'Cr';
@@ -132,12 +167,69 @@ export async function initDB() {
     console.error("Error during user seeding:", err);
   }
 
+  // Account Groups
+  if (!(await db.schema.hasTable('account_groups'))) {
+    await db.schema.createTable('account_groups', (table) => {
+      table.string('id').primary();
+      table.string('name').notNullable();
+      table.string('under'); // Parent group ID
+      table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
+    });
+    
+    // Seed default Tally groups
+    const defaultGroups = [
+      'Capital Account', 'Current Assets', 'Current Liabilities', 'Fixed Assets', 
+      'Investments', 'Loans (Liability)', 'Suspense Account', 'Sales Account', 
+      'Purchase Account', 'Direct Income', 'Indirect Income', 'Direct Expenses', 
+      'Indirect Expenses'
+    ].map((name, index) => ({ id: `g_${index}`, name, branchId: '101' })); // Seed for first branch
+    
+    await db('account_groups').insert(defaultGroups);
+  }
+
+  // Units of Measure
+  if (!(await db.schema.hasTable('units_of_measure'))) {
+    await db.schema.createTable('units_of_measure', (table) => {
+      table.string('id').primary();
+      table.string('type').notNullable(); // Simple or Compound
+      table.string('symbol').notNullable();
+      table.string('formalName').notNullable();
+      table.integer('decimalPlaces').defaultTo(0);
+      table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
+    });
+  }
+
+  // Stock Groups
+  if (!(await db.schema.hasTable('stock_groups'))) {
+    await db.schema.createTable('stock_groups', (table) => {
+      table.string('id').primary();
+      table.string('name').notNullable();
+      table.string('under');
+      table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
+    });
+  }
+
+  // Stock Items
+  if (!(await db.schema.hasTable('stock_items'))) {
+    await db.schema.createTable('stock_items', (table) => {
+      table.string('id').primary();
+      table.string('name').notNullable();
+      table.string('alias');
+      table.string('under'); // Stock Group ID
+      table.string('unitId').references('id').inTable('units_of_measure');
+      table.float('openingBalance').defaultTo(0);
+      table.float('ratePerUnit').defaultTo(0);
+      table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
+    });
+  }
+
   // Ledgers
   if (!(await db.schema.hasTable('ledgers'))) {
     await db.schema.createTable('ledgers', (table) => {
       table.string('id').primary();
       table.string('name').notNullable();
-      table.string('group_name').notNullable();
+      table.string('groupId'); // Replaces group_name
+      table.string('group_name'); // Compatibility
       table.float('openingBalance').defaultTo(0);
       table.string('balanceType').notNullable();
       table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
@@ -168,6 +260,9 @@ export async function initDB() {
       table.increments('id').primary();
       table.string('voucherId').references('id').inTable('vouchers').onDelete('CASCADE');
       table.string('ledgerId').references('id').inTable('ledgers');
+      table.string('stockItemId').references('id').inTable('stock_items');
+      table.float('quantity');
+      table.float('rate');
       table.float('amount').notNullable();
       table.string('type').notNullable(); // Dr or Cr
     });

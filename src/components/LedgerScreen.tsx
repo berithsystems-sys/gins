@@ -3,20 +3,37 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function LedgerScreen({ branchId }: { branchId?: string }) {
   const [name, setName] = useState('');
-  const [group, setGroup] = useState('Primary');
+  const [groupId, setGroupId] = useState('');
   const [openingBalance, setOpeningBalance] = useState('0');
   const [balanceType, setBalanceType] = useState<'Dr' | 'Cr'>('Dr');
+  const [groups, setGroups] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch(`api/account-groups${branchId ? `?branchId=${branchId}` : ''}`)
+      .then(res => res.json())
+      .then(data => {
+        setGroups(data);
+        if (data.length > 0) setGroupId(data[0].id);
+      });
+  }, [branchId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const response = await fetch('api/ledgers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, group, openingBalance: Number(openingBalance), balanceType, branchId }),
+      body: JSON.stringify({ 
+        name, 
+        groupId, 
+        group_name: groups.find(g => g.id === groupId)?.name,
+        openingBalance: Number(openingBalance), 
+        balanceType, 
+        branchId 
+      }),
     });
     if (response.ok) {
       alert('Ledger Created Successfully');
@@ -43,21 +60,12 @@ export default function LedgerScreen({ branchId }: { branchId?: string }) {
           <div>
             <label className="block text-xs font-bold text-gray-400 uppercase">Under</label>
             <select 
-              value={group}
-              onChange={(e) => setGroup(e.target.value)}
+              value={groupId}
+              onChange={(e) => setGroupId(e.target.value)}
               className="w-full border-b border-tally-teal focus:outline-none focus:bg-tally-accent/10 p-1"
             >
-              <option>Primary</option>
-              <option>Bank Accounts</option>
-              <option>Cash-in-hand</option>
-              <option>Direct Expenses</option>
-              <option>Indirect Expenses</option>
-              <option>Fixed Assets</option>
-              <option>Current Assets</option>
-              <option>Sundry Debtors</option>
-              <option>Sundry Creditors</option>
-              <option>Sales Accounts</option>
-              <option>Purchase Accounts</option>
+              <option value="">Primary</option>
+              {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
           </div>
         </div>

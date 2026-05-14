@@ -3,22 +3,31 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-export default function StockScreen() {
-  const [items, setItems] = useState([
-    { id: '1', name: 'Raw Material A', group: 'Primary', quantity: 50, rate: 200, unit: 'kgs' },
-    { id: '2', name: 'Finished Good X', group: 'Primary', quantity: 120, rate: 1500, unit: 'pcs' },
-  ]);
+export default function StockScreen({ branchId }: { branchId?: string }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [units, setUnits] = useState<any[]>([]);
+
+  useEffect(() => {
+    const query = branchId ? `?branchId=${branchId}` : '';
+    Promise.all([
+      fetch(`/api/stock-items${query}`).then(res => res.json()),
+      fetch(`/api/units${query}`).then(res => res.json())
+    ]).then(([si, u]) => {
+      setItems(si);
+      setUnits(u);
+    });
+  }, [branchId]);
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center bg-tally-teal text-white p-2 rounded-t-sm">
         <span className="text-xs font-bold uppercase tracking-wider">Stock Summary</span>
-        <span className="text-[10px] opacity-70">ABC TRADING CO.</span>
+        <span className="text-[10px] opacity-70">Church Branch Storage</span>
       </div>
       
-      <div className="border-2 border-tally-teal overflow-hidden">
+      <div className="border-2 border-tally-teal overflow-hidden bg-white shadow-lg">
         <table className="w-full text-sm">
           <thead className="bg-gray-100 border-b border-tally-teal/20 text-[10px] font-bold uppercase text-gray-500">
             <tr>
@@ -28,23 +37,28 @@ export default function StockScreen() {
               <th className="px-4 py-2 text-right">Value</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-100 italic">
             {items.map(item => (
-              <tr key={item.id} className="hover:bg-tally-bg cursor-pointer transition-colors">
-                <td className="px-4 py-2 font-medium">{item.name}</td>
-                <td className="px-4 py-2 text-right font-mono">{item.quantity} {item.unit}</td>
-                <td className="px-4 py-2 text-right font-mono">{item.rate.toFixed(2)}</td>
-                <td className="px-4 py-2 text-right font-mono font-bold">{(item.quantity * item.rate).toFixed(2)}</td>
+              <tr key={item.id} className="hover:bg-tally-accent/5 cursor-pointer transition-colors">
+                <td className="px-4 py-2 font-bold text-tally-teal uppercase">{item.name}</td>
+                <td className="px-4 py-2 text-right font-mono">{item.openingBalance} {units.find(u => u.id === item.unitId)?.symbol || ''}</td>
+                <td className="px-4 py-2 text-right font-mono">{Number(item.ratePerUnit || 0).toFixed(2)}</td>
+                <td className="px-4 py-2 text-right font-mono font-bold">₹{(item.openingBalance * item.ratePerUnit).toLocaleString()}</td>
               </tr>
             ))}
+            {items.length === 0 && (
+              <tr>
+                <td colSpan={4} className="p-8 text-center text-gray-400 font-bold uppercase tracking-widest text-[10px]">No Stock Items Found</td>
+              </tr>
+            )}
           </tbody>
           <tfoot className="bg-tally-teal/5 font-bold border-t-2 border-tally-teal">
             <tr>
-              <td className="px-4 py-2 uppercase">Total</td>
-              <td className="px-4 py-2 text-right">170 items</td>
+              <td className="px-4 py-2 uppercase">Total Inventory Value</td>
+              <td className="px-4 py-2 text-right">{items.length} items</td>
               <td className="px-4 py-2" />
-              <td className="px-4 py-2 text-right font-mono">
-                {items.reduce((acc, curr) => acc + (curr.quantity * curr.rate), 0).toFixed(2)}
+              <td className="px-4 py-2 text-right font-mono text-lg text-tally-teal">
+                ₹{items.reduce((acc, curr) => acc + (curr.openingBalance * curr.ratePerUnit), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </td>
             </tr>
           </tfoot>

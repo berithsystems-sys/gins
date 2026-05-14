@@ -172,6 +172,16 @@ async function startServer() {
           role: 'BRANCH',
           branchId: branchId
         });
+
+        // Seed default groups for the new branch
+        const defaultGroups = [
+          'Capital Account', 'Current Assets', 'Current Liabilities', 'Fixed Assets', 
+          'Investments', 'Loans (Liability)', 'Suspense Account', 'Sales Account', 
+          'Purchase Account', 'Direct Income', 'Indirect Income', 'Direct Expenses', 
+          'Indirect Expenses'
+        ].map((name, index) => ({ id: `${branchId}_g_${index}`, name, branchId }));
+        
+        await trx('account_groups').insert(defaultGroups);
       });
       
       res.json(newBranch);
@@ -184,6 +194,62 @@ async function startServer() {
   app.delete("/api/branches/:id", async (req, res) => {
     await db('branches').where({ id: req.params.id }).delete();
     res.json({ success: true });
+  });
+
+  // Account Groups
+  app.get("/api/account-groups", async (req, res) => {
+    const { branchId } = req.query;
+    let query = db('account_groups').select('*');
+    if (branchId) query = query.where({ branchId });
+    res.json(await query);
+  });
+
+  app.post("/api/account-groups", async (req, res) => {
+    const newGroup = { id: Date.now().toString(), ...req.body };
+    await db('account_groups').insert(newGroup);
+    res.json(newGroup);
+  });
+
+  // Units of Measure
+  app.get("/api/units", async (req, res) => {
+    const { branchId } = req.query;
+    let query = db('units_of_measure').select('*');
+    if (branchId) query = query.where({ branchId });
+    res.json(await query);
+  });
+
+  app.post("/api/units", async (req, res) => {
+    const newUnit = { id: Date.now().toString(), ...req.body };
+    await db('units_of_measure').insert(newUnit);
+    res.json(newUnit);
+  });
+
+  // Stock Groups
+  app.get("/api/stock-groups", async (req, res) => {
+    const { branchId } = req.query;
+    let query = db('stock_groups').select('*');
+    if (branchId) query = query.where({ branchId });
+    res.json(await query);
+  });
+
+  app.post("/api/stock-groups", async (req, res) => {
+    const newGroup = { id: Date.now().toString(), ...req.body };
+    await db('stock_groups').insert(newGroup);
+    res.json(newGroup);
+  });
+
+  // Stock Items
+  app.get("/api/stock-items", async (req, res) => {
+    const { branchId } = req.query;
+    let query = db('stock_items').select('*');
+    if (branchId) query = query.where({ branchId });
+    res.json(await query);
+  });
+
+  app.post("/api/stock-items", async (req, res) => {
+    const newItem = { id: Date.now().toString(), ...req.body };
+    await db('stock_items').insert(newItem);
+    res.json(newItem);
   });
 
   app.get("/api/ledgers", async (req, res) => {

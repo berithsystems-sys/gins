@@ -30,6 +30,7 @@ import LoginScreen from './components/LoginScreen';
 import HQDashboard from './components/HQDashboard';
 import AnalyticsScreen from './components/AnalyticsScreen';
 import AuditLogScreen from './components/AuditLogScreen';
+import MastersDashboard from './components/masters/MastersDashboard';
 
 type User = {
   id: string;
@@ -47,8 +48,7 @@ type MenuOption = {
 };
 
 const GATEWAY_MENU: MenuOption[] = [
-  { id: 'masters', label: 'Masters (Trial Balance)', key: 'M', icon: <Building className="w-4 h-4" /> },
-  { id: 'create', label: 'Create Ledger', key: 'C', icon: <PlusCircle className="w-4 h-4" />, shortcut: 'Alt+C' },
+  { id: 'masters', label: 'Masters (Accounts Info)', key: 'M', icon: <Building className="w-4 h-4" /> },
   { id: 'vouchers', label: 'Vouchers', key: 'V', icon: <Receipt className="w-4 h-4" />, shortcut: 'F4-F9' },
   { id: 'daybook', label: 'Day Book', key: 'K', icon: <BookOpen className="w-4 h-4" /> },
   { id: 'reports', label: 'Financial Reports', key: 'R', icon: <FileText className="w-4 h-4" /> },
@@ -112,11 +112,10 @@ export default function App() {
     if (currentScreen === 'GATEWAY') {
       const selectedId = GATEWAY_MENU[selectedIndex].id;
       if (selectedId === 'vouchers') setCurrentScreen('VOUCHER');
-      if (selectedId === 'create') setCurrentScreen('LEDGER');
+      if (selectedId === 'masters') setCurrentScreen('LEDGER'); // Reused name but now is Dashboard
       if (selectedId === 'reports') setCurrentScreen('REPORTS');
       if (selectedId === 'stock-summary') setCurrentScreen('STOCK');
       if (selectedId === 'daybook') setCurrentScreen('DAYBOOK');
-      if (selectedId === 'masters') setCurrentScreen('TRIAL');
       if (selectedId === 'analytics') setCurrentScreen('ANALYTICS');
       if (selectedId === 'audit') setCurrentScreen('AUDIT');
       if (selectedId === 'backup') {
@@ -144,11 +143,10 @@ export default function App() {
   });
 
   useHotkeys('v', () => setCurrentScreen('VOUCHER'));
-  useHotkeys('c', () => setCurrentScreen('LEDGER'));
+  useHotkeys('m', () => setCurrentScreen('LEDGER'));
   useHotkeys('r', () => setCurrentScreen('REPORTS')); // Reports
   useHotkeys('s', () => setCurrentScreen('STOCK'));
   useHotkeys('k', () => setCurrentScreen('DAYBOOK'));
-  useHotkeys('m', () => setCurrentScreen('TRIAL'));
   useHotkeys('a', () => setCurrentScreen('ANALYTICS'));
   useHotkeys('l', () => setCurrentScreen('AUDIT'));
   useHotkeys('ctrl+n', () => setShowCalculator(true));
@@ -177,10 +175,12 @@ export default function App() {
   useHotkeys('f6', () => { if (currentScreen === 'VOUCHER') alert('Receipt Mode'); });
   useHotkeys('f7', () => { if (currentScreen === 'VOUCHER') alert('Journal Mode'); });
 
+  const [showHelp, setShowHelp] = useState(false);
+
   if (!user) return <LoginScreen onLogin={setUser} />;
 
   return (
-    <div className="flex flex-col h-screen bg-tally-bg overflow-hidden">
+    <div className="flex flex-col h-screen bg-tally-bg overflow-hidden uppercase">
       {/* Top Header Bar */}
       <header className="bg-tally-header text-white h-[35px] flex items-center justify-between px-2 text-[12px] border-b border-tally-hotkey">
         <div className="flex items-center gap-6">
@@ -229,6 +229,53 @@ export default function App() {
                 <div className="flex gap-8 justify-center">
                   <button onClick={() => window.close()} className="bg-tally-accent text-black px-8 py-1 font-bold border border-black hover:bg-yellow-500 transition-colors">Yes (Y)</button>
                   <button onClick={() => setShowQuit(false)} className="bg-gray-100 px-8 py-1 font-bold border border-gray-300 hover:bg-gray-200 transition-colors">No (N)</button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {showHelp && (
+            <motion.div 
+              initial={{ x: 300, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 300, opacity: 0 }}
+              className="absolute right-0 top-[65px] bottom-[24px] w-[350px] z-[90] bg-white border-l-4 border-tally-teal shadow-2xl p-6 overflow-auto"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-lg font-bold text-tally-teal tracking-widest">Golden Rules</h2>
+                <button onClick={() => setShowHelp(false)} className="text-red-600 font-bold">X</button>
+              </div>
+              
+              <div className="space-y-8">
+                <section>
+                  <h3 className="text-sm font-bold bg-gray-100 p-1 mb-2">Real Accounts</h3>
+                  <p className="text-xs italic text-gray-500 mb-2">(Relating to properties & assets)</p>
+                  <ul className="text-xs space-y-1 font-bold">
+                    <li className="text-green-700">Debit: What Comes In</li>
+                    <li className="text-red-700">Credit: What Goes Out</li>
+                  </ul>
+                </section>
+
+                <section>
+                  <h3 className="text-sm font-bold bg-gray-100 p-1 mb-2">Personal Accounts</h3>
+                  <p className="text-xs italic text-gray-500 mb-2">(Relating to persons/firms)</p>
+                  <ul className="text-xs space-y-1 font-bold">
+                    <li className="text-green-700">Debit: The Receiver</li>
+                    <li className="text-red-700">Credit: The Giver</li>
+                  </ul>
+                </section>
+
+                <section>
+                  <h3 className="text-sm font-bold bg-gray-100 p-1 mb-2">Nominal Accounts</h3>
+                  <p className="text-xs italic text-gray-500 mb-2">(Relating to income/expenses)</p>
+                  <ul className="text-xs space-y-1 font-bold">
+                    <li className="text-green-700">Debit: All Expenses & Losses</li>
+                    <li className="text-red-700">Credit: All Incomes & Gains</li>
+                  </ul>
+                </section>
+
+                <div className="bg-tally-bg p-3 border border-tally-teal/20 text-[10px] italic">
+                  Tally Shortcut: Use F12 in any voucher to configure advanced options.
                 </div>
               </div>
             </motion.div>
@@ -342,7 +389,7 @@ export default function App() {
               </div>
 
               {currentScreen === 'VOUCHER' && <VoucherScreen branchId={selectedBranchId} />}
-              {currentScreen === 'LEDGER' && <LedgerScreen branchId={selectedBranchId} />}
+              {currentScreen === 'LEDGER' && <MastersDashboard branchId={selectedBranchId} />}
               {currentScreen === 'REPORTS' && <ReportsScreen branchId={selectedBranchId} />}
               {currentScreen === 'STOCK' && <StockScreen branchId={selectedBranchId} />}
               {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} />}
@@ -368,6 +415,7 @@ export default function App() {
           <div className="h-4 bg-black/10"></div>
           <div className="hotkey-btn opacity-60"><span>F11: Features</span></div>
           <div className="hotkey-btn opacity-60"><span>F12: Configure</span></div>
+          <div className="hotkey-btn bg-tally-accent text-black mt-2" onClick={() => setShowHelp(!showHelp)}><span>H: Golden Rules</span></div>
           <div className="mt-auto bg-[#001c24] p-2 text-[10px] text-center italic border-t border-white/5">
             {currentTime.toLocaleTimeString()}
           </div>
