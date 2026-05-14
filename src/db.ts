@@ -58,12 +58,18 @@ export interface AuditLog {
 const dbUser = process.env.DB_USER || process.env.DB_USERNAME;
 const dbName = process.env.DB_NAME || process.env.DB_DATABASE;
 const dbHost = process.env.DB_HOST || 'localhost';
-const dbClient = process.env.DB_CLIENT || 'sqlite3';
+let dbClient = process.env.DB_CLIENT || 'sqlite3';
+
+// Validate DB_CLIENT - force sqlite3 if mysql2 isn't explicitly and correctly set
+if (dbClient !== 'mysql2' && dbClient !== 'sqlite3') {
+  console.warn(`WARNING: Invalid DB_CLIENT "${dbClient}" detected. Falling back to sqlite3.`);
+  dbClient = 'sqlite3';
+}
 
 console.log('--- Database Config Debug ---');
-console.log('Detected Client:', dbClient);
+console.log('Final Client Choice:', dbClient);
 if (dbClient === 'sqlite3') {
-  console.log('INFO: No MySQL client detected, falling back to SQLite3 (database.sqlite)');
+  console.log('INFO: Using SQLite3 (database.sqlite)');
 } else {
   console.log('Host:', dbHost);
   console.log('User:', dbUser);
@@ -80,7 +86,7 @@ export const db = knex({
     user: dbUser,
     password: process.env.DB_PASSWORD,
     database: dbName,
-    connectTimeout: 5000, // 5 seconds
+    connectTimeout: 10000, // Increased timeout for remote connections
   } : {
     filename: path.join(process.cwd(), 'database.sqlite')
   },
@@ -88,7 +94,7 @@ export const db = knex({
   pool: {
     min: 0,
     max: 10,
-    acquireTimeoutMillis: 5000,
+    acquireTimeoutMillis: 10000,
   }
 });
 
