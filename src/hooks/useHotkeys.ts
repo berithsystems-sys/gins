@@ -21,7 +21,14 @@ export function useHotkeys(
   useEffect(() => {
     const handler = (event: KeyboardEvent, keys: HotkeysEvent) => {
       const target = event.target as HTMLElement;
-      const isInput = target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      if (!target) return;
+      
+      const tagName = target.tagName ? target.tagName.toUpperCase() : '';
+      const isInput = tagName === 'INPUT' || 
+                      tagName === 'SELECT' || 
+                      tagName === 'TEXTAREA' || 
+                      target.isContentEditable ||
+                      target.getAttribute('role') === 'textbox';
       
       if (isInput && !options.enableOnFormTags) {
         return;

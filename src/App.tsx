@@ -121,7 +121,7 @@ export default function App() {
     setCurrentScreen('GOTO');
     setGotoSearch('');
     setGotoHighlightedIdx(0);
-  }, { enableOnFormTags: true });
+  });
 
   const handleGotoSelect = (item: string) => {
     if (item === 'Day Book') setCurrentScreen('DAYBOOK');
@@ -224,15 +224,20 @@ export default function App() {
   useHotkeys('l', () => setCurrentScreen('AUDIT'));
   useHotkeys('ctrl+n', () => setShowCalculator(true));
   useHotkeys('alt+f1', () => setUser(null)); // Logout
-  useHotkeys('alt+k', () => setCurrentScreen('COMPANY'));
-  useHotkeys('alt+y', () => setCurrentScreen('DATA'));
-  useHotkeys('alt+z', () => setCurrentScreen('EXCHANGE'));
-  useHotkeys('alt+g', () => setCurrentScreen('GOTO'));
-  useHotkeys('alt+o', () => setCurrentScreen('IMPORT'));
-  useHotkeys('alt+e', () => setCurrentScreen('EXPORT'));
-  useHotkeys('alt+m', () => setCurrentScreen('EMAIL'));
-  useHotkeys('alt+p', () => setCurrentScreen('PRINT'));
-  useHotkeys('alt+s', () => setCurrentScreen('SETTINGS'));
+  useHotkeys('alt+k', () => setCurrentScreen('COMPANY'), { enableOnFormTags: true });
+  useHotkeys('alt+y', () => setCurrentScreen('DATA'), { enableOnFormTags: true });
+  useHotkeys('alt+z', () => setCurrentScreen('EXCHANGE'), { enableOnFormTags: true });
+  useHotkeys('alt+g', (e) => {
+    e.preventDefault();
+    setCurrentScreen('GOTO');
+    setGotoSearch('');
+    setGotoHighlightedIdx(0);
+  }, { enableOnFormTags: true });
+  useHotkeys('alt+o', () => setCurrentScreen('IMPORT'), { enableOnFormTags: true });
+  useHotkeys('alt+e', () => setCurrentScreen('EXPORT'), { enableOnFormTags: true });
+  useHotkeys('alt+m', () => setCurrentScreen('EMAIL'), { enableOnFormTags: true });
+  useHotkeys('alt+p', () => setCurrentScreen('PRINT'), { enableOnFormTags: true });
+  useHotkeys('alt+s', () => setCurrentScreen('SETTINGS'), { enableOnFormTags: true });
 
   // Global Function Keys (Tally Style)
   useHotkeys('f2', (e) => {
@@ -252,7 +257,7 @@ export default function App() {
   useHotkeys('f9', () => { setCurrentScreen('VOUCHER'); setVoucherType('Purchase'); });
   useHotkeys('f11', () => alert('Features (F11)'));
   useHotkeys('f12', () => alert('Configuration (F12)'));
-  useHotkeys('alt+c', () => setCurrentScreen('LEDGER'));
+  useHotkeys('alt+c', () => setCurrentScreen('LEDGER'), { enableOnFormTags: true });
   useHotkeys('alt+a', () => alert('Alter Masters Mode Activated'));
   const [showQuit, setShowQuit] = useState(false);
 
