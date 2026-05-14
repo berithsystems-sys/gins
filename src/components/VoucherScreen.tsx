@@ -10,24 +10,23 @@ interface Ledger {
   name: string;
 }
 
-interface StockItem {
+interface CostCentre {
   id: string;
   name: string;
-  ratePerUnit: number;
 }
 
 export default function VoucherScreen({ branchId }: { branchId?: string }) {
   const [ledgers, setLedgers] = useState<Ledger[]>([]);
-  const [stockItems, setStockItems] = useState<StockItem[]>([]);
+  const [costCentres, setCostCentres] = useState<CostCentre[]>([]);
   const [type, setType] = useState<'Contra' | 'Payment' | 'Receipt' | 'Journal' | 'Sales' | 'Purchase'>('Payment');
   const [date, setDate] = useState('2026-05-12');
   const [narration, setNarration] = useState('');
-  const [entries, setEntries] = useState([{ ledgerId: '', stockItemId: '', quantity: '', rate: '', amount: '', type: 'Dr' as 'Dr' | 'Cr' }]);
+  const [entries, setEntries] = useState([{ ledgerId: '', costCentreId: '', amount: '', type: 'Dr' as 'Dr' | 'Cr' }]);
 
   useEffect(() => {
     const query = branchId ? `?branchId=${branchId}` : '';
     fetch(`api/ledgers${query}`).then(res => res.json()).then(setLedgers);
-    fetch(`api/stock-items${query}`).then(res => res.json()).then(setStockItems);
+    fetch(`api/cost-centres${query}`).then(res => res.json()).then(setCostCentres);
     
     // Internal Voucher Hotkeys
     const handler = (event: KeyboardEvent) => {
@@ -43,7 +42,7 @@ export default function VoucherScreen({ branchId }: { branchId?: string }) {
   }, [branchId]);
 
   const handleAddEntry = () => {
-    setEntries([...entries, { ledgerId: '', stockItemId: '', quantity: '', rate: '', amount: '', type: 'Dr' }]);
+    setEntries([...entries, { ledgerId: '', costCentreId: '', amount: '', type: 'Dr' }]);
   };
 
   const calculateTotal = () => {
@@ -63,17 +62,15 @@ export default function VoucherScreen({ branchId }: { branchId?: string }) {
         branchId,
         entries: entries.map(e => ({ 
           ledgerId: e.ledgerId || null,
-          stockItemId: e.stockItemId || null,
-          quantity: e.quantity ? Number(e.quantity) : null,
-          rate: e.rate ? Number(e.rate) : null,
+          costCentreId: e.costCentreId || null,
           amount: Number(e.amount),
           type: e.type 
         }))
       }),
     });
     if (response.ok) {
-      alert('Voucher Saved');
-      setEntries([{ ledgerId: '', amount: '', type: 'Dr' }]);
+      alert('Voucher Saved Successfully');
+      setEntries([{ ledgerId: '', costCentreId: '', amount: '', type: 'Dr' }]);
       setNarration('');
     }
   };
@@ -81,55 +78,43 @@ export default function VoucherScreen({ branchId }: { branchId?: string }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="flex justify-between items-start mb-4">
-        <div className="flex gap-4">
-          <button 
-            type="button" 
-            onClick={() => setType('Payment')}
-            className={`px-3 py-1 text-[10px] font-bold border rounded ${type === 'Payment' ? 'bg-tally-teal text-white' : 'bg-gray-100'}`}
-          >
-            F5: Payment
-          </button>
-          <button 
-            type="button" 
-            onClick={() => setType('Receipt')}
-            className={`px-3 py-1 text-[10px] font-bold border rounded ${type === 'Receipt' ? 'bg-tally-teal text-white' : 'bg-gray-100'}`}
-          >
-            F6: Receipt
-          </button>
-          <button 
-            type="button" 
-            onClick={() => setType('Journal')}
-            className={`px-3 py-1 text-[10px] font-bold border rounded ${type === 'Journal' ? 'bg-tally-teal text-white' : 'bg-gray-100'}`}
-          >
-            F7: Journal
-          </button>
+        <div className="flex flex-wrap gap-2">
+          {['Contra', 'Payment', 'Receipt', 'Journal', 'Sales', 'Purchase'].map((t, idx) => (
+            <button 
+              key={t}
+              type="button" 
+              onClick={() => setType(t as any)}
+              className={`px-3 py-1 text-[10px] font-bold border rounded transition-colors ${type === t ? 'bg-tally-teal text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
+            >
+              F{idx + 4}: {t}
+            </button>
+          ))}
         </div>
         <div className="text-right">
-          <div className="text-[10px] font-bold text-gray-500">Date</div>
+          <div className="text-[10px] font-bold text-gray-500 uppercase">Date</div>
           <input 
             type="date" 
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="text-sm font-bold border-b border-tally-teal focus:outline-none"
+            className="text-sm font-bold border-b-2 border-tally-teal focus:outline-none focus:bg-tally-bg p-1"
           />
         </div>
       </div>
 
-      <div className="border border-tally-teal/30">
+      <div className="border-2 border-tally-teal/20 bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-gray-100 text-[10px] font-bold uppercase text-gray-500">
+          <thead className="bg-gray-100 text-[10px] font-bold uppercase text-gray-500 border-b-2 border-tally-teal/10">
             <tr>
               <th className="px-4 py-2 text-left w-16">Dr/Cr</th>
-              <th className="px-4 py-2 text-left">Particulars (Ledger)</th>
-              <th className="px-4 py-2 text-left">Item (Optional)</th>
-              <th className="px-4 py-2 text-right w-24">Qty/Rate</th>
-              <th className="px-4 py-2 text-right w-32">Debit</th>
-              <th className="px-4 py-2 text-right w-32">Credit</th>
+              <th className="px-4 py-2 text-left">Particulars</th>
+              <th className="px-4 py-2 text-left w-40">Cost Centre</th>
+              <th className="px-4 py-2 text-right w-32">Debit (₹)</th>
+              <th className="px-4 py-2 text-right w-32">Credit (₹)</th>
             </tr>
           </thead>
-          <tbody className="divide-y">
+          <tbody className="divide-y divide-gray-100">
             {entries.map((entry, idx) => (
-              <tr key={idx} className="hover:bg-tally-active/5">
+              <tr key={idx} className="hover:bg-tally-accent/5">
                 <td className="px-1 py-1">
                   <select 
                     value={entry.type}
@@ -138,7 +123,7 @@ export default function VoucherScreen({ branchId }: { branchId?: string }) {
                       newEntries[idx].type = e.target.value as 'Dr' | 'Cr';
                       setEntries(newEntries);
                     }}
-                    className="w-full focus:outline-none font-bold text-tally-teal bg-transparent px-1"
+                    className="w-full focus:outline-none font-bold text-tally-teal bg-transparent px-2"
                   >
                     <option value="Dr">Dr</option>
                     <option value="Cr">Cr</option>
@@ -152,7 +137,7 @@ export default function VoucherScreen({ branchId }: { branchId?: string }) {
                       newEntries[idx].ledgerId = e.target.value;
                       setEntries(newEntries);
                     }}
-                    className="w-full focus:outline-none font-medium bg-transparent"
+                    className="w-full focus:outline-none font-bold bg-transparent italic"
                     required
                   >
                     <option value="">Select Ledger...</option>
@@ -161,54 +146,17 @@ export default function VoucherScreen({ branchId }: { branchId?: string }) {
                 </td>
                 <td className="px-2 py-1">
                   <select
-                    value={entry.stockItemId}
+                    value={entry.costCentreId}
                     onChange={(e) => {
                       const newEntries = [...entries];
-                      const itemId = e.target.value;
-                      newEntries[idx].stockItemId = itemId;
-                      if (itemId) {
-                        const item = stockItems.find(si => si.id === itemId);
-                        if (item) newEntries[idx].rate = item.ratePerUnit.toString();
-                      }
+                      newEntries[idx].costCentreId = e.target.value;
                       setEntries(newEntries);
                     }}
-                    className="w-full focus:outline-none text-[12px] bg-transparent"
+                    className="w-full focus:outline-none text-[11px] bg-transparent opacity-70"
                   >
                     <option value="">(None)</option>
-                    {stockItems.map(si => <option key={si.id} value={si.id}>{si.name}</option>)}
+                    {costCentres.map(cc => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
                   </select>
-                </td>
-                <td className="px-1 py-1">
-                  {entry.stockItemId && (
-                    <div className="flex flex-col gap-1">
-                      <input 
-                        type="number" 
-                        placeholder="Qty"
-                        value={entry.quantity}
-                        onChange={(e) => {
-                          const newEntries = [...entries];
-                          const qty = e.target.value;
-                          newEntries[idx].quantity = qty;
-                          newEntries[idx].amount = (Number(qty || 0) * Number(newEntries[idx].rate || 0)).toString();
-                          setEntries(newEntries);
-                        }}
-                        className="w-full text-right focus:outline-none bg-blue-50/50 text-[11px] border border-transparent focus:border-tally-teal px-1"
-                      />
-                      <input 
-                        type="number" 
-                        placeholder="Rate"
-                        value={entry.rate}
-                        onChange={(e) => {
-                          const newEntries = [...entries];
-                          const rate = e.target.value;
-                          newEntries[idx].rate = rate;
-                          newEntries[idx].amount = (Number(newEntries[idx].quantity || 0) * Number(rate || 0)).toString();
-                          setEntries(newEntries);
-                        }}
-                        className="w-full text-right focus:outline-none bg-blue-50/50 text-[11px] border border-transparent focus:border-tally-teal px-1"
-                      />
-                    </div>
-                  )}
                 </td>
                 <td className="px-4 py-1">
                   {entry.type === 'Dr' && (
@@ -220,7 +168,8 @@ export default function VoucherScreen({ branchId }: { branchId?: string }) {
                         newEntries[idx].amount = e.target.value;
                         setEntries(newEntries);
                       }}
-                      className="w-full text-right focus:outline-none bg-transparent font-bold"
+                      className="w-full text-right focus:outline-none bg-transparent font-mono font-bold"
+                      placeholder="0.00"
                     />
                   )}
                 </td>
@@ -234,35 +183,49 @@ export default function VoucherScreen({ branchId }: { branchId?: string }) {
                         newEntries[idx].amount = e.target.value;
                         setEntries(newEntries);
                       }}
-                      className="w-full text-right focus:outline-none bg-transparent font-bold"
+                      className="w-full text-right focus:outline-none bg-transparent font-mono font-bold"
+                      placeholder="0.00"
                     />
                   )}
                 </td>
               </tr>
             ))}
           </tbody>
+          <tfoot className="bg-gray-50 border-t-2 border-tally-teal/10 invisible">
+             <tr><td colSpan={5}>Space for total</td></tr>
+          </tfoot>
         </table>
         <button 
           type="button" 
           onClick={handleAddEntry}
-          className="w-full py-2 text-[10px] text-tally-teal font-bold hover:bg-tally-bg border-t border-tally-teal/10"
+          className="w-full py-2 text-[10px] text-tally-teal font-extrabold uppercase hover:bg-tally-accent/20 border-t border-tally-teal/10 transition-colors"
         >
-          + Add Line
+          + Add Particulars (Alt+C to new ledger)
         </button>
       </div>
 
-      <div className="space-y-1">
-        <label className="block text-[10px] font-bold text-gray-400 uppercase">Narration</label>
-        <textarea 
-          value={narration}
-          onChange={(e) => setNarration(e.target.value)}
-          rows={2}
-          className="w-full border border-tally-teal/20 p-2 text-sm focus:outline-none focus:border-tally-teal bg-gray-50"
-        />
-      </div>
-
-      <div className="flex justify-end gap-4">
-        <button type="submit" className="bg-tally-teal text-white px-8 py-2 text-xs font-bold uppercase shadow-md">Accept</button>
+      <div className="flex gap-6 mt-4">
+        <div className="flex-1">
+          <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Narration</label>
+          <textarea 
+            value={narration}
+            onChange={(e) => setNarration(e.target.value)}
+            rows={2}
+            placeholder="Enter narration for this transaction..."
+            className="w-full border border-tally-teal/20 p-2 text-xs focus:outline-none focus:border-tally-teal bg-gray-50 italic"
+          />
+        </div>
+        <div className="w-1/3 flex flex-col justify-end gap-2 border-l border-gray-100 pl-6">
+          <div className="flex justify-between items-center text-xs font-bold text-gray-500 uppercase">
+             <span>Sub Total</span>
+             <span className="font-mono">{calculateTotal().toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between items-center text-sm font-black text-tally-teal">
+             <span>Total Dr/Cr</span>
+             <span className="font-mono">₹ {calculateTotal().toLocaleString()}</span>
+          </div>
+          <button type="submit" className="w-full bg-tally-teal text-white py-2 text-xs font-bold uppercase shadow-lg hover:bg-teal-700 transition-all active:scale-95">Accept (Enter)</button>
+        </div>
       </div>
     </form>
   );

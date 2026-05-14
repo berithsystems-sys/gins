@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Building2, Plus, Trash2, ChevronRight, BarChart3 } from 'lucide-react';
+import { Building2, Plus, Trash2, ChevronRight, BarChart3, KeyRound } from 'lucide-react';
 
 interface HQDashboardProps {
   onSelectBranch: (id: string) => void;
@@ -41,6 +41,18 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
     if (!confirm('Are you sure? All data related to this church branch will be deleted.')) return;
     await fetch(`api/branches/${id}`, { method: 'DELETE' });
     setBranches(branches.filter(b => b.id !== id));
+  };
+
+  const handleResetPassword = async (id: string) => {
+    const newPass = prompt('Enter new password for this church:');
+    if (!newPass) return;
+    const res = await fetch(`api/branches/${id}/reset-password`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: newPass })
+    });
+    if (res.ok) alert('Password reset successfully');
+    else alert('Failed to reset password');
   };
 
   return (
@@ -88,6 +100,13 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
                     title="View Branch Analytics"
                   >
                     <BarChart3 className="w-5 h-5" />
+                  </button>
+                  <button 
+                    onClick={() => handleResetPassword(branch.id)}
+                    className="p-2 hover:bg-teal-50 text-tally-teal rounded transition-colors" 
+                    title="Reset Password"
+                  >
+                    <KeyRound className="w-5 h-5" />
                   </button>
                   <button 
                     onClick={() => handleDelete(branch.id)}

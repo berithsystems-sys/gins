@@ -1,11 +1,8 @@
 import React, { useState } from 'react';
 import AccountGroupScreen from './AccountGroupScreen';
 import LedgerScreen from '../LedgerScreen';
-import StockGroupScreen from './StockGroupScreen';
-import StockItemScreen from './StockItemScreen';
-import UnitOfMeasureScreen from './UnitOfMeasureScreen';
 
-type MasterTab = 'ACCOUNT_GROUPS' | 'LEDGERS' | 'STOCK_GROUPS' | 'STOCK_ITEMS' | 'UNITS';
+type MasterTab = 'ACCOUNT_GROUPS' | 'LEDGERS' | 'COST_CENTRES' | 'EMPLOYEES';
 
 export default function MastersDashboard({ branchId }: { branchId?: string }) {
   const [activeTab, setActiveTab] = useState<MasterTab>('LEDGERS');
@@ -13,9 +10,8 @@ export default function MastersDashboard({ branchId }: { branchId?: string }) {
   const tabs: { id: MasterTab; label: string; section: string }[] = [
     { id: 'ACCOUNT_GROUPS', label: 'Groups', section: 'Accounts Information' },
     { id: 'LEDGERS', label: 'Ledgers', section: 'Accounts Information' },
-    { id: 'STOCK_GROUPS', label: 'Stock Groups', section: 'Inventory Information' },
-    { id: 'STOCK_ITEMS', label: 'Stock Items', section: 'Inventory Information' },
-    { id: 'UNITS', label: 'Units of Measure', section: 'Inventory Information' },
+    { id: 'COST_CENTRES', label: 'Cost Centres', section: 'Accounts Information' },
+    { id: 'EMPLOYEES', label: 'Employees', section: 'Payroll Information' },
   ];
 
   return (
@@ -38,8 +34,8 @@ export default function MastersDashboard({ branchId }: { branchId?: string }) {
         </div>
 
         <div>
-          <h3 className="text-[10px] font-bold text-gray-400 uppercase mb-2 tracking-widest pl-2">Inventory Info</h3>
-          {tabs.filter(t => t.section === 'Inventory Information').map(tab => (
+          <h3 className="text-[10px] font-bold text-gray-400 uppercase mb-2 tracking-widest pl-2">Payroll Info</h3>
+          {tabs.filter(t => t.section === 'Payroll Information').map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -61,9 +57,8 @@ export default function MastersDashboard({ branchId }: { branchId?: string }) {
         
         {activeTab === 'ACCOUNT_GROUPS' && <AccountGroupScreen branchId={branchId} />}
         {activeTab === 'LEDGERS' && <LedgerScreen branchId={branchId} />}
-        {activeTab === 'STOCK_GROUPS' && <StockGroupScreen branchId={branchId} />}
-        {activeTab === 'STOCK_ITEMS' && <StockItemScreen branchId={branchId} />}
-        {activeTab === 'UNITS' && <UnitOfMeasureScreen branchId={branchId} />}
+        {activeTab === 'COST_CENTRES' && <div className="text-xs italic text-gray-400">Cost Centres screen placeholder</div>}
+        {activeTab === 'EMPLOYEES' && <div className="text-xs italic text-gray-400">Payroll screen placeholder</div>}
       </div>
     </div>
   );

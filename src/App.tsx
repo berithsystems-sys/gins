@@ -13,19 +13,18 @@ import {
   Settings, 
   Database, 
   FileText,
-  Package,
-  PlusCircle,
   BarChart3,
   ShieldCheck,
   LayoutDashboard,
-  Clock
+  Wallet,
+  Users,
+  LogOut,
+  PlusCircle
 } from 'lucide-react';
 import VoucherScreen from './components/VoucherScreen';
 import LedgerScreen from './components/LedgerScreen';
 import ReportsScreen from './components/ReportsScreen';
-import StockScreen from './components/StockScreen';
 import DayBookScreen from './components/DayBookScreen';
-import TrialBalanceScreen from './components/TrialBalanceScreen';
 import LoginScreen from './components/LoginScreen';
 import HQDashboard from './components/HQDashboard';
 import AnalyticsScreen from './components/AnalyticsScreen';
@@ -52,16 +51,16 @@ const GATEWAY_MENU: MenuOption[] = [
   { id: 'vouchers', label: 'Vouchers', key: 'V', icon: <Receipt className="w-4 h-4" />, shortcut: 'F4-F9' },
   { id: 'daybook', label: 'Day Book', key: 'K', icon: <BookOpen className="w-4 h-4" /> },
   { id: 'reports', label: 'Financial Reports', key: 'R', icon: <FileText className="w-4 h-4" /> },
-  { id: 'analytics', label: 'Visual Analytics', key: 'A', icon: <BarChart3 className="w-4 h-4" /> },
+  { id: 'analytics', label: 'MIS Reports (AI)', key: 'A', icon: <BarChart3 className="w-4 h-4" /> },
+  { id: 'banking', label: 'Banking', key: 'B', icon: <Wallet className="w-4 h-4" /> },
+  { id: 'payroll', label: 'Payroll', key: 'P', icon: <Users className="w-4 h-4" /> },
   { id: 'audit', label: 'Audit Logs', key: 'L', icon: <ShieldCheck className="w-4 h-4" /> },
-  { id: 'stock-summary', label: 'Stock Summary', key: 'S', icon: <Package className="w-4 h-4" /> },
-  { id: 'backup', label: 'Manual Backup', key: 'B', icon: <Database className="w-4 h-4" /> },
-  { id: 'utilities', label: 'Utilities', key: 'U', icon: <Settings className="w-4 h-4" /> },
+  { id: 'backup', label: 'Data Utility', key: 'U', icon: <Database className="w-4 h-4" /> },
 ];
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'STOCK' | 'DAYBOOK' | 'TRIAL' | 'HQ' | 'ANALYTICS' | 'AUDIT'>('GATEWAY');
+  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'HQ' | 'ANALYTICS' | 'AUDIT' | 'BANKING' | 'PAYROLL' | 'DAYBOOK' | 'COMPANY' | 'DATA' | 'EXCHANGE' | 'GOTO' | 'IMPORT' | 'EXPORT' | 'PRINT' | 'EMAIL' | 'SETTINGS'>('GATEWAY');
   const [selectedBranchId, setSelectedBranchId] = useState<string | undefined>(undefined);
   const [branches, setBranches] = useState<any[]>([]);
   const [allLedgers, setAllLedgers] = useState<any[]>([]);
@@ -112,12 +111,13 @@ export default function App() {
     if (currentScreen === 'GATEWAY') {
       const selectedId = GATEWAY_MENU[selectedIndex].id;
       if (selectedId === 'vouchers') setCurrentScreen('VOUCHER');
-      if (selectedId === 'masters') setCurrentScreen('LEDGER'); // Reused name but now is Dashboard
+      if (selectedId === 'masters') setCurrentScreen('LEDGER'); 
       if (selectedId === 'reports') setCurrentScreen('REPORTS');
-      if (selectedId === 'stock-summary') setCurrentScreen('STOCK');
       if (selectedId === 'daybook') setCurrentScreen('DAYBOOK');
       if (selectedId === 'analytics') setCurrentScreen('ANALYTICS');
       if (selectedId === 'audit') setCurrentScreen('AUDIT');
+      if (selectedId === 'banking') setCurrentScreen('BANKING');
+      if (selectedId === 'payroll') setCurrentScreen('PAYROLL');
       if (selectedId === 'backup') {
         const confirmBackup = window.confirm("Download a local backup of the entire church database?");
         if (confirmBackup) {
@@ -144,13 +144,23 @@ export default function App() {
 
   useHotkeys('v', () => setCurrentScreen('VOUCHER'));
   useHotkeys('m', () => setCurrentScreen('LEDGER'));
-  useHotkeys('r', () => setCurrentScreen('REPORTS')); // Reports
-  useHotkeys('s', () => setCurrentScreen('STOCK'));
+  useHotkeys('r', () => setCurrentScreen('REPORTS')); 
   useHotkeys('k', () => setCurrentScreen('DAYBOOK'));
   useHotkeys('a', () => setCurrentScreen('ANALYTICS'));
   useHotkeys('l', () => setCurrentScreen('AUDIT'));
+  useHotkeys('b', () => setCurrentScreen('BANKING'));
+  useHotkeys('p', () => setCurrentScreen('PAYROLL'));
   useHotkeys('ctrl+n', () => setShowCalculator(true));
   useHotkeys('alt+f1', () => setUser(null)); // Logout
+  useHotkeys('alt+k', () => setCurrentScreen('COMPANY'));
+  useHotkeys('alt+y', () => setCurrentScreen('DATA'));
+  useHotkeys('alt+z', () => setCurrentScreen('EXCHANGE'));
+  useHotkeys('alt+g', () => setCurrentScreen('GOTO'));
+  useHotkeys('alt+o', () => setCurrentScreen('IMPORT'));
+  useHotkeys('alt+e', () => setCurrentScreen('EXPORT'));
+  useHotkeys('alt+m', () => setCurrentScreen('EMAIL'));
+  useHotkeys('alt+p', () => setCurrentScreen('PRINT'));
+  useHotkeys('alt+s', () => setCurrentScreen('SETTINGS'));
 
   // Global Function Keys (Tally Style)
   useHotkeys('f2', () => alert('Date: 12-May-2026'));
@@ -185,19 +195,19 @@ export default function App() {
       <header className="bg-tally-header text-white h-[35px] flex items-center justify-between px-2 text-[12px] border-b border-tally-hotkey">
         <div className="flex items-center gap-6">
           <div className="flex gap-4">
-            <span><u>K</u>: Company</span>
-            <span><u>Y</u>: Data</span>
-            <span><u>Z</u>: Exchange</span>
-            <span className="bg-white/20 px-2 rounded font-bold cursor-pointer" onClick={() => user.role === 'HQ' ? setCurrentScreen('HQ') : setCurrentScreen('GATEWAY')}>G: Go To</span>
-            <span><u>O</u>: Import</span>
-            <span><u>E</u>: Export</span>
-            <span><u>M</u>: E-mail</span>
-            <span><u>P</u>: Print</span>
+            <span className="cursor-pointer hover:bg-white/10 px-1 rounded" onClick={() => setCurrentScreen('COMPANY')}><u>K</u>: Company</span>
+            <span className="cursor-pointer hover:bg-white/10 px-1 rounded" onClick={() => setCurrentScreen('DATA')}><u>Y</u>: Data</span>
+            <span className="cursor-pointer hover:bg-white/10 px-1 rounded" onClick={() => setCurrentScreen('EXCHANGE')}><u>Z</u>: Exchange</span>
+            <span className="cursor-pointer hover:bg-white/10 px-1 rounded" onClick={() => setCurrentScreen('GOTO')}><u>G</u>: Go To</span>
+            <span className="cursor-pointer hover:bg-white/10 px-1 rounded" onClick={() => setCurrentScreen('IMPORT')}><u>O</u>: Import</span>
+            <span className="cursor-pointer hover:bg-white/10 px-1 rounded" onClick={() => setCurrentScreen('EXPORT')}><u>E</u>: Export</span>
+            <span className="cursor-pointer hover:bg-white/10 px-1 rounded" onClick={() => setCurrentScreen('EMAIL')}><u>M</u>: E-mail</span>
+            <span className="cursor-pointer hover:bg-white/10 px-1 rounded" onClick={() => setCurrentScreen('PRINT')}><u>P</u>: Print</span>
           </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="opacity-70">User: {user.username}</span>
+            <span className="opacity-70 cursor-pointer hover:underline" onClick={() => setCurrentScreen('SETTINGS')}>User: {user.username}</span>
             <span className="bg-red-500/20 px-2 rounded text-[10px] font-bold">{user.role}</span>
           </div>
           <button className="opacity-80 hover:opacity-100" onClick={() => setUser(null)}>Alt+F1: Logout</button>
@@ -328,8 +338,8 @@ export default function App() {
                   {GATEWAY_MENU.map((item, index) => (
                     <React.Fragment key={item.id}>
                       {index === 0 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Masters</div>}
-                      {index === 2 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Transactions</div>}
-                      {index === 5 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Reports</div>}
+                      {index === 1 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Transactions</div>}
+                      {index === 3 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Reports</div>}
                       {index === 8 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Utilities</div>}
                       
                       <div
@@ -372,13 +382,22 @@ export default function App() {
                 <h1 className="text-lg font-bold text-tally-teal uppercase flex items-center gap-2">
                   <div className="w-1 h-6 bg-tally-teal"></div>
                   {currentScreen === 'VOUCHER' && 'Accounting Voucher Creation'}
-                  {currentScreen === 'LEDGER' && 'Ledger Creation'}
+                  {currentScreen === 'LEDGER' && 'Masters Management'}
                   {currentScreen === 'REPORTS' && 'Financial Reports'}
-                  {currentScreen === 'STOCK' && 'Stock Summary'}
                   {currentScreen === 'DAYBOOK' && 'Day Book'}
-                  {currentScreen === 'TRIAL' && 'Trial Balance'}
                   {currentScreen === 'ANALYTICS' && 'Visual Data Analytics'}
                   {currentScreen === 'AUDIT' && 'Security Audit Dashboard'}
+                  {currentScreen === 'BANKING' && 'Banking Utility'}
+                  {currentScreen === 'PAYROLL' && 'Payroll Management'}
+                  {currentScreen === 'COMPANY' && 'Company Information'}
+                  {currentScreen === 'DATA' && 'Data Management'}
+                  {currentScreen === 'EXCHANGE' && 'Data Exchange'}
+                  {currentScreen === 'GOTO' && 'Go To / Switch To'}
+                  {currentScreen === 'IMPORT' && 'Import Data'}
+                  {currentScreen === 'EXPORT' && 'Export Data'}
+                  {currentScreen === 'PRINT' && 'Print Reports'}
+                  {currentScreen === 'EMAIL' && 'E-mail Services'}
+                  {currentScreen === 'SETTINGS' && 'User Settings & Security'}
                 </h1>
                 <button 
                   onClick={() => user.role === 'HQ' ? setCurrentScreen('HQ') : setCurrentScreen('GATEWAY')}
@@ -391,11 +410,68 @@ export default function App() {
               {currentScreen === 'VOUCHER' && <VoucherScreen branchId={selectedBranchId} />}
               {currentScreen === 'LEDGER' && <MastersDashboard branchId={selectedBranchId} />}
               {currentScreen === 'REPORTS' && <ReportsScreen branchId={selectedBranchId} />}
-              {currentScreen === 'STOCK' && <StockScreen branchId={selectedBranchId} />}
               {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} />}
-              {currentScreen === 'TRIAL' && <TrialBalanceScreen branchId={selectedBranchId} />}
               {currentScreen === 'ANALYTICS' && <AnalyticsScreen branches={branches} ledgers={allLedgers} vouchers={allVouchers} />}
-              {currentScreen === 'AUDIT' && <AuditLogScreen />}
+              {currentScreen === 'AUDIT' && <AuditLogScreen branchId={selectedBranchId} />}
+              {currentScreen === 'BANKING' && <div className="p-10 text-center font-bold text-tally-teal uppercase italic">Banking Module - Coming Soon</div>}
+              {currentScreen === 'PAYROLL' && <div className="p-10 text-center font-bold text-tally-teal uppercase italic">Payroll Module - Coming Soon</div>}
+              {currentScreen === 'SETTINGS' && (
+                <div className="p-8 space-y-6">
+                  <div className="border p-4 bg-gray-50">
+                    <h3 className="text-sm font-bold uppercase mb-4 text-tally-teal">Change Password</h3>
+                    <div className="space-y-4 max-w-xs">
+                      <input 
+                        id="new-password"
+                        type="password" 
+                        placeholder="Enter New Password"
+                        className="w-full border p-2 text-sm outline-none focus:border-tally-teal"
+                      />
+                      <button 
+                        onClick={async () => {
+                          const pass = (document.getElementById('new-password') as HTMLInputElement).value;
+                          if (!pass) return;
+                          const res = await fetch(`api/users/${user.id}/password`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ password: pass })
+                          });
+                          if (res.ok) alert('Password updated successfully');
+                        }}
+                        className="bg-tally-teal text-white px-4 py-2 text-[10px] font-bold uppercase w-full shadow-md hover:bg-tally-header"
+                      >
+                        Update Password
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-gray-500 italic">
+                    User ID: {user.id} | Access Level: {user.role}
+                  </div>
+                </div>
+              )}
+              {currentScreen === 'COMPANY' && (
+                <div className="p-10 space-y-4">
+                   <div className="grid grid-cols-2 gap-4 text-xs">
+                      <div className="bg-gray-100 p-4 border italic">Select Company (F3)</div>
+                      <div className="bg-gray-100 p-4 border italic">Alter Company (Alt+K)</div>
+                      <div className="bg-gray-100 p-4 border italic">Connect for Remote Access</div>
+                      <div className="bg-gray-100 p-4 border italic">Shut Company (Alt+F1)</div>
+                   </div>
+                </div>
+              )}
+              {['DATA', 'EXCHANGE', 'GOTO', 'IMPORT', 'EXPORT', 'PRINT', 'EMAIL'].includes(currentScreen) && (
+                <div className="p-20 text-center space-y-4">
+                   <div className="text-4xl text-tally-teal/10 font-black uppercase">{currentScreen}</div>
+                   <div className="text-xs font-bold text-gray-400 uppercase tracking-widest italic">
+                     This utility module is being synchronized with the cloud...
+                   </div>
+                   <button 
+                     onClick={() => setCurrentScreen('GATEWAY')}
+                     className="text-[10px] border border-tally-teal px-4 py-1 hover:bg-tally-teal hover:text-white transition-colors"
+                   >
+                     Back to Gateway
+                   </button>
+                </div>
+              )}
             </div>
           </div>
         )}

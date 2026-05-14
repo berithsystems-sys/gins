@@ -17,6 +17,10 @@ export interface Branch {
   code: string;
   name: string;
   location: string;
+  email?: string;
+  password?: string;
+  gstin?: string;
+  registrationType?: 'Regular' | 'Composition';
 }
 
 export interface AccountGroup {
@@ -26,41 +30,29 @@ export interface AccountGroup {
   branchId: string;
 }
 
-export interface UnitOfMeasure {
-  id: string;
-  type: 'Simple' | 'Compound';
-  symbol: string;
-  formalName: string;
-  decimalPlaces: number;
-  branchId: string;
-}
-
-export interface StockGroup {
-  id: string;
-  name: string;
-  under?: string;
-  branchId: string;
-}
-
-export interface StockItem {
-  id: string;
-  name: string;
-  alias?: string;
-  under?: string; // stock group id
-  unitId: string;
-  openingBalance: number;
-  ratePerUnit: number;
-  branchId: string;
-}
-
 export interface Ledger {
   id: string;
   name: string;
   groupId?: string; 
-  group_name?: string; // Legacy support
-  group?: string; // Legacy support
+  group_name?: string; 
   openingBalance: number;
   balanceType: 'Dr' | 'Cr';
+  branchId: string;
+  gstin?: string;
+}
+
+export interface CostCentre {
+  id: string;
+  name: string;
+  branchId: string;
+}
+
+export interface Employee {
+  id: string;
+  name: string;
+  code: string;
+  designation: string;
+  salaryStructure: string; // JSON string
   branchId: string;
 }
 
@@ -68,15 +60,22 @@ export interface Voucher {
   id: string;
   number?: string;
   date: string;
-  type: 'Contra' | 'Payment' | 'Receipt' | 'Journal' | 'Sales' | 'Purchase';
+  type: 'Contra' | 'Payment' | 'Receipt' | 'Journal' | 'Sales' | 'Purchase' | 'Credit Note' | 'Debit Note';
   narration: string;
   amount: number;
   branchId: string;
-  entries?: {
-    ledgerId: string;
-    amount: number;
-    type: 'Dr' | 'Cr';
-  }[];
+  gstAmount?: number;
+  igst?: number;
+  cgst?: number;
+  sgst?: number;
+  entries?: VoucherEntry[];
+}
+
+export interface VoucherEntry {
+  ledgerId: string;
+  amount: number;
+  type: 'Dr' | 'Cr';
+  costCentreId?: string;
 }
 
 export interface AuditLog {
@@ -133,6 +132,10 @@ export async function initDB() {
       table.string('code').notNullable();
       table.string('name').notNullable();
       table.string('location').notNullable();
+      table.string('email');
+      table.string('password');
+      table.string('gstin');
+      table.string('registrationType');
     });
     // Seed initial branches
     await db('branches').insert([
@@ -187,38 +190,23 @@ export async function initDB() {
     await db('account_groups').insert(defaultGroups);
   }
 
-  // Units of Measure
-  if (!(await db.schema.hasTable('units_of_measure'))) {
-    await db.schema.createTable('units_of_measure', (table) => {
+  // Cost Centres
+  if (!(await db.schema.hasTable('cost_centres'))) {
+    await db.schema.createTable('cost_centres', (table) => {
       table.string('id').primary();
-      table.string('type').notNullable(); // Simple or Compound
-      table.string('symbol').notNullable();
-      table.string('formalName').notNullable();
-      table.integer('decimalPlaces').defaultTo(0);
+      table.string('name').notNullable();
       table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
     });
   }
 
-  // Stock Groups
-  if (!(await db.schema.hasTable('stock_groups'))) {
-    await db.schema.createTable('stock_groups', (table) => {
+  // Employees
+  if (!(await db.schema.hasTable('employees'))) {
+    await db.schema.createTable('employees', (table) => {
       table.string('id').primary();
       table.string('name').notNullable();
-      table.string('under');
-      table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
-    });
-  }
-
-  // Stock Items
-  if (!(await db.schema.hasTable('stock_items'))) {
-    await db.schema.createTable('stock_items', (table) => {
-      table.string('id').primary();
-      table.string('name').notNullable();
-      table.string('alias');
-      table.string('under'); // Stock Group ID
-      table.string('unitId').references('id').inTable('units_of_measure');
-      table.float('openingBalance').defaultTo(0);
-      table.float('ratePerUnit').defaultTo(0);
+      table.string('code').unique().notNullable();
+      table.string('designation');
+      table.text('salaryStructure');
       table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
     });
   }
@@ -228,10 +216,11 @@ export async function initDB() {
     await db.schema.createTable('ledgers', (table) => {
       table.string('id').primary();
       table.string('name').notNullable();
-      table.string('groupId'); // Replaces group_name
-      table.string('group_name'); // Compatibility
+      table.string('groupId'); 
+      table.string('group_name'); 
       table.float('openingBalance').defaultTo(0);
       table.string('balanceType').notNullable();
+      table.string('gstin');
       table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
     });
     // Seed initial ledgers
@@ -250,6 +239,10 @@ export async function initDB() {
       table.string('type').notNullable();
       table.text('narration');
       table.float('amount').notNullable();
+      table.float('gstAmount').defaultTo(0);
+      table.float('igst').defaultTo(0);
+      table.float('cgst').defaultTo(0);
+      table.float('sgst').defaultTo(0);
       table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
     });
   }
@@ -260,9 +253,7 @@ export async function initDB() {
       table.increments('id').primary();
       table.string('voucherId').references('id').inTable('vouchers').onDelete('CASCADE');
       table.string('ledgerId').references('id').inTable('ledgers');
-      table.string('stockItemId').references('id').inTable('stock_items');
-      table.float('quantity');
-      table.float('rate');
+      table.string('costCentreId').references('id').inTable('cost_centres');
       table.float('amount').notNullable();
       table.string('type').notNullable(); // Dr or Cr
     });

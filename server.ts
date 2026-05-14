@@ -193,6 +193,20 @@ async function startServer() {
 
   app.delete("/api/branches/:id", async (req, res) => {
     await db('branches').where({ id: req.params.id }).delete();
+    // Also delete user associated with this branch
+    await db('users').where({ branchId: req.params.id }).delete();
+    res.json({ success: true });
+  });
+
+  app.put("/api/branches/:id/reset-password", async (req, res) => {
+    const { password } = req.body;
+    await db('users').where({ branchId: req.params.id }).update({ password });
+    res.json({ success: true });
+  });
+
+  app.put("/api/users/:id/password", async (req, res) => {
+    const { password } = req.body;
+    await db('users').where({ id: req.params.id }).update({ password });
     res.json({ success: true });
   });
 
@@ -210,46 +224,32 @@ async function startServer() {
     res.json(newGroup);
   });
 
-  // Units of Measure
-  app.get("/api/units", async (req, res) => {
+  // Cost Centres
+  app.get("/api/cost-centres", async (req, res) => {
     const { branchId } = req.query;
-    let query = db('units_of_measure').select('*');
+    let query = db('cost_centres').select('*');
     if (branchId) query = query.where({ branchId });
     res.json(await query);
   });
 
-  app.post("/api/units", async (req, res) => {
-    const newUnit = { id: Date.now().toString(), ...req.body };
-    await db('units_of_measure').insert(newUnit);
-    res.json(newUnit);
+  app.post("/api/cost-centres", async (req, res) => {
+    const newCC = { id: Date.now().toString(), ...req.body };
+    await db('cost_centres').insert(newCC);
+    res.json(newCC);
   });
 
-  // Stock Groups
-  app.get("/api/stock-groups", async (req, res) => {
+  // Employees
+  app.get("/api/employees", async (req, res) => {
     const { branchId } = req.query;
-    let query = db('stock_groups').select('*');
+    let query = db('employees').select('*');
     if (branchId) query = query.where({ branchId });
     res.json(await query);
   });
 
-  app.post("/api/stock-groups", async (req, res) => {
-    const newGroup = { id: Date.now().toString(), ...req.body };
-    await db('stock_groups').insert(newGroup);
-    res.json(newGroup);
-  });
-
-  // Stock Items
-  app.get("/api/stock-items", async (req, res) => {
-    const { branchId } = req.query;
-    let query = db('stock_items').select('*');
-    if (branchId) query = query.where({ branchId });
-    res.json(await query);
-  });
-
-  app.post("/api/stock-items", async (req, res) => {
-    const newItem = { id: Date.now().toString(), ...req.body };
-    await db('stock_items').insert(newItem);
-    res.json(newItem);
+  app.post("/api/employees", async (req, res) => {
+    const newEmployee = { id: Date.now().toString(), ...req.body };
+    await db('employees').insert(newEmployee);
+    res.json(newEmployee);
   });
 
   app.get("/api/ledgers", async (req, res) => {
