@@ -7,16 +7,17 @@ import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ShieldCheck, Clock, UserIcon, Info } from 'lucide-react';
 
-export default function AuditLogScreen() {
+export default function AuditLogScreen({ branchId, isAdmin }: { branchId?: string; isAdmin?: boolean }) {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('api/audit').then(res => res.json()).then(data => {
+    const query = !isAdmin && branchId ? `?branchId=${branchId}` : '';
+    fetch(`api/audit${query}`).then(res => res.json()).then(data => {
       setLogs(data);
       setLoading(false);
     });
-  }, []);
+  }, [branchId, isAdmin]);
 
   return (
     <div className="p-6 space-y-4">

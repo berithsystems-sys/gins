@@ -32,6 +32,7 @@ import LoginScreen from './components/LoginScreen';
 import HQDashboard from './components/HQDashboard';
 import AnalyticsScreen from './components/AnalyticsScreen';
 import AuditLogScreen from './components/AuditLogScreen';
+import AdminPanel from './components/AdminPanel';
 import MastersDashboard from './components/masters/MastersDashboard';
 import AlterMasterScreen from './components/AlterMasterScreen';
 import CompanyScreen from './components/CompanyScreen';
@@ -67,7 +68,7 @@ const GATEWAY_MENU: MenuOption[] = [
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'HQ' | 'ANALYTICS' | 'AUDIT' | 'BANKING' | 'PAYROLL' | 'DAYBOOK' | 'COMPANY' | 'DATA' | 'EXCHANGE' | 'GOTO' | 'IMPORT' | 'EXPORT' | 'PRINT' | 'EMAIL' | 'SETTINGS' | 'ALTER' | 'BALANCE_SHEET' | 'PL_ACCOUNT' | 'RATIO' | 'CHART'>('GATEWAY');
+  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'HQ' | 'ANALYTICS' | 'AUDIT' | 'BANKING' | 'PAYROLL' | 'DAYBOOK' | 'COMPANY' | 'DATA' | 'EXCHANGE' | 'GOTO' | 'IMPORT' | 'EXPORT' | 'PRINT' | 'EMAIL' | 'SETTINGS' | 'ALTER' | 'BALANCE_SHEET' | 'PL_ACCOUNT' | 'RATIO' | 'CHART' | 'ADMIN'>('GATEWAY');
   const [voucherType, setVoucherType] = useState('Payment');
   const [selectedBranchId, setSelectedBranchId] = useState<string | undefined>(undefined);
   const [branches, setBranches] = useState<any[]>([]);
@@ -95,6 +96,7 @@ export default function App() {
     else if (user?.role === 'BRANCH') {
       setCurrentScreen('GATEWAY');
       setSelectedBranchId(user.branchId);
+      fetch(`api/branches`).then(res => res.json()).then(b => setBranches(b));
     }
   }, [user]);
 
@@ -176,13 +178,16 @@ export default function App() {
 
   // Global Function Keys (Tally Style)
   useHotkeys('f2', () => alert('Date: 12-May-2026'));
-  useHotkeys('f3', () => alert('Select Company: ABC TRADING CO.'));
-  useHotkeys('f4', () => setCurrentScreen('VOUCHER'));
-  useHotkeys('f5', () => setCurrentScreen('VOUCHER'));
-  useHotkeys('f6', () => setCurrentScreen('VOUCHER'));
-  useHotkeys('f7', () => setCurrentScreen('VOUCHER'));
-  useHotkeys('f8', () => setCurrentScreen('VOUCHER'));
-  useHotkeys('f9', () => setCurrentScreen('VOUCHER'));
+  useHotkeys('f3', () => {
+    const branch = branches.find(b => b.id === selectedBranchId);
+    alert(`Current Church: ${branch ? branch.name : 'BERITHSYSTEMS HQ'}`);
+  });
+  useHotkeys('f4', () => { setCurrentScreen('VOUCHER'); setVoucherType('Contra'); });
+  useHotkeys('f5', () => { setCurrentScreen('VOUCHER'); setVoucherType('Payment'); });
+  useHotkeys('f6', () => { setCurrentScreen('VOUCHER'); setVoucherType('Receipt'); });
+  useHotkeys('f7', () => { setCurrentScreen('VOUCHER'); setVoucherType('Journal'); });
+  useHotkeys('f8', () => { setCurrentScreen('VOUCHER'); setVoucherType('Sales'); });
+  useHotkeys('f9', () => { setCurrentScreen('VOUCHER'); setVoucherType('Purchase'); });
   useHotkeys('f11', () => alert('Features (F11)'));
   useHotkeys('f12', () => alert('Configuration (F12)'));
   useHotkeys('alt+c', () => setCurrentScreen('LEDGER'));
@@ -230,6 +235,9 @@ export default function App() {
       <div className="bg-tally-teal text-white h-[30px] flex items-center px-4 justify-between border-b border-tally-hotkey">
         <div className="flex gap-8 text-[13px] font-semibold">
           <span>{user.role === 'HQ' ? 'HQ Administration' : 'Gateway of Tally'}</span>
+          {user.role === 'HQ' && (
+            <button onClick={() => setCurrentScreen('ADMIN')} className="text-[10px] bg-white/20 px-2 rounded hover:bg-white/30 border border-white/40">SYSTEM ADMIN</button>
+          )}
         </div>
         <div className="text-[12px] opacity-80 italic">
           {user.role === 'HQ' ? 'Global Controller' : 'Branch Church'} (2024-25)
@@ -399,7 +407,14 @@ export default function App() {
             <div className="max-w-4xl mx-auto border-2 border-tally-teal rounded-sm p-4 shadow-lg bg-white">
               <div className="flex justify-between items-center mb-6 border-b border-tally-teal/20 pb-2">
                 <h1 className="text-lg font-bold text-tally-teal uppercase flex items-center gap-2">
-                  <div className="w-1 h-6 bg-tally-teal"></div>
+                  <div className={`w-1 h-6 ${
+                    voucherType === 'Payment' ? 'bg-red-600' :
+                    voucherType === 'Receipt' ? 'bg-green-600' :
+                    voucherType === 'Contra' ? 'bg-blue-600' :
+                    voucherType === 'Journal' ? 'bg-purple-600' :
+                    voucherType === 'Sales' ? 'bg-cyan-600' :
+                    voucherType === 'Purchase' ? 'bg-orange-600' : 'bg-tally-teal'
+                  }`}></div>
                   {currentScreen === 'VOUCHER' && `${voucherType} Voucher Creation`}
                   {currentScreen === 'LEDGER' && 'Masters Management (Create)'}
                   {currentScreen === 'ALTER' && 'Masters Management (Alter)'}
@@ -421,6 +436,7 @@ export default function App() {
                   {currentScreen === 'PRINT' && 'Print Reports'}
                   {currentScreen === 'EMAIL' && 'E-mail Services'}
                   {currentScreen === 'SETTINGS' && 'User Settings & Security'}
+                  {currentScreen === 'ADMIN' && 'System Administration (HQ Only)'}
                 </h1>
                 <button 
                   onClick={() => user.role === 'HQ' ? setCurrentScreen('HQ') : setCurrentScreen('GATEWAY')}
@@ -430,7 +446,7 @@ export default function App() {
                 </button>
               </div>
 
-              {currentScreen === 'VOUCHER' && <VoucherScreen branchId={selectedBranchId} onTypeChange={setVoucherType} />}
+              {currentScreen === 'VOUCHER' && <VoucherScreen branchId={selectedBranchId} onTypeChange={setVoucherType} initialType={voucherType} />}
               {currentScreen === 'LEDGER' && <MastersDashboard branchId={selectedBranchId} />}
               {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} />}
               {currentScreen === 'BALANCE_SHEET' && <BalanceSheetScreen branchId={selectedBranchId} />}
@@ -439,7 +455,8 @@ export default function App() {
               {currentScreen === 'RATIO' && <div className="p-20 text-center font-black text-tally-teal uppercase italic border">Ratio Analysis - Coming Soon</div>}
               {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} />}
               {currentScreen === 'ANALYTICS' && <AnalyticsScreen branches={branches} ledgers={allLedgers} vouchers={allVouchers} />}
-              {currentScreen === 'AUDIT' && <AuditLogScreen branchId={selectedBranchId} />}
+              {currentScreen === 'AUDIT' && <AuditLogScreen branchId={selectedBranchId} isAdmin={user.role === 'HQ'} />}
+              {currentScreen === 'ADMIN' && <AdminPanel />}
               {currentScreen === 'BANKING' && <BankingScreen branchId={selectedBranchId} />}
               {currentScreen === 'PAYROLL' && <div className="p-10 text-center font-bold text-tally-teal uppercase italic">Payroll Module - Coming Soon</div>}
               {currentScreen === 'COMPANY' && <CompanyScreen branchId={selectedBranchId} />}

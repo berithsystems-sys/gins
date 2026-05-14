@@ -15,14 +15,18 @@ interface CostCentre {
   name: string;
 }
 
-export default function VoucherScreen({ branchId, onTypeChange }: { branchId?: string; onTypeChange?: (type: string) => void }) {
+export default function VoucherScreen({ branchId, onTypeChange, initialType }: { branchId?: string; onTypeChange?: (type: string) => void; initialType?: string }) {
   const [ledgers, setLedgers] = useState<Ledger[]>([]);
   const [costCentres, setCostCentres] = useState<CostCentre[]>([]);
-  const [type, setType] = useState<'Contra' | 'Payment' | 'Receipt' | 'Journal' | 'Sales' | 'Purchase'>('Payment');
+  const [type, setType] = useState<'Contra' | 'Payment' | 'Receipt' | 'Journal' | 'Sales' | 'Purchase'>((initialType as any) || 'Payment');
   const [date, setDate] = useState('2026-05-12');
   const [narration, setNarration] = useState('');
-  const [entries, setEntries] = useState([{ ledgerId: '', costCentreId: '', amount: '', type: 'Dr' as 'Dr' | 'Cr' }]);
+  const [entries, setEntries] = useState([{ ledgerId: '', costCentreId: '', amount: '', type: 'Dr' as 'Dr' | 'Cr', tempSearch: '' }]);
   const [ledgerBalances, setLedgerBalances] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (initialType) setType(initialType as any);
+  }, [initialType]);
 
   useEffect(() => {
     const query = branchId ? `?branchId=${branchId}` : '';
@@ -35,25 +39,7 @@ export default function VoucherScreen({ branchId, onTypeChange }: { branchId?: s
       setLedgerBalances(balances);
     });
     fetch(`api/cost-centres${query}`).then(res => res.json()).then(setCostCentres);
-    
-    // Internal Voucher Hotkeys
-    const handler = (event: KeyboardEvent) => {
-      let newType: any = null;
-      if (event.key === 'F4') newType = 'Contra';
-      if (event.key === 'F5') newType = 'Payment';
-      if (event.key === 'F6') newType = 'Receipt';
-      if (event.key === 'F7') newType = 'Journal';
-      if (event.key === 'F8') newType = 'Sales';
-      if (event.key === 'F9') newType = 'Purchase';
-      
-      if (newType) {
-        setType(newType);
-        if (onTypeChange) onTypeChange(newType);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [branchId, onTypeChange]);
+  }, [branchId]);
 
   const handleTypeChange = (t: typeof type) => {
     setType(t);
@@ -61,7 +47,7 @@ export default function VoucherScreen({ branchId, onTypeChange }: { branchId?: s
   };
 
   const handleAddEntry = () => {
-    setEntries([...entries, { ledgerId: '', costCentreId: '', amount: '', type: 'Dr' }]);
+    setEntries([...entries, { ledgerId: '', costCentreId: '', amount: '', type: 'Dr', tempSearch: '' }]);
   };
 
   const calculateTotal = () => {
@@ -89,7 +75,7 @@ export default function VoucherScreen({ branchId, onTypeChange }: { branchId?: s
     });
     if (response.ok) {
       alert('Voucher Saved Successfully');
-      setEntries([{ ledgerId: '', costCentreId: '', amount: '', type: 'Dr' }]);
+      setEntries([{ ledgerId: '', costCentreId: '', amount: '', type: 'Dr', tempSearch: '' }]);
       setNarration('');
     }
   };
@@ -151,12 +137,13 @@ export default function VoucherScreen({ branchId, onTypeChange }: { branchId?: s
                 <td className="px-2 py-1">
                   <div className="relative group">
                     <input 
-                      list={`ledgers-list-${idx}`}
-                      value={ledgers.find(l => l.id === entry.ledgerId)?.name || ''}
+                      type="text"
+                      value={entry.tempSearch || ledgers.find(l => l.id === entry.ledgerId)?.name || ''}
                       onChange={(e) => {
                         const val = e.target.value;
-                        const match = ledgers.find(l => l.name === val);
+                        const match = ledgers.find(l => l.name.toLowerCase() === val.toLowerCase());
                         const newEntries = [...entries];
+                        newEntries[idx].tempSearch = val;
                         newEntries[idx].ledgerId = match ? match.id : '';
                         setEntries(newEntries);
                       }}
@@ -164,13 +151,29 @@ export default function VoucherScreen({ branchId, onTypeChange }: { branchId?: s
                       placeholder="Type ledger name..."
                       required
                     />
-                    <datalist id={`ledgers-list-${idx}`}>
-                      {ledgers.map(l => (
-                        <option key={l.id} value={l.name}>
-                          {l.name}
-                        </option>
-                      ))}
-                    </datalist>
+                    {/* Custom search results */}
+                    <div className="hidden group-focus-within:block absolute z-[60] left-0 mt-1 w-64 bg-white border-2 border-tally-teal shadow-2xl max-h-48 overflow-auto">
+                       {ledgers
+                        .filter(l => {
+                          const search = entry.tempSearch?.toLowerCase() || '';
+                          return l.name.toLowerCase().includes(search);
+                        })
+                        .map(l => (
+                         <div 
+                           key={l.id} 
+                           onMouseDown={() => {
+                             const newEntries = [...entries];
+                             newEntries[idx].ledgerId = l.id;
+                             newEntries[idx].tempSearch = l.name;
+                             setEntries(newEntries);
+                           }}
+                           className="px-2 py-1.5 hover:bg-tally-accent text-xs font-bold border-b last:border-0 cursor-pointer flex justify-between uppercase"
+                         >
+                            <span>{l.name}</span>
+                            <span className="text-[9px] opacity-40">₹ {Math.abs(ledgerBalances[l.id] || 0)} {ledgerBalances[l.id] >= 0 ? 'Dr' : 'Cr'}</span>
+                         </div>
+                       ))}
+                    </div>
                     {entry.ledgerId && (
                       <div className="text-[9px] font-bold text-gray-400 mt-0.5 flex justify-between">
                          <span className="uppercase tracking-widest">Balance:</span>

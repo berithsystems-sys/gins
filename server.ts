@@ -131,7 +131,12 @@ async function startServer() {
 
   // Audit Logs (HQ Only)
   app.get("/api/audit", async (req, res) => {
-    const logs = await db('audit_logs').orderBy('timestamp', 'desc').limit(100);
+    const { branchId } = req.query;
+    let query = db('audit_logs').orderBy('timestamp', 'desc');
+    if (branchId) {
+      query = query.where({ branchId });
+    }
+    const logs = await query.limit(100);
     res.json(logs);
   });
 
@@ -207,6 +212,12 @@ async function startServer() {
   app.put("/api/users/:id/password", async (req, res) => {
     const { password } = req.body;
     await db('users').where({ id: req.params.id }).update({ password });
+    res.json({ success: true });
+  });
+
+  app.put("/api/users/:id/email", async (req, res) => {
+    const { email } = req.body;
+    await db('users').where({ id: req.params.id }).update({ username: email });
     res.json({ success: true });
   });
 

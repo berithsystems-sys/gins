@@ -1,7 +1,7 @@
 {
-  "name": "TallyPrime Clone ERP",
-  "short_name": "TallyPrime",
-  "description": "Keyboard-driven accounting and inventory system",
+  "name": "ACCOUNTING - BERITHSYSTEMS.COM",
+  "short_name": "ACCOUNTING",
+  "description": "Church Administration and Accounting System",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#004050",
