@@ -57,7 +57,7 @@ export interface AuditLog {
 // Knex Configuration
 const dbUser = process.env.DB_USER || process.env.DB_USERNAME;
 const dbName = process.env.DB_NAME || process.env.DB_DATABASE;
-const dbHost = process.env.DB_HOST || 'localhost';
+const dbHost = process.env.DB_HOST;
 let dbClient = process.env.DB_CLIENT || 'sqlite3';
 
 // Validate DB_CLIENT - force sqlite3 if mysql2 isn't explicitly and correctly set
@@ -71,7 +71,12 @@ console.log('Final Client Choice:', dbClient);
 if (dbClient === 'sqlite3') {
   console.log('INFO: Using SQLite3 (database.sqlite)');
 } else {
-  console.log('Host:', dbHost);
+  if (!dbHost || dbHost === 'localhost' || dbHost === '127.0.0.1') {
+    console.warn('CRITICAL WARNING: You are trying to use MySQL on localhost/127.0.0.1.');
+    console.warn('This environment DOES NOT have a local MySQL server.');
+    console.warn('Please provide a remote database host in the DB_HOST environment variable.');
+  }
+  console.log('Host:', dbHost || '127.0.0.1 (Default)');
   console.log('User:', dbUser);
   console.log('Database:', dbName);
   console.log('Port:', process.env.DB_PORT || 3306);
@@ -81,12 +86,12 @@ console.log('-----------------------------');
 export const db = knex({
   client: dbClient,
   connection: dbClient === 'mysql2' ? {
-    host: dbHost,
+    host: dbHost || '127.0.0.1',
     port: Number(process.env.DB_PORT) || 3306,
     user: dbUser,
     password: process.env.DB_PASSWORD,
     database: dbName,
-    connectTimeout: 10000, // Increased timeout for remote connections
+    connectTimeout: 10000, 
   } : {
     filename: path.join(process.cwd(), 'database.sqlite')
   },
