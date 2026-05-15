@@ -364,6 +364,181 @@ async function startServer() {
     res.json({ ...newVoucher, entries });
   });
 
+  // Banking: Reconciliations
+  app.get('/api/bank/reconciliations', async (req, res) => {
+    const { branchId } = req.query as any;
+    let query = db('bank_reconciliations').select('*').orderBy('date', 'desc');
+    if (branchId) query = query.where({ branchId });
+    const rows = await query.limit(1000);
+    res.json(rows);
+  });
+
+  app.post('/api/bank/reconciliations', async (req, res) => {
+    const payload = req.body;
+    try {
+      if (payload.id) {
+        payload.updatedAt = new Date().toISOString();
+        await db('bank_reconciliations').where({ id: payload.id }).update(payload);
+        const updated = await db('bank_reconciliations').where({ id: payload.id }).first();
+        return res.json(updated);
+      }
+
+      const id = Date.now().toString();
+      const now = new Date().toISOString();
+      const newRow = { id, createdAt: now, updatedAt: now, status: payload.bankDate ? 'RECONCILED' : 'UNRECONCILED', ...payload };
+      await db('bank_reconciliations').insert(newRow);
+      res.json(newRow);
+    } catch (err: any) {
+      console.error('Failed to save reconciliation:', err);
+      res.status(500).json({ error: 'Failed to save reconciliation', details: err.message });
+    }
+  });
+
+  app.delete('/api/bank/reconciliations/:id', async (req, res) => {
+    await db('bank_reconciliations').where({ id: req.params.id }).delete();
+    res.json({ success: true });
+  });
+
+  // Bank statement import (bulk)
+  app.post('/api/bank/import', async (req, res) => {
+    const { branchId, rows, fileName } = req.body as any;
+    if (!rows || !Array.isArray(rows)) return res.status(400).json({ error: 'Invalid rows' });
+
+    const importId = Date.now().toString();
+    const now = new Date().toISOString();
+    try {
+      await db.transaction(async (trx) => {
+        await trx('bank_imports').insert({ id: importId, branchId, fileName: fileName || 'uploaded', rows: rows.length, importedAt: now });
+
+        const toInsert = rows.map((r: any, idx: number) => ({
+          id: `${importId}_${idx}`,
+          branchId,
+          date: r.date || r.txnDate || r.statementDate,
+          particulars: r.particulars || r.description || r.particulars || '',
+          amount: Number(r.amount) || 0,
+          txnType: r.txnType || (r.amount && Number(r.amount) < 0 ? 'DR' : 'CR'),
+          bankDate: null,
+          status: 'UNRECONCILED',
+          createdAt: now,
+          updatedAt: now
+        }));
+
+        if (toInsert.length > 0) await trx('bank_reconciliations').insert(toInsert);
+      });
+
+      const inserted = await db('bank_reconciliations').where({ branchId }).orderBy('createdAt', 'desc').limit(rows.length);
+      res.json({ importId, rows: inserted });
+    } catch (err: any) {
+      console.error('Import failed:', err);
+      res.status(500).json({ error: 'Import failed', details: err.message });
+    }
+  });
+
+  // Simple reconciliation report
+  app.get('/api/bank/reconciliations/report', async (req, res) => {
+    const { branchId } = req.query as any;
+    let q = db('bank_reconciliations').select('*');
+    if (branchId) q = q.where({ branchId });
+    const rows = await q;
+    const total = rows.reduce((acc: any, r: any) => acc + Number(r.amount || 0), 0);
+    const reconciled = rows.filter((r: any) => r.status === 'RECONCILED').length;
+    res.json({ total, count: rows.length, reconciled });
+  });
+
+  // Sync a reconciliation to a voucher (simple support) - requires ledgerId in body
+  app.post('/api/bank/reconciliations/:id/sync', async (req, res) => {
+    const { ledgerId } = req.body as any;
+    const id = req.params.id;
+    try {
+      const row = await db('bank_reconciliations').where({ id }).first();
+      if (!row) return res.status(404).json({ error: 'Not found' });
+      // Create a simple voucher for this reconciliation
+      const voucherId = Date.now().toString();
+      const voucher = { id: voucherId, date: row.date || new Date().toISOString(), type: 'Bank Reconciliation', narration: row.particulars || '', amount: Number(row.amount || 0), branchId: row.branchId };
+      await db.transaction(async (trx) => {
+        await trx('vouchers').insert(voucher);
+        if (ledgerId) {
+          // debit or credit depends on txnType
+          const entry = { voucherId, ledgerId, amount: Number(row.amount || 0), type: row.txnType === 'DR' ? 'Dr' : 'Cr' };
+          await trx('voucher_entries').insert(entry);
+        }
+        await trx('bank_reconciliations').where({ id }).update({ status: 'RECONCILED', updatedAt: new Date().toISOString(), bankDate: new Date().toISOString() });
+      });
+      res.json({ success: true, voucherId });
+    } catch (err: any) {
+      console.error('Sync failed:', err);
+      res.status(500).json({ error: 'Sync failed', details: err.message });
+    }
+  });
+
+  // PDCS endpoints
+  app.get('/api/pdcs', async (req, res) => {
+    const { branchId } = req.query as any;
+    // auto-clear PDCS whose chequeDate <= today
+    try {
+      const today = new Date().toISOString().slice(0,10);
+      await db('pdcs').where('chequeDate', '<=', today).andWhere({ status: 'PENDING' }).update({ status: 'CLEARED', updatedAt: new Date().toISOString() });
+    } catch (e) {
+      console.error('Auto-clear PDCS failed:', e);
+    }
+    let q = db('pdcs').select('*').orderBy('chequeDate','asc');
+    if (branchId) q = q.where({ branchId });
+    const rows = await q;
+    res.json(rows);
+  });
+
+  app.post('/api/pdcs', async (req, res) => {
+    const { id, branchId, payer, amount, chequeNo, chequeDate, status } = req.body as any;
+    try {
+      if (id) {
+        await db('pdcs').where({ id }).update({ payer, amount, chequeNo, chequeDate, status, updatedAt: new Date().toISOString() });
+        return res.json(await db('pdcs').where({ id }).first());
+      }
+      const nid = Date.now().toString();
+      const now = new Date().toISOString();
+      await db('pdcs').insert({ id: nid, branchId, payer, amount, chequeNo, chequeDate, status: status || 'PENDING', createdAt: now, updatedAt: now });
+      res.json(await db('pdcs').where({ id: nid }).first());
+    } catch (err: any) {
+      console.error('PDC save failed:', err);
+      res.status(500).json({ error: 'Failed to save PDC', details: err.message });
+    }
+  });
+
+  app.delete('/api/pdcs/:id', async (req, res) => {
+    await db('pdcs').where({ id: req.params.id }).delete();
+    res.json({ success: true });
+  });
+
+  // Cheque templates
+  app.get('/api/cheque/templates', async (req, res) => {
+    const { branchId } = req.query as any;
+    let q = db('cheque_templates').select('*');
+    if (branchId) q = q.where({ branchId });
+    res.json(await q);
+  });
+
+  app.post('/api/cheque/templates', async (req, res) => {
+    const { id, branchId, name, template } = req.body as any;
+    try {
+      if (id) {
+        await db('cheque_templates').where({ id }).update({ name, template, updatedAt: new Date().toISOString() });
+        return res.json(await db('cheque_templates').where({ id }).first());
+      }
+      const nid = Date.now().toString();
+      const now = new Date().toISOString();
+      await db('cheque_templates').insert({ id: nid, branchId, name, template, createdAt: now, updatedAt: now });
+      res.json(await db('cheque_templates').where({ id: nid }).first());
+    } catch (err: any) {
+      console.error('Template save failed:', err);
+      res.status(500).json({ error: 'Failed to save template', details: err.message });
+    }
+  });
+
+  app.delete('/api/cheque/templates/:id', async (req, res) => {
+    await db('cheque_templates').where({ id: req.params.id }).delete();
+    res.json({ success: true });
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

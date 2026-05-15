@@ -278,6 +278,61 @@ export async function initDB() {
     });
   }
 
+  // Bank Reconciliations
+  if (!(await db.schema.hasTable('bank_reconciliations'))) {
+    await db.schema.createTable('bank_reconciliations', (table) => {
+      table.string('id').primary();
+      table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
+      table.string('reference'); // optional reference / voucher id
+      table.string('date'); // statement date
+      table.float('amount');
+      table.string('particulars');
+      table.string('txnType'); // CR or DR
+      table.string('bankDate'); // reconciled date (nullable)
+      table.string('status').defaultTo('UNRECONCILED'); // UNRECONCILED, RECONCILED
+      table.string('createdAt');
+      table.string('updatedAt');
+    });
+  }
+
+  // Bank Imports metadata
+  if (!(await db.schema.hasTable('bank_imports'))) {
+    await db.schema.createTable('bank_imports', (table) => {
+      table.string('id').primary();
+      table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
+      table.string('fileName');
+      table.integer('rows').defaultTo(0);
+      table.string('importedAt');
+    });
+  }
+
+  // Post-Dated Cheques (PDCs)
+  if (!(await db.schema.hasTable('pdcs'))) {
+    await db.schema.createTable('pdcs', (table) => {
+      table.string('id').primary();
+      table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
+      table.string('payer');
+      table.float('amount');
+      table.string('chequeNo');
+      table.string('chequeDate');
+      table.string('status').defaultTo('PENDING'); // PENDING, CLEARED, BOUNCED
+      table.string('createdAt');
+      table.string('updatedAt');
+    });
+  }
+
+  // Cheque templates (for printing)
+  if (!(await db.schema.hasTable('cheque_templates'))) {
+    await db.schema.createTable('cheque_templates', (table) => {
+      table.string('id').primary();
+      table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
+      table.string('name');
+      table.text('template');
+      table.string('createdAt');
+      table.string('updatedAt');
+    });
+  }
+
   // Migration for new columns if table already existed
   try {
     const columns = await db('ledgers').columnInfo();

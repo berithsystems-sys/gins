@@ -1,5 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { Landmark, CreditCard, Receipt, FileStack, Printer, ChevronLeft } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Landmark, CreditCard, Receipt, FileStack, Printer, ChevronLeft, UploadCloud, Trash2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import ChequePrintScreen from './ChequePrintScreen';
+import PDCManagementScreen from './PDCManagementScreen';
+
+// Simple types for imported bank rows
+interface BankRow {
+   date?: string;
+   particulars?: string;
+   debit?: number;
+   credit?: number;
+}
 
 interface ReconciliationItem {
   id: string;
@@ -11,14 +22,32 @@ interface ReconciliationItem {
 }
 
 export default function BankingScreen({ branchId }: { branchId?: string }) {
-  const [activeTab, setActiveTab] = useState<'MENU' | 'RECON' | 'CHEQUE' | 'STATEMENT'>('MENU');
-  const [reconItems, setReconItems] = useState<ReconciliationItem[]>([
-    { id: '1', date: '2024-05-10', particulars: 'Salary Payment', amount: 50000, type: 'Dr' },
-    { id: '2', date: '2024-05-11', particulars: 'Church Offering', amount: 15000, type: 'Cr' },
-    { id: '3', date: '2024-05-12', particulars: 'Electricity Bill', amount: 2500, type: 'Dr' },
-  ]);
+   const [activeTab, setActiveTab] = useState<'MENU' | 'RECON' | 'CHEQUE' | 'STATEMENT' | 'PDC'>('MENU');
+   const [reconItems, setReconItems] = useState<ReconciliationItem[]>([
+      { id: '1', date: '2024-05-10', particulars: 'Salary Payment', amount: 50000, type: 'Dr' },
+      { id: '2', date: '2024-05-11', particulars: 'Church Offering', amount: 15000, type: 'Cr' },
+      { id: '3', date: '2024-05-12', particulars: 'Electricity Bill', amount: 2500, type: 'Dr' },
+   ]);
+   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const options = [
+   const storageKey = `bank_recon_${branchId || 'global'}`;
+
+   useEffect(() => {
+      // Load reconciliations from server for branch
+      const bid = branchId || '101';
+      fetch(`/api/bank/reconciliations?branchId=${encodeURIComponent(bid)}`)
+        .then(r => r.json())
+        .then((rows: any[]) => {
+          if (Array.isArray(rows) && rows.length > 0) {
+            const mapped = rows.map(r => ({ id: r.id, date: r.date || '', particulars: r.particulars || '', amount: Number(r.amount) || 0, type: (r.txnType === 'DR' || r.type === 'Dr') ? 'Dr' : 'Cr', bankDate: r.bankDate || undefined } as ReconciliationItem));
+            setReconItems(mapped);
+          }
+        }).catch(() => {
+          // fallback: keep existing seeded items
+        });
+   }, [branchId]);
+
+   const options = [
     { id: 'RECON', title: 'Bank Reconciliation', icon: <FileStack />, desc: 'Synchronize your ledger with bank statements.' },
     { id: 'CHEQUE', title: 'Cheque Printing', icon: <Printer />, desc: 'Configure and print cheques for vendors.' },
     { id: 'STATEMENT', title: 'Bank Statement Import', icon: <Landmark />, desc: 'Import .csv or .xlsx bank statements.' },
@@ -26,7 +55,154 @@ export default function BankingScreen({ branchId }: { branchId?: string }) {
     { id: 'MENU', title: 'Post-Dated Summary', icon: <CreditCard />, desc: 'Manage PDCs and their automated clearance.' },
   ];
 
-  if (activeTab === 'RECON') {
+    const saveRecon = (items: ReconciliationItem[]) => {
+         setReconItems(items);
+         try { localStorage.setItem(storageKey, JSON.stringify(items)); } catch (e) {}
+    };
+
+   const persistAll = async () => {
+      const bid = branchId || '101';
+      try {
+         await Promise.all(reconItems.map(item => fetch('/api/bank/reconciliations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...item, branchId: bid }) } )));
+         alert('Reconciliations saved to server.');
+      } catch (err) {
+         console.error('Failed to persist reconciliations', err);
+         alert('Failed to save reconciliations to server');
+      }
+   };
+
+   const importBankRows = async (rows: BankRow[]) => {
+      // Attempt auto-match by amount +/- exact, date within 2 days, or particulars substring
+      const items = [...reconItems];
+      rows.forEach(r => {
+         const amt = (r.debit || 0) || (r.credit || 0);
+         if (!amt) return;
+         // find candidate
+         const candidate = items.find(it => {
+            const sameAmt = Math.abs(it.amount - amt) < 0.005; // amounts equal
+            if (!sameAmt) return false;
+            if (r.date && it.date) {
+               const d1 = new Date(r.date).getTime();
+               const d2 = new Date(it.date).getTime();
+               const diffDays = Math.abs(d1 - d2) / (1000 * 60 * 60 * 24);
+               if (diffDays <= 3) return true;
+            }
+            if (r.particulars && it.particulars && it.particulars.toLowerCase().includes((r.particulars || '').toLowerCase())) return true;
+            return false;
+         });
+         if (candidate) {
+            candidate.bankDate = r.date;
+         }
+      });
+      saveRecon(items);
+      // optimistic: do not persist each auto-match now; user can Accept to persist
+   };
+
+   const handleFile = (file: File) => {
+      const name = file.name.toLowerCase();
+      const reader = new FileReader();
+      if (name.endsWith('.csv')) {
+         reader.onload = async () => {
+            const text = reader.result as string;
+            const rows = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+            const parsed: BankRow[] = rows.slice(1).map(line => {
+               const cols = line.split(/,|;|\t/).map(s => s.replace(/^\"|\"$/g, '').trim());
+               // naive mapping: date, particulars, debit, credit
+               return {
+                  date: cols[0],
+                  particulars: cols[1],
+                              debit: parseFloat(cols[2]) || 0,
+                              credit: parseFloat(cols[3]) || 0,
+               };
+            });
+                     // attempt header-based mapping if first row looks like headers
+                     const header = rows[0].split(/,|;|\t/).map(h => h.toLowerCase());
+                     const hasHeaders = header.some(h => /date|particular|desc|amount|debit|credit|dr|cr/.test(h));
+                     if (hasHeaders) {
+                        const mapIdx: any = {};
+                        header.forEach((h, i) => {
+                           if (/date/.test(h)) mapIdx.date = i;
+                           if (/particul|desc|narration/.test(h)) mapIdx.particulars = i;
+                           if (/debit|withdraw|dr/.test(h)) mapIdx.debit = i;
+                           if (/credit|deposit|cr/.test(h)) mapIdx.credit = i;
+                           if (/amount/.test(h) && mapIdx.debit === undefined && mapIdx.credit === undefined) mapIdx.amount = i;
+                        });
+                        const parsed2: BankRow[] = rows.slice(1).map(line => {
+                           const cols = line.split(/,|;|\t/).map(s => s.replace(/^\"|\"$/g, '').trim());
+                           const debit = mapIdx.debit !== undefined ? parseFloat(cols[mapIdx.debit] || '0') : (mapIdx.amount !== undefined ? parseFloat(cols[mapIdx.amount] || '0') : 0);
+                           const credit = mapIdx.credit !== undefined ? parseFloat(cols[mapIdx.credit] || '0') : 0;
+                           return {
+                              date: cols[mapIdx.date] || '',
+                              particulars: cols[mapIdx.particulars] || '',
+                              debit: debit || 0,
+                              credit: credit || 0,
+                           };
+                        });
+                        // replace parsed with parsed2
+                        // @ts-ignore
+                        parsed.splice(0, parsed.length, ...parsed2);
+                     }
+                  // Prefer server-side import: send parsed rows to server and refresh
+                  try {
+                     const bid = branchId || '101';
+                     const resp = await fetch('/api/bank/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ branchId: bid, rows: parsed, fileName: file.name }) });
+                     const data = await resp.json();
+                     if (data && data.rows) {
+                        const merged = data.rows.map((r: any) => ({ id: r.id, date: r.date || '', particulars: r.particulars || '', amount: Number(r.amount) || 0, type: (r.txnType === 'DR' || r.txnType === 'Dr') ? 'Dr' : 'Cr', bankDate: r.bankDate || undefined } as ReconciliationItem));
+                        setReconItems(merged.concat(reconItems));
+                     } else {
+                        importBankRows(parsed);
+                     }
+                  } catch (e) {
+                     importBankRows(parsed);
+                  }
+         };
+         reader.readAsText(file);
+      } else {
+         reader.onload = async () => {
+            const data = new Uint8Array(reader.result as ArrayBuffer);
+            const wb = XLSX.read(data, { type: 'array' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const json = XLSX.utils.sheet_to_json(ws, { defval: '' }) as any[];
+            const parsed: BankRow[] = json.map(r => ({
+               date: r['Date'] || r['date'] || r['Transaction Date'] || '',
+               particulars: r['Particulars'] || r['Description'] || r['Narration'] || '',
+               debit: parseFloat((r['Debit'] || r['Amount Dr'] || r['Debit Amount'] || r['Withdrawals'] || 0) as any) || 0,
+               credit: parseFloat((r['Credit'] || r['Amount Cr'] || r['Credit Amount'] || r['Deposits'] || 0) as any) || 0,
+            }));
+                  try {
+                     const bid = branchId || '101';
+                     const resp = await fetch('/api/bank/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ branchId: bid, rows: parsed, fileName: file.name }) });
+                     const data = await resp.json();
+                     if (data && data.rows) {
+                        const merged = data.rows.map((r: any) => ({ id: r.id, date: r.date || '', particulars: r.particulars || '', amount: Number(r.amount) || 0, type: (r.txnType === 'DR' || r.type === 'Dr') ? 'Dr' : 'Cr', bankDate: r.bankDate || undefined } as ReconciliationItem));
+                        setReconItems(merged.concat(reconItems));
+                     } else {
+                        importBankRows(parsed);
+                     }
+                  } catch (e) {
+                     importBankRows(parsed);
+                  }
+         };
+         reader.readAsArrayBuffer(file);
+      }
+   };
+
+   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const f = e.target.files && e.target.files[0];
+      if (f) handleFile(f);
+      // reset input
+      if (fileInputRef.current) fileInputRef.current.value = '';
+   };
+
+   const undoReconciliation = (id: string) => {
+      const items = reconItems.map(it => it.id === id ? { ...it, bankDate: undefined } : it);
+      saveRecon(items);
+      // optimistic server update
+      fetch('/api/bank/reconciliations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, bankDate: null }) }).catch(() => {});
+   };
+
+   if (activeTab === 'RECON') {
     return (
       <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
         <div className="flex items-center gap-4 bg-tally-teal text-white p-2">
@@ -53,11 +229,22 @@ export default function BankingScreen({ branchId }: { branchId?: string }) {
                       <td className="px-4 py-2 text-right font-mono">{item.type === 'Dr' ? item.amount.toLocaleString() : ''}</td>
                       <td className="px-4 py-2 text-right font-mono">{item.type === 'Cr' ? item.amount.toLocaleString() : ''}</td>
                       <td className="px-4 py-2 text-center">
-                         <input 
-                           type="date" 
-                           className="border border-gray-200 text-[10px] p-1 focus:border-tally-teal outline-none" 
-                           defaultValue={item.bankDate}
-                         />
+                         <div className="flex items-center gap-2 justify-center">
+                           <input 
+                             type="date" 
+                             className="border border-gray-200 text-[10px] p-1 focus:border-tally-teal outline-none" 
+                             value={item.bankDate || ''}
+                             onChange={(e) => {
+                               const items = reconItems.map(it => it.id === item.id ? { ...it, bankDate: e.target.value || undefined } : it);
+                               saveRecon(items);
+                             }}
+                           />
+                           {item.bankDate && (
+                             <button onClick={() => undoReconciliation(item.id)} className="text-red-600 p-1" title="Undo">
+                               <Trash2 className="w-4 h-4" />
+                             </button>
+                           )}
+                         </div>
                       </td>
                    </tr>
                 ))}
@@ -74,13 +261,47 @@ export default function BankingScreen({ branchId }: { branchId?: string }) {
              </tfoot>
           </table>
         </div>
-        <div className="flex justify-end gap-2">
-           <button className="bg-tally-accent text-black px-6 py-1.5 text-[10px] font-bold border border-black/10">F6: Bank Details</button>
-           <button className="bg-tally-teal text-white px-6 py-1.5 text-[10px] font-bold shadow-md">Accept (Enter)</button>
-        </div>
+            <div className="flex justify-between items-center gap-2">
+                <div className="flex items-center gap-2">
+                   <input ref={fileInputRef} onChange={handleFileInput} type="file" accept=".csv,.xlsx,.xls" className="hidden" />
+                   <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 bg-white border p-2 text-[10px] font-bold hover:bg-gray-50">
+                      <UploadCloud className="w-4 h-4" /> Import Statement
+                   </button>
+                   <button onClick={() => {
+                      // clear persisted recon
+                      if (confirm('Clear saved reconciliations for this branch?')) {
+                         localStorage.removeItem(storageKey);
+                         setReconItems(reconItems.map(it => ({ ...it, bankDate: undefined })));
+                      }
+                   }} className="flex items-center gap-2 bg-white border p-2 text-[10px] font-bold hover:bg-gray-50">
+                      <Trash2 className="w-4 h-4" /> Clear Reconciliations
+                   </button>
+                </div>
+                <div className="flex justify-end gap-2">
+                   <button className="bg-tally-accent text-black px-6 py-1.5 text-[10px] font-bold border border-black/10">F6: Bank Details</button>
+                   <button onClick={() => {
+                      // Accept: persist (already persisted on change) and show summary
+                      const reconciled = reconItems.filter(i => i.bankDate).length;
+                      alert(`Accepted reconciliations. ${reconciled} items reconciled.`);
+                      saveRecon(reconItems);
+                   }} className="bg-tally-teal text-white px-6 py-1.5 text-[10px] font-bold shadow-md">Accept (Enter)</button>
+                         </div>
+                         <div className="flex justify-end gap-2">
+                            <button onClick={() => setActiveTab('CHEQUE')} className="bg-tally-accent text-black px-6 py-1.5 text-[10px] font-bold border border-black/10">F9: Cheque Print</button>
+                            <button onClick={() => setActiveTab('PDC')} className="bg-gray-200 text-black px-6 py-1.5 text-[10px] font-bold border">PDC</button>
+                </div>
+            </div>
       </div>
     );
   }
+
+   if (activeTab === 'CHEQUE') {
+      return <ChequePrintScreen onBack={() => setActiveTab('MENU')} />;
+   }
+
+   if (activeTab === 'PDC') {
+      return <PDCManagementScreen onBack={() => setActiveTab('RECON')} />;
+   }
 
   return (
     <div className="p-4 md:p-8 space-y-8 max-w-full overflow-hidden">
