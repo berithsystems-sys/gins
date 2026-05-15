@@ -166,7 +166,7 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
                 <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Church / Branch Name</label>
                 <input 
                   type="text" 
-                  placeholder="EBC Vengnuam" 
+                  placeholder="e.g. St. Peters Main" 
                   className="w-full border-2 p-3 outline-none focus:border-tally-teal uppercase text-sm font-bold mt-1"
                   value={newBranch.name}
                   onChange={e => setNewBranch({...newBranch, name: e.target.value})}
@@ -189,7 +189,7 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
                   <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Location</label>
                   <input 
                     type="text" 
-                    placeholder="NEW LAMKA" 
+                    placeholder="New York" 
                     className="w-full border-2 p-3 outline-none focus:border-tally-teal uppercase text-sm font-bold mt-1"
                     value={newBranch.location}
                     onChange={e => setNewBranch({...newBranch, location: e.target.value})}
@@ -202,7 +202,7 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
                   <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Admin Email</label>
                   <input 
                     type="email" 
-                    placeholder="branch@berithsystems.com" 
+                    placeholder="branch@church.com" 
                     className="w-full border-2 p-3 outline-none focus:border-tally-teal text-sm font-bold mt-1"
                     value={newBranch.email}
                     onChange={e => setNewBranch({...newBranch, email: e.target.value})}
