@@ -39,6 +39,10 @@ import CompanyScreen from './components/CompanyScreen';
 import DataScreen from './components/DataScreen';
 import CashBankBookScreen from './components/CashBankBookScreen';
 import TrialBalanceScreen from './components/TrialBalanceScreen';
+import SettingsScreen from './components/SettingsScreen';
+import PrintScreen from './components/PrintScreen';
+import ExportScreen from './components/ExportScreen';
+import RatioAnalysisScreen from './components/RatioAnalysisScreen';
 import { exportToExcel } from './lib/ReportUtils';
 
 type User = {
@@ -115,7 +119,7 @@ export default function App() {
   const [dateInput, setDateInput] = useState(currentDate);
 
   const getFilteredGotoOptions = () => {
-    const options = ['Balance Sheet', 'Profit & Loss A/c', 'Trial Balance', 'Day Book', 'Cash/Bank Book', 'Stock Summary', 'Ratio Analysis', 'Audit Logs', 'Admin Panel', 'Banking'];
+    const options = ['Balance Sheet', 'Profit & Loss A/c', 'Trial Balance', 'Day Book', 'Cash/Bank Book', 'Ratio Analysis', 'Audit Logs', 'Admin Panel', 'Banking'];
     return options.filter(o => o.toLowerCase().includes(gotoSearch.toLowerCase()));
   };
 
@@ -235,9 +239,8 @@ export default function App() {
     setGotoSearch('');
     setGotoHighlightedIdx(0);
   }, { enableOnFormTags: true });
-  useHotkeys('alt+o', () => setCurrentScreen('IMPORT'), { enableOnFormTags: true });
+  useHotkeys('alt+m', () => setCurrentScreen('EXPORT'), { enableOnFormTags: true });
   useHotkeys('alt+e', () => setCurrentScreen('EXPORT'), { enableOnFormTags: true });
-  useHotkeys('alt+m', () => setCurrentScreen('EMAIL'), { enableOnFormTags: true });
   useHotkeys('alt+p', () => setCurrentScreen('PRINT'), { enableOnFormTags: true });
   useHotkeys('alt+s', () => setCurrentScreen('SETTINGS'), { enableOnFormTags: true });
 
@@ -645,7 +648,8 @@ export default function App() {
               {currentScreen === 'TRIAL_BALANCE' && <TrialBalanceScreen branchId={selectedBranchId} />}
               {currentScreen === 'CASH_BANK_BOOK' && <CashBankBookScreen branchId={selectedBranchId} />}
               {currentScreen === 'CHART' && <AlterMasterScreen branchId={selectedBranchId} />} {/* Chart of accounts is similar list */}
-              {currentScreen === 'RATIO' && <div className="p-20 text-center font-black text-tally-teal uppercase italic border">Ratio Analysis - Coming Soon</div>}
+              {currentScreen === 'RATIO' && <RatioAnalysisScreen onBack={handleBack} />}
+              {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} />}
               {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} initialDate={currentDate} />}
               {currentScreen === 'ANALYTICS' && <AnalyticsScreen branches={branches} ledgers={allLedgers} vouchers={allVouchers} />}
               {currentScreen === 'AUDIT' && <AuditLogScreen branchId={selectedBranchId} isAdmin={user.role === 'HQ'} />}
@@ -674,77 +678,9 @@ export default function App() {
                   </div>
                 </div>
               )}
-              {currentScreen === 'EXPORT' && (
-                <div className="p-10 space-y-6 max-w-xl mx-auto">
-                   <h3 className="text-lg font-bold uppercase text-tally-teal border-b-2 border-tally-teal mb-4">Export Configuration</h3>
-                   <div className="space-y-4 border p-6 bg-white shadow">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[10px] font-bold text-gray-400">FORMAT</label>
-                          <select className="w-full border p-2 text-xs outline-none">
-                             <option>XML (Data Interchange)</option>
-                             <option>Excel (Spreadsheet)</option>
-                             <option>PDF (Readable Document)</option>
-                             <option>JPEG (Image)</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-gray-400">DATA TO EXPORT</label>
-                          <select className="w-full border p-2 text-xs outline-none">
-                             <option>All Masters</option>
-                             <option>All Transactions</option>
-                             <option>Day Book Only</option>
-                             <option>Trial Balance</option>
-                          </select>
-                        </div>
-                      </div>
-                      <button className="w-full bg-tally-teal text-white py-2 text-xs font-bold uppercase mt-4">Send Export</button>
-                   </div>
-                </div>
-              )}
-              {currentScreen === 'PRINT' && (
-                <div className="p-20 text-center space-y-4">
-                   <div className="w-20 h-20 bg-tally-teal/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <FileText className="w-10 h-10 text-tally-teal" />
-                   </div>
-                   <h3 className="text-xl font-black uppercase text-tally-teal">Print Spooler</h3>
-                   <p className="text-xs text-gray-400 max-w-xs mx-auto italic">Generating printable buffers for all branch reports. Ensure your printer is connected via Tally Gateway.</p>
-                   <button onClick={() => window.print()} className="bg-tally-teal text-white px-10 py-2 text-xs font-bold uppercase shadow-xl mt-4">Execute Local Print</button>
-                </div>
-              )}
-              {currentScreen === 'SETTINGS' && (
-                <div className="p-8 space-y-6">
-                  <div className="border p-4 bg-gray-50">
-                    <h3 className="text-sm font-bold uppercase mb-4 text-tally-teal">Change Password</h3>
-                    <div className="space-y-4 max-w-xs">
-                      <input 
-                        id="new-password"
-                        type="password" 
-                        placeholder="Enter New Password"
-                        className="w-full border p-2 text-sm outline-none focus:border-tally-teal"
-                      />
-                      <button 
-                        onClick={async () => {
-                          const pass = (document.getElementById('new-password') as HTMLInputElement).value;
-                          if (!pass) return;
-                          const res = await fetch(`api/users/${user.id}/password`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ password: pass })
-                          });
-                          if (res.ok) alert('Password updated successfully');
-                        }}
-                        className="bg-tally-teal text-white px-4 py-2 text-[10px] font-bold uppercase w-full shadow-md hover:bg-tally-header"
-                      >
-                        Update Password
-                      </button>
-                    </div>
-                  </div>
-                  <div className="text-[10px] text-gray-500 italic">
-                    User ID: {user.id} | Access Level: {user.role}
-                  </div>
-                </div>
-              )}
+              {currentScreen === 'EXPORT' && <ExportScreen onBack={handleBack} />}
+              {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} />}
+              {currentScreen === 'SETTINGS' && <SettingsScreen onBack={handleBack} />}
               {currentScreen === 'COMPANY' && (
                 <div className="p-10 space-y-4">
                    <div className="grid grid-cols-2 gap-4 text-xs">

@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^git add \\. ; git commit -m \"Add Settings, Print, Export/Email, and enhanced Ratio Analysis screens\" ; git push origin main$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
