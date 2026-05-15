@@ -1,0 +1,7 @@
+---
+deployment:
+  tasks:
+    - export NODEVENV=nodejs20
+    - export NODE_ENV=production
+    - npm install --production
+    - npm run build
