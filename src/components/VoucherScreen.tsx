@@ -8,6 +8,7 @@ import React, { useState, useEffect } from 'react';
 interface Ledger {
   id: string;
   name: string;
+  group: string;
 }
 
 interface CostCentre {
@@ -23,6 +24,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
   const [narration, setNarration] = useState('');
   const [entries, setEntries] = useState([{ ledgerId: '', costCentreId: '', amount: '', type: 'Dr' as 'Dr' | 'Cr', tempSearch: '' }]);
   const [ledgerBalances, setLedgerBalances] = useState<Record<string, number>>({});
+  const [selectedAccountId, setSelectedAccountId] = useState('');
 
   useEffect(() => {
     if (initialType) setType(initialType as any);
@@ -33,6 +35,8 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
   }, [initialDate]);
 
   const [activeDropdownIdx, setActiveDropdownIdx] = useState<number | null>(null);
+  const [showAccountDropdown, setShowAccountDropdown] = useState(false);
+  const [accountSearch, setAccountSearch] = useState('');
   const [highlightedIdx, setHighlightedIdx] = useState(0);
 
   useEffect(() => {
@@ -59,6 +63,10 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
   const getFilteredLedgers = (searchTerm: string) => {
     const search = searchTerm?.toLowerCase() || '';
     return ledgers.filter(l => l.name.toLowerCase().includes(search));
+  };
+
+  const getAccountLedgers = () => {
+    return ledgers.filter(l => l.group === 'Cash-in-hand' || l.group === 'Bank Accounts');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, entryIdx: number) => {
@@ -90,15 +98,35 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
   };
 
   const handleAddEntry = () => {
-    setEntries([...entries, { ledgerId: '', costCentreId: '', amount: '', type: 'Dr', tempSearch: '' }]);
+    const rowType = type === 'Receipt' ? 'Cr' : 'Dr';
+    setEntries([...entries, { ledgerId: '', costCentreId: '', amount: '', type: rowType as any, tempSearch: '' }]);
   };
 
   const calculateTotal = () => {
-    return entries.filter(e => e.type === 'Dr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+    return entries.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    const finalEntries = entries.map(e => ({ 
+      ledgerId: e.ledgerId || null,
+      costCentreId: e.costCentreId || null,
+      amount: Number(e.amount),
+      type: e.type 
+    }));
+
+    // Add the "Account" side of the transaction for Single Entry mode
+    if (['Contra', 'Payment', 'Receipt'].includes(type) && selectedAccountId) {
+      const accountSideType = type === 'Receipt' ? 'Dr' : 'Cr';
+      finalEntries.push({
+        ledgerId: selectedAccountId,
+        costCentreId: null,
+        amount: calculateTotal(),
+        type: accountSideType
+      });
+    }
+
     const response = await fetch('api/vouchers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -108,20 +136,19 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
         narration, 
         amount: calculateTotal(),
         branchId,
-        entries: entries.map(e => ({ 
-          ledgerId: e.ledgerId || null,
-          costCentreId: e.costCentreId || null,
-          amount: Number(e.amount),
-          type: e.type 
-        }))
+        entries: finalEntries
       }),
     });
     if (response.ok) {
       alert('Voucher Saved Successfully');
-      setEntries([{ ledgerId: '', costCentreId: '', amount: '', type: 'Dr', tempSearch: '' }]);
+      setEntries([{ ledgerId: '', costCentreId: '', amount: '', type: (type === 'Receipt' ? 'Cr' : 'Dr'), tempSearch: '' }]);
       setNarration('');
+      setSelectedAccountId('');
+      setAccountSearch('');
     }
   };
+
+  const selectedAccount = ledgers.find(l => l.id === selectedAccountId);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -149,11 +176,57 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
         </div>
       </div>
 
+      {/* Account Selection (Single Entry Mode) */}
+      {['Contra', 'Payment', 'Receipt'].includes(type) && (
+        <div className="bg-tally-accent/5 p-4 border-2 border-tally-teal/10 flex items-center gap-6">
+           <div className="w-24 text-[10px] font-black text-tally-teal uppercase italic">Account :</div>
+           <div className="relative flex-1 max-w-md">
+             <input 
+               type="text"
+               value={accountSearch || selectedAccount?.name || ''}
+               onChange={(e) => {
+                 setAccountSearch(e.target.value);
+                 setShowAccountDropdown(true);
+               }}
+               onFocus={() => setShowAccountDropdown(true)}
+               onBlur={() => setTimeout(() => setShowAccountDropdown(false), 200)}
+               placeholder="Select Cash or Bank Account..."
+               className="w-full bg-transparent border-b-2 border-tally-teal/30 focus:border-tally-teal outline-none py-1 font-bold text-sm"
+             />
+             {showAccountDropdown && (
+               <div className="absolute z-[70] left-0 mt-1 w-full bg-white border-2 border-tally-teal shadow-2xl max-h-48 overflow-auto">
+                 {getAccountLedgers().filter(l => l.name.toLowerCase().includes(accountSearch.toLowerCase())).map(l => (
+                   <div 
+                     key={l.id}
+                     onMouseDown={() => {
+                        setSelectedAccountId(l.id);
+                        setAccountSearch('');
+                        setShowAccountDropdown(false);
+                     }}
+                     className="px-3 py-2 text-xs font-bold hover:bg-tally-accent transition-colors flex justify-between uppercase cursor-pointer"
+                   >
+                     <span>{l.name}</span>
+                     <span className="text-[9px] opacity-40 italic">{l.group}</span>
+                   </div>
+                 ))}
+               </div>
+             )}
+             {selectedAccountId && (
+                <div className="absolute top-1 right-0 text-[10px] font-bold text-blue-600">
+                  BAL: ₹ {Math.abs(ledgerBalances[selectedAccountId]).toLocaleString()} {ledgerBalances[selectedAccountId] >= 0 ? 'Dr' : 'Cr'}
+                </div>
+             )}
+           </div>
+        </div>
+      )}
+
       <div className="border-2 border-tally-teal/20 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-gray-100 text-[10px] font-bold uppercase text-gray-500 border-b-2 border-tally-teal/10">
             <tr>
-              <th className="px-4 py-2 text-left w-16">Dr/Cr</th>
+              <th className="px-4 py-2 text-left w-16">
+                {['Contra', 'Payment', 'Receipt'].includes(type) ? 'To/By' : 'Dr/Cr'}
+              </th>
               <th className="px-4 py-2 text-left">Particulars</th>
               <th className="px-4 py-2 text-left w-40">Cost Centre</th>
               <th className="px-4 py-2 text-right w-32">Debit (₹)</th>
@@ -164,18 +237,24 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
             {entries.map((entry, idx) => (
               <tr key={idx} className="hover:bg-tally-accent/5">
                 <td className="px-1 py-1">
-                  <select 
-                    value={entry.type}
-                    onChange={(e) => {
-                      const newEntries = [...entries];
-                      newEntries[idx].type = e.target.value as 'Dr' | 'Cr';
-                      setEntries(newEntries);
-                    }}
-                    className="w-full focus:outline-none font-bold text-tally-teal bg-transparent px-2"
-                  >
-                    <option value="Dr">Dr</option>
-                    <option value="Cr">Cr</option>
-                  </select>
+                  {!['Contra', 'Payment', 'Receipt'].includes(type) ? (
+                    <select 
+                      value={entry.type}
+                      onChange={(e) => {
+                        const newEntries = [...entries];
+                        newEntries[idx].type = e.target.value as 'Dr' | 'Cr';
+                        setEntries(newEntries);
+                      }}
+                      className="w-full focus:outline-none font-bold text-tally-teal bg-transparent px-2"
+                    >
+                      <option value="Dr">Dr</option>
+                      <option value="Cr">Cr</option>
+                    </select>
+                  ) : (
+                    <div className="px-4 font-bold text-tally-teal italic">
+                      {type === 'Receipt' ? 'Cr' : 'Dr'}
+                    </div>
+                  )}
                 </td>
                 <td className="px-2 py-1">
                   <div className="relative">
@@ -246,7 +325,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                   </select>
                 </td>
                 <td className="px-4 py-1">
-                  {entry.type === 'Dr' && (
+                  {(entry.type === 'Dr' || (['Contra', 'Payment', 'Receipt'].includes(type))) && (
                     <input 
                       type="number" 
                       value={entry.amount}
@@ -261,7 +340,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                   )}
                 </td>
                 <td className="px-4 py-1">
-                  {entry.type === 'Cr' && (
+                  {entry.type === 'Cr' && !['Contra', 'Payment', 'Receipt'].includes(type) && (
                     <input 
                       type="number" 
                       value={entry.amount}
@@ -308,12 +387,14 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
              <span className="font-mono">{calculateTotal().toLocaleString()}</span>
           </div>
           <div className="flex justify-between items-center text-sm font-black text-tally-teal">
-             <span>Total Dr/Cr</span>
+             <span>Total Amount</span>
              <span className="font-mono">₹ {calculateTotal().toLocaleString()}</span>
           </div>
           <button type="submit" className="w-full bg-tally-teal text-white py-2 text-xs font-bold uppercase shadow-lg hover:bg-teal-700 transition-all active:scale-95">Accept (Enter)</button>
         </div>
       </div>
     </form>
+  );
+}
   );
 }

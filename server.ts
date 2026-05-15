@@ -187,6 +187,15 @@ async function startServer() {
         ].map((name, index) => ({ id: `${branchId}_g_${index}`, name, branchId }));
         
         await trx('account_groups').insert(defaultGroups);
+
+        // Seed default ledgers for the new branch
+        const defaultLedgers = [
+          { id: `${branchId}_l_cash`, name: 'Cash', group_name: 'Cash-in-hand', openingBalance: 0, balanceType: 'Dr', branchId },
+          { id: `${branchId}_l_sbi`, name: 'SBI Bank', group_name: 'Bank Accounts', openingBalance: 0, balanceType: 'Dr', branchId },
+          { id: `${branchId}_l_hdfc`, name: 'HDFC Bank', group_name: 'Bank Accounts', openingBalance: 0, balanceType: 'Dr', branchId },
+          { id: `${branchId}_l_tithe`, name: 'Tithe Collection', group_name: 'Direct Income', openingBalance: 0, balanceType: 'Cr', branchId }
+        ];
+        await trx('ledgers').insert(defaultLedgers);
       });
       
       res.json(newBranch);
