@@ -127,7 +127,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="flex justify-between items-start mb-4">
         <div className="flex flex-wrap gap-2">
-          {['Contra', 'Payment', 'Receipt', 'Journal', 'Sales', 'Purchase'].map((t, idx) => (
+          {['Contra', 'Payment', 'Receipt', 'Journal'].map((t, idx) => (
             <button 
               key={t}
               type="button" 

@@ -37,6 +37,9 @@ import MastersDashboard from './components/masters/MastersDashboard';
 import AlterMasterScreen from './components/AlterMasterScreen';
 import CompanyScreen from './components/CompanyScreen';
 import DataScreen from './components/DataScreen';
+import CashBankBookScreen from './components/CashBankBookScreen';
+import TrialBalanceScreen from './components/TrialBalanceScreen';
+import { exportToExcel } from './lib/ReportUtils';
 
 type User = {
   id: string;
@@ -68,7 +71,7 @@ const GATEWAY_MENU: MenuOption[] = [
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'HQ' | 'ANALYTICS' | 'AUDIT' | 'BANKING' | 'PAYROLL' | 'DAYBOOK' | 'COMPANY' | 'DATA' | 'EXCHANGE' | 'GOTO' | 'IMPORT' | 'EXPORT' | 'PRINT' | 'EMAIL' | 'SETTINGS' | 'ALTER' | 'BALANCE_SHEET' | 'PL_ACCOUNT' | 'RATIO' | 'CHART' | 'ADMIN'>('GATEWAY');
+  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'HQ' | 'ANALYTICS' | 'AUDIT' | 'BANKING' | 'PAYROLL' | 'DAYBOOK' | 'COMPANY' | 'DATA' | 'EXCHANGE' | 'GOTO' | 'IMPORT' | 'EXPORT' | 'PRINT' | 'EMAIL' | 'SETTINGS' | 'ALTER' | 'BALANCE_SHEET' | 'PL_ACCOUNT' | 'RATIO' | 'CHART' | 'ADMIN' | 'TRIAL_BALANCE' | 'CASH_BANK_BOOK'>('GATEWAY');
   const [voucherType, setVoucherType] = useState('Payment');
   const [selectedBranchId, setSelectedBranchId] = useState<string | undefined>(undefined);
   const [currentDate, setCurrentDate] = useState('2026-05-12');
@@ -127,13 +130,12 @@ export default function App() {
     if (item === 'Day Book') setCurrentScreen('DAYBOOK');
     else if (item === 'Balance Sheet') setCurrentScreen('BALANCE_SHEET');
     else if (item === 'Profit & Loss A/c') setCurrentScreen('PL_ACCOUNT');
-    else if (item === 'Trial Balance') setCurrentScreen('REPORTS');
+    else if (item === 'Trial Balance') setCurrentScreen('TRIAL_BALANCE');
     else if (item === 'Banking') setCurrentScreen('BANKING');
     else if (item === 'Audit Logs') setCurrentScreen('AUDIT');
     else if (item === 'Admin Panel') setCurrentScreen('ADMIN');
     else if (item === 'Ratio Analysis') setCurrentScreen('RATIO');
-    else if (item === 'Cash/Bank Book') setCurrentScreen('BANKING');
-    setCurrentScreen('GATEWAY'); // close goto after selection
+    else if (item === 'Cash/Bank Book') setCurrentScreen('CASH_BANK_BOOK');
   };
 
   useHotkeys('up', (e) => {
@@ -199,7 +201,7 @@ export default function App() {
       return;
     }
 
-    if (['VOUCHER', 'LEDGER', 'ALTER', 'DAYBOOK', 'BANKING', 'BALANCE_SHEET', 'PL_ACCOUNT', 'RATIO', 'CHART', 'AUDIT', 'COMPANY', 'DATA', 'IMPORT', 'EXPORT', 'PRINT', 'EMAIL', 'SETTINGS', 'ADMIN'].includes(currentScreen)) {
+    if (['VOUCHER', 'LEDGER', 'ALTER', 'DAYBOOK', 'BANKING', 'BALANCE_SHEET', 'PL_ACCOUNT', 'RATIO', 'CHART', 'AUDIT', 'COMPANY', 'DATA', 'IMPORT', 'EXPORT', 'PRINT', 'EMAIL', 'SETTINGS', 'ADMIN', 'TRIAL_BALANCE', 'CASH_BANK_BOOK'].includes(currentScreen)) {
       setCurrentScreen('GATEWAY');
     } else {
       if (user?.role === 'HQ') setCurrentScreen('HQ');
@@ -249,14 +251,12 @@ export default function App() {
     const branch = branches.find(b => b.id === selectedBranchId);
     alert(`Current Church: ${branch ? branch.name : 'BERITHSYSTEMS HQ'}`);
   });
-  useHotkeys('f4', () => { setCurrentScreen('VOUCHER'); setVoucherType('Contra'); });
-  useHotkeys('f5', () => { setCurrentScreen('VOUCHER'); setVoucherType('Payment'); });
-  useHotkeys('f6', () => { setCurrentScreen('VOUCHER'); setVoucherType('Receipt'); });
-  useHotkeys('f7', () => { setCurrentScreen('VOUCHER'); setVoucherType('Journal'); });
-  useHotkeys('f8', () => { setCurrentScreen('VOUCHER'); setVoucherType('Sales'); });
-  useHotkeys('f9', () => { setCurrentScreen('VOUCHER'); setVoucherType('Purchase'); });
-  useHotkeys('f11', () => alert('Features (F11)'));
-  useHotkeys('f12', () => alert('Configuration (F12)'));
+  useHotkeys('f4', (e) => { e.preventDefault(); setCurrentScreen('VOUCHER'); setVoucherType('Contra'); });
+  useHotkeys('f5', (e) => { e.preventDefault(); setCurrentScreen('VOUCHER'); setVoucherType('Payment'); });
+  useHotkeys('f6', (e) => { e.preventDefault(); setCurrentScreen('VOUCHER'); setVoucherType('Receipt'); });
+  useHotkeys('f7', (e) => { e.preventDefault(); setCurrentScreen('VOUCHER'); setVoucherType('Journal'); });
+  const [showConfig, setShowConfig] = useState(false);
+  useHotkeys('f12', (e) => { e.preventDefault(); setShowConfig(true); });
   useHotkeys('alt+c', () => setCurrentScreen('LEDGER'), { enableOnFormTags: true });
   useHotkeys('alt+a', () => alert('Alter Masters Mode Activated'));
   const [showQuit, setShowQuit] = useState(false);
@@ -265,9 +265,6 @@ export default function App() {
   useHotkeys('ctrl+q', () => setShowQuit(true));
   useHotkeys('y', () => { if (showQuit) window.close(); });
   useHotkeys('n', () => { if (showQuit) setShowQuit(false); });
-  useHotkeys('f5', () => { if (currentScreen === 'VOUCHER') alert('Payment Mode'); });
-  useHotkeys('f6', () => { if (currentScreen === 'VOUCHER') alert('Receipt Mode'); });
-  useHotkeys('f7', () => { if (currentScreen === 'VOUCHER') alert('Journal Mode'); });
 
   const [showHelp, setShowHelp] = useState(false);
 
@@ -277,6 +274,43 @@ export default function App() {
     <div className="flex flex-col h-screen bg-tally-bg overflow-hidden uppercase relative">
       {/* Global Modals */}
       <AnimatePresence>
+        {showConfig && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[130]">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-[500px] border-4 border-tally-teal shadow-2xl overflow-hidden uppercase">
+              <div className="bg-tally-teal text-white px-4 py-1 text-[10px] font-bold flex justify-between items-center">
+                 <span>Configuration</span>
+                 <button onClick={() => setShowConfig(false)} className="hover:text-red-200 text-xs">×</button>
+              </div>
+              <div className="p-6 grid grid-cols-2 gap-x-8 gap-y-4">
+                 <div className="space-y-4">
+                    <h3 className="text-[11px] font-bold text-tally-teal border-b border-tally-teal/20 pb-1">General</h3>
+                    <div className="flex justify-between items-center text-xs">
+                       <span>Use Accounting Terminology</span>
+                       <span className="text-blue-700 font-bold">Yes</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                       <span>Show Monthly Breakdown</span>
+                       <span className="text-blue-700 font-bold">Yes</span>
+                    </div>
+                 </div>
+                 <div className="space-y-4">
+                    <h3 className="text-[11px] font-bold text-tally-teal border-b border-tally-teal/20 pb-1">Vouchers</h3>
+                    <div className="flex justify-between items-center text-xs">
+                       <span>Show Ledger Balances</span>
+                       <span className="text-blue-700 font-bold">Yes</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                       <span>Warn on Negative Balance</span>
+                       <span className="text-blue-700 font-bold">Yes</span>
+                    </div>
+                 </div>
+              </div>
+              <div className="bg-tally-bg p-2 text-right border-t">
+                 <button onClick={() => setShowConfig(false)} className="bg-tally-teal text-white px-6 py-1 text-[10px] font-bold">ESC: Accept</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
         {showDateModal && (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[110]">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-[300px] border-4 border-tally-teal shadow-2xl overflow-hidden">
@@ -380,10 +414,18 @@ export default function App() {
 
       {/* Secondary Ribbon */}
       <div className="bg-tally-teal text-white h-[30px] flex items-center px-4 justify-between border-b border-tally-hotkey">
-        <div className="flex gap-8 text-[13px] font-semibold">
+        <div className="flex gap-4 items-center text-[13px] font-semibold">
           <span>{user.role === 'HQ' ? 'HQ Administration' : 'Gateway of Tally'}</span>
+          {user.role === 'HQ' && currentScreen !== 'HQ' && (
+            <button 
+              onClick={() => setCurrentScreen('HQ')} 
+              className="text-[10px] bg-tally-accent text-black px-2 py-0.5 rounded font-bold hover:bg-yellow-500 border border-black/20 flex items-center gap-1"
+            >
+              <LayoutDashboard className="w-3 h-3" /> HQ HOME
+            </button>
+          )}
           {user.role === 'HQ' && (
-            <button onClick={() => setCurrentScreen('ADMIN')} className="text-[10px] bg-white/20 px-2 rounded hover:bg-white/30 border border-white/40">SYSTEM ADMIN</button>
+            <button onClick={() => setCurrentScreen('ADMIN')} className="text-[10px] bg-white/20 px-2 py-0.5 rounded hover:bg-white/30 border border-white/40">SYSTEM ADMIN</button>
           )}
         </div>
         <div className="text-[12px] opacity-80 italic">
@@ -568,6 +610,8 @@ export default function App() {
                   {currentScreen === 'CHART' && 'Chart of Accounts'}
                   {currentScreen === 'BALANCE_SHEET' && 'Balance Sheet'}
                   {currentScreen === 'PL_ACCOUNT' && 'Profit & Loss A/c'}
+                  {currentScreen === 'TRIAL_BALANCE' && 'Trial Balance'}
+                  {currentScreen === 'CASH_BANK_BOOK' && 'Cash / Bank Book'}
                   {currentScreen === 'RATIO' && 'Ratio Analysis'}
                   {currentScreen === 'DAYBOOK' && 'Day Book'}
                   {currentScreen === 'ANALYTICS' && 'Visual Data Analytics'}
@@ -598,6 +642,8 @@ export default function App() {
               {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} />}
               {currentScreen === 'BALANCE_SHEET' && <BalanceSheetScreen branchId={selectedBranchId} />}
               {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} />}
+              {currentScreen === 'TRIAL_BALANCE' && <TrialBalanceScreen branchId={selectedBranchId} />}
+              {currentScreen === 'CASH_BANK_BOOK' && <CashBankBookScreen branchId={selectedBranchId} />}
               {currentScreen === 'CHART' && <AlterMasterScreen branchId={selectedBranchId} />} {/* Chart of accounts is similar list */}
               {currentScreen === 'RATIO' && <div className="p-20 text-center font-black text-tally-teal uppercase italic border">Ratio Analysis - Coming Soon</div>}
               {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} initialDate={currentDate} />}
@@ -729,19 +775,16 @@ export default function App() {
 
         {/* Sidebar Actions */}
         <aside className="w-[180px] bg-tally-teal text-white flex flex-col border-l border-tally-hotkey">
-          <div className="hotkey-btn" onClick={() => alert('Date')}><span>F2: Date</span></div>
+          <div className="hotkey-btn" onClick={() => { setDateInput(currentDate); setShowDateModal(true); }}><span>F2: Date</span></div>
           <div className="hotkey-btn" onClick={() => alert('Branch Selection')}><span>F3: Branch</span></div>
           <div className="h-4 bg-black/10"></div>
-          <div className="hotkey-btn" onClick={() => setCurrentScreen('VOUCHER')}><span>F4: Contra</span></div>
-          <div className="hotkey-btn" onClick={() => setCurrentScreen('VOUCHER')}><span>F5: Payment</span></div>
-          <div className="hotkey-btn" onClick={() => setCurrentScreen('VOUCHER')}><span>F6: Receipt</span></div>
-          <div className="hotkey-btn" onClick={() => setCurrentScreen('VOUCHER')}><span>F7: Journal</span></div>
-          <div className="hotkey-btn" onClick={() => setCurrentScreen('VOUCHER')}><span>F8: Sales</span></div>
-          <div className="hotkey-btn" onClick={() => setCurrentScreen('VOUCHER')}><span>F9: Purchase</span></div>
-          <div className="hotkey-btn"><span>F10: Other</span></div>
+          <div className="hotkey-btn" onClick={() => { setCurrentScreen('VOUCHER'); setVoucherType('Contra'); }}><span>F4: Contra</span></div>
+          <div className="hotkey-btn" onClick={() => { setCurrentScreen('VOUCHER'); setVoucherType('Payment'); }}><span>F5: Payment</span></div>
+          <div className="hotkey-btn" onClick={() => { setCurrentScreen('VOUCHER'); setVoucherType('Receipt'); }}><span>F6: Receipt</span></div>
+          <div className="hotkey-btn" onClick={() => { setCurrentScreen('VOUCHER'); setVoucherType('Journal'); }}><span>F7: Journal</span></div>
           <div className="h-4 bg-black/10"></div>
           <div className="hotkey-btn opacity-60"><span>F11: Features</span></div>
-          <div className="hotkey-btn opacity-60"><span>F12: Configure</span></div>
+          <div className="hotkey-btn" onClick={() => setShowConfig(true)}><span>F12: Configure</span></div>
           <div className="hotkey-btn bg-tally-accent text-black mt-2" onClick={() => setShowHelp(!showHelp)}><span>H: Golden Rules</span></div>
           <div className="mt-auto bg-[#001c24] p-2 text-[10px] text-center italic border-t border-white/5">
             {currentTime.toLocaleTimeString()}
