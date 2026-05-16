@@ -300,4 +300,83 @@ export async function initDB() {
   } catch (e) {
     console.error("Migration failed:", e);
   }
+
+  // Auto-seed default data if empty
+  try {
+    const branchCount = await db('branches').count('* as count').first();
+    if (!branchCount || branchCount.count === 0) {
+      console.log("Seeding default branch...");
+      await db('branches').insert({
+        id: '1',
+        code: 'HQ',
+        name: 'Head Office',
+        location: 'Main Office'
+      });
+    }
+
+    const userCount = await db('users').count('* as count').first();
+    if (!userCount || userCount.count === 0) {
+      console.log("Seeding default admin user...");
+      await db('users').insert({
+        id: 'admin_1',
+        username: 'hi@ebc.com',
+        password: 'helloworld',
+        role: 'HQ'
+      });
+      console.log("✓ Admin user created: hi@ebc.com / helloworld");
+    }
+
+    const groupCount = await db('account_groups').count('* as count').first();
+    if (!groupCount || groupCount.count === 0) {
+      console.log("Seeding Chart of Accounts...");
+      const standardGroups = [
+        { id: 'g_001', name: 'Fixed Assets', branchId: '1' },
+        { id: 'g_002', name: 'Current Assets', branchId: '1' },
+        { id: 'g_003', name: 'Investments', branchId: '1' },
+        { id: 'g_004', name: 'Current Liabilities', branchId: '1' },
+        { id: 'g_005', name: 'Loans (Liability)', branchId: '1' },
+        { id: 'g_006', name: 'Capital Account', branchId: '1' },
+        { id: 'g_007', name: 'Reserves and Surplus', branchId: '1' },
+        { id: 'g_008', name: 'Direct Income', branchId: '1' },
+        { id: 'g_009', name: 'Indirect Income', branchId: '1' },
+        { id: 'g_010', name: 'Sales Account', branchId: '1' },
+        { id: 'g_011', name: 'Direct Expenses', branchId: '1' },
+        { id: 'g_012', name: 'Indirect Expenses', branchId: '1' },
+        { id: 'g_013', name: 'Purchase Account', branchId: '1' },
+        { id: 'g_014', name: 'Suspense Account', branchId: '1' },
+        { id: 'g_015', name: 'Bank Accounts', branchId: '1' },
+        { id: 'g_016', name: 'Cash', branchId: '1' }
+      ];
+      await db('account_groups').insert(standardGroups);
+      console.log("✓ Chart of Accounts created (16 groups)");
+    }
+
+    const ledgerCount = await db('ledgers').count('* as count').first();
+    if (!ledgerCount || ledgerCount.count === 0) {
+      console.log("Seeding default ledgers...");
+      const defaultLedgers = [
+        { id: 'l_001', name: 'Cash', groupId: 'g_016', group_name: 'Cash', openingBalance: 0, balanceType: 'Dr', branchId: '1' },
+        { id: 'l_002', name: 'Bank Account', groupId: 'g_015', group_name: 'Bank Accounts', openingBalance: 0, balanceType: 'Dr', branchId: '1' },
+        { id: 'l_003', name: 'Service Income', groupId: 'g_008', group_name: 'Direct Income', openingBalance: 0, balanceType: 'Cr', branchId: '1' },
+        { id: 'l_004', name: 'Consulting Income', groupId: 'g_008', group_name: 'Direct Income', openingBalance: 0, balanceType: 'Cr', branchId: '1' },
+        { id: 'l_005', name: 'Other Income', groupId: 'g_009', group_name: 'Indirect Income', openingBalance: 0, balanceType: 'Cr', branchId: '1' },
+        { id: 'l_006', name: 'Sales', groupId: 'g_010', group_name: 'Sales Account', openingBalance: 0, balanceType: 'Cr', branchId: '1' },
+        { id: 'l_007', name: 'Salary Expenses', groupId: 'g_011', group_name: 'Direct Expenses', openingBalance: 0, balanceType: 'Dr', branchId: '1' },
+        { id: 'l_008', name: 'Office Expenses', groupId: 'g_012', group_name: 'Indirect Expenses', openingBalance: 0, balanceType: 'Dr', branchId: '1' },
+        { id: 'l_009', name: 'Utilities', groupId: 'g_012', group_name: 'Indirect Expenses', openingBalance: 0, balanceType: 'Dr', branchId: '1' },
+        { id: 'l_010', name: 'Purchase', groupId: 'g_013', group_name: 'Purchase Account', openingBalance: 0, balanceType: 'Dr', branchId: '1' },
+        { id: 'l_011', name: 'Land & Building', groupId: 'g_001', group_name: 'Fixed Assets', openingBalance: 0, balanceType: 'Dr', branchId: '1' },
+        { id: 'l_012', name: 'Equipment', groupId: 'g_001', group_name: 'Fixed Assets', openingBalance: 0, balanceType: 'Dr', branchId: '1' },
+        { id: 'l_013', name: 'Accounts Receivable', groupId: 'g_002', group_name: 'Current Assets', openingBalance: 0, balanceType: 'Dr', branchId: '1' },
+        { id: 'l_014', name: 'Stock', groupId: 'g_002', group_name: 'Current Assets', openingBalance: 0, balanceType: 'Dr', branchId: '1' },
+        { id: 'l_015', name: 'Accounts Payable', groupId: 'g_004', group_name: 'Current Liabilities', openingBalance: 0, balanceType: 'Cr', branchId: '1' },
+        { id: 'l_016', name: 'Owner Capital', groupId: 'g_006', group_name: 'Capital Account', openingBalance: 0, balanceType: 'Cr', branchId: '1' },
+        { id: 'l_017', name: 'Retained Earnings', groupId: 'g_007', group_name: 'Reserves and Surplus', openingBalance: 0, balanceType: 'Cr', branchId: '1' }
+      ];
+      await db('ledgers').insert(defaultLedgers);
+      console.log("✓ Default ledgers created (17 accounts)");
+    }
+  } catch (e) {
+    console.error("Seeding error:", e);
+  }
 }
