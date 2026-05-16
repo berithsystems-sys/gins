@@ -11,9 +11,9 @@ header("Content-Type: application/json");
 
 // 1. Database Configuration
 $host = 'localhost'; 
-$db   = 'u698772346_tally'; // YOUR_DATABASE_NAME
-$user = 'u698772346_user';  // YOUR_DATABASE_USER
-$pass = 'YOUR_ACTUAL_PASSWORD_HERE'; // <--- CHANGE THIS TO YOUR REAL PASSWORD
+$db   = 'u698772346_tallyebccs'; // YOUR_DATABASE_NAME
+$user = 'u698772346_tallyebccs';  // YOUR_DATABASE_USER
+$pass = '1pA2QIL5|xA|'; // Your database password
 $charset = 'utf8mb4';
 
 $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
