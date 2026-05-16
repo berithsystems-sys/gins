@@ -5,9 +5,10 @@ import { useHotkeys } from '../hooks/useHotkeys';
 
 interface AlterMasterScreenProps {
   branchId?: string;
+  onSelectLedger?: (id: string) => void;
 }
 
-export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) {
+export default function AlterMasterScreen({ branchId, onSelectLedger }: AlterMasterScreenProps) {
   const [ledgers, setLedgers] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -21,6 +22,7 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
   useEffect(() => {
     setSelectedIndex(0);
   }, [activeType]);
+
   const fetchData = async () => {
     const query = branchId ? `?branchId=${branchId}` : '';
     const [l, g, e, c] = await Promise.all([
@@ -33,11 +35,23 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
     setGroups(g);
     setEmployees(e);
     setCostCentres(c);
+
+    // Expand top groups by default
+    const initialExpanded = g.reduce((acc: any, curr: any) => ({ ...acc, [curr.id]: true }), {});
+    setExpandedGroups(initialExpanded);
   };
 
   useEffect(() => {
     fetchData();
   }, [branchId]);
+
+  const handleItemClick = (item: any) => {
+    if (onSelectLedger && activeType === 'LEDGER') {
+      onSelectLedger(item.id);
+    } else {
+      setEditingItem(item);
+    }
+  };
 
   const handleDelete = async (id: string, type: string) => {
     if (!window.confirm(`Are you sure you want to delete this ${type}?`)) return;
@@ -222,7 +236,7 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
                             {group.ledgers.map((ledger: any) => (
                               <div 
                                 key={ledger.id} 
-                                onClick={() => setEditingItem(ledger)}
+                                onClick={() => handleItemClick(ledger)}
                                 className="flex justify-between items-center py-1 px-8 hover:bg-tally-accent cursor-pointer group"
                               >
                                 <span className="text-xs uppercase font-bold text-tally-teal">{ledger.name}</span>

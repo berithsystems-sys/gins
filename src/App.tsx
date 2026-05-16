@@ -40,6 +40,7 @@ import DataScreen from './components/DataScreen';
 import CashBankBookScreen from './components/CashBankBookScreen';
 import TrialBalanceScreen from './components/TrialBalanceScreen';
 import ChartOfAccountsScreen from './components/ChartOfAccountsScreen';
+import LedgerVouchersScreen from './components/LedgerVouchersScreen';
 import SettingsScreen from './components/SettingsScreen';
 import PrintScreen from './components/PrintScreen';
 import ExportScreen from './components/ExportScreen';
@@ -84,7 +85,7 @@ const GATEWAY_MENU = [
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'HQ' | 'ANALYTICS' | 'AUDIT' | 'BANKING' | 'PAYROLL' | 'DAYBOOK' | 'COMPANY' | 'DATA' | 'EXCHANGE' | 'GOTO' | 'IMPORT' | 'EXPORT' | 'PRINT' | 'EMAIL' | 'SETTINGS' | 'ALTER' | 'BALANCE_SHEET' | 'PL_ACCOUNT' | 'RATIO' | 'CHART' | 'ADMIN' | 'TRIAL_BALANCE' | 'CASH_BANK_BOOK'>('GATEWAY');
+  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'HQ' | 'ANALYTICS' | 'AUDIT' | 'BANKING' | 'PAYROLL' | 'DAYBOOK' | 'COMPANY' | 'DATA' | 'EXCHANGE' | 'GOTO' | 'IMPORT' | 'EXPORT' | 'PRINT' | 'EMAIL' | 'SETTINGS' | 'ALTER' | 'BALANCE_SHEET' | 'PL_ACCOUNT' | 'RATIO' | 'CHART' | 'ADMIN' | 'TRIAL_BALANCE' | 'CASH_BANK_BOOK' | 'LEDGER_DETAIL'>('GATEWAY');
   const [voucherType, setVoucherType] = useState('Payment');
   const [selectedBranchId, setSelectedBranchId] = useState<string | undefined>(undefined);
   const [currentDate, setCurrentDate] = useState('2026-05-12');
@@ -92,6 +93,7 @@ export default function App() {
   const [allLedgers, setAllLedgers] = useState<any[]>([]);
   const [allVouchers, setAllVouchers] = useState<any[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedLedgerId, setSelectedLedgerId] = useState<string | undefined>(undefined);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showCalculator, setShowCalculator] = useState(false);
   const [calcInput, setCalcInput] = useState('');
@@ -652,8 +654,8 @@ export default function App() {
 
               {currentScreen === 'VOUCHER' && <VoucherScreen branchId={selectedBranchId} onTypeChange={setVoucherType} initialType={voucherType} initialDate={currentDate} />}
               {currentScreen === 'LEDGER' && <MastersDashboard branchId={selectedBranchId} />}
-              {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} />}
-              {currentScreen === 'BALANCE_SHEET' && <BalanceSheetScreen branchId={selectedBranchId} />}
+              {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} onSelectLedger={(id) => { setSelectedLedgerId(id); setCurrentScreen('LEDGER_DETAIL'); }} />}
+              {currentScreen === 'CHART' && <ChartOfAccountsScreen branchId={selectedBranchId} />}
               {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} />}
               {currentScreen === 'TRIAL_BALANCE' && <TrialBalanceScreen branchId={selectedBranchId} />}
               {currentScreen === 'CASH_BANK_BOOK' && <CashBankBookScreen branchId={selectedBranchId} />}
@@ -661,6 +663,8 @@ export default function App() {
               {currentScreen === 'RATIO' && <RatioAnalysisScreen onBack={handleBack} />}
               {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} />}
               {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} initialDate={currentDate} />}
+              {currentScreen === 'LEDGER_DETAIL' && <LedgerVouchersScreen branchId={selectedBranchId} ledgerId={selectedLedgerId} onBack={() => setCurrentScreen('GATEWAY')} />}
+              {currentScreen === 'HQ' && user?.role === 'HQ' && <HQDashboard onSelectBranch={(id) => { setSelectedBranchId(id); setCurrentScreen('GATEWAY'); }} />}
               {currentScreen === 'ANALYTICS' && <AnalyticsScreen branches={branches} ledgers={allLedgers} vouchers={allVouchers} />}
               {currentScreen === 'AUDIT' && <AuditLogScreen branchId={selectedBranchId} isAdmin={user.role === 'HQ'} />}
               {currentScreen === 'ADMIN' && <AdminPanel />}

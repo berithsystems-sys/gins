@@ -99,27 +99,50 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const response = await fetch('api/vouchers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        date, 
-        type, 
-        narration, 
-        amount: calculateTotal(),
-        branchId,
-        entries: entries.map(e => ({ 
-          ledgerId: e.ledgerId || null,
-          costCentreId: e.costCentreId || null,
-          amount: Number(e.amount),
-          type: e.type 
-        }))
-      }),
-    });
-    if (response.ok) {
-      alert('Voucher Saved Successfully');
-      setEntries([{ ledgerId: '', costCentreId: '', amount: '', type: 'Dr', tempSearch: '' }]);
-      setNarration('');
+    
+    // Validation
+    const drTotal = entries.filter(e => e.type === 'Dr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+    const crTotal = entries.filter(e => e.type === 'Cr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+    
+    if (drTotal !== crTotal) {
+      alert(`Debit (₹${drTotal}) and Credit (₹${crTotal}) totals must match! Difference: ₹${Math.abs(drTotal - crTotal)}`);
+      return;
+    }
+
+    if (entries.some(e => !e.ledgerId || !e.amount)) {
+      alert('Please ensure all entries have a selected ledger and an amount.');
+      return;
+    }
+
+    try {
+      const response = await fetch('api/vouchers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          date, 
+          type, 
+          narration, 
+          amount: drTotal,
+          branchId,
+          entries: entries.map(e => ({ 
+            ledgerId: e.ledgerId,
+            costCentreId: e.costCentreId || null,
+            amount: Number(e.amount),
+            type: e.type 
+          }))
+        }),
+      });
+
+      if (response.ok) {
+        alert('Voucher Saved Successfully');
+        setEntries([{ ledgerId: '', costCentreId: '', amount: '', type: 'Dr' as 'Dr' | 'Cr', tempSearch: '' }]);
+        setNarration('');
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to save voucher: ${errorData.error || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      alert(`Connection error: ${err.message}`);
     }
   };
 
