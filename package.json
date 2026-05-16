@@ -11,7 +11,8 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "clear-demo-data": "tsx scripts/clear-demo-data.js",
-    "seed": "tsx scripts/seed.js"
+    "seed": "tsx scripts/seed.js",
+    "test-db": "tsx scripts/test-db.js"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

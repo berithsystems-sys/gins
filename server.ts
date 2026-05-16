@@ -75,13 +75,14 @@ async function startServer() {
         const userExists = await db('users').where({ username }).first();
         if (userExists) {
           console.warn(`Debug: User "${username}" exists, but password did not match.`);
+          return res.status(401).json({ error: "Invalid credentials - password incorrect" });
         } else {
           console.warn(`Debug: User "${username}" does not exist in the database.`);
           // list users for debug (HQ Only or in dev)
           const allUsers = await db('users').select('username').limit(5);
           console.log(`Available users: ${allUsers.map(u => u.username).join(', ')}`);
+          return res.status(401).json({ error: "Invalid credentials - user not found", hint: `Available users: ${allUsers.map(u => u.username).join(', ')}` });
         }
-        return res.status(401).json({ error: "Invalid credentials" });
       }
       
       console.log(`Login success: user="${user.username}", role="${user.role}"`);
@@ -108,22 +109,28 @@ async function startServer() {
       res.json(user);
     } catch (err: any) {
       console.error("Login Database Error:", err);
+      console.error("Error code:", err.code);
+      console.error("Error message:", err.message);
       
       let errorMessage = "Database error during login";
       let hint = "";
 
-      if (err.code === 'ECONNREFUSED' || err.code === 'ER_ACCESS_DENIED_ERROR') {
+      // Check connection issues
+      if (err.code === 'ECONNREFUSED' || err.code === 'PROTOCOL_CONNECTION_LOST' || err.code === 'PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR') {
         const currentHost = (db.client.config.connection as any).host;
-        if (currentHost === 'localhost' || currentHost === '127.0.0.1' || currentHost === '::1') {
-          hint = "CRITICAL: You are trying to connect to MySQL on 'localhost'. This environment (AI Studio) DOES NOT have a MySQL server. You MUST use your remote database hostname (e.g., mysql.hostinger.com) in your environment variables.";
-        } else {
-          hint = "Could not connect to your remote database. Please verify your DB_HOST, DB_USER, and DB_PASSWORD are correct and that Remote MySQL is enabled on your host.";
-        }
+        hint = `Cannot connect to database server: ${currentHost}. Please verify: 1) Hostinger Remote MySQL is enabled, 2) Your IP is whitelisted, 3) The hostname is correct.`;
+      } else if (err.code === 'ER_ACCESS_DENIED_ERROR' || err.code === 'ER_BAD_DB_ERROR') {
+        hint = `Authentication failed. Please check your DB_USER and DB_PASSWORD in environment variables.`;
+      } else if (err.code === 'ER_NO_SUCH_TABLE') {
+        hint = `Table doesn't exist. Please run the SQL setup script in PhpMyAdmin first.`;
+      } else if (err.message.includes('ENOTFOUND') || err.message.includes('getaddrinfo')) {
+        hint = `Cannot resolve database hostname. The host "${(db.client.config.connection as any).host}" is not reachable.`;
       }
 
       res.status(500).json({ 
         error: errorMessage, 
         details: err.message,
+        code: err.code,
         hint: hint || "Check your database connection settings in the environment variables."
       });
     }
