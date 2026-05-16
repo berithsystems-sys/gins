@@ -117,36 +117,72 @@ export default function PLScreen({ branchId }: { branchId?: string }) {
   const incomeTotal = ['Sales Account', 'Direct Income', 'Indirect Income'].reduce((acc, g) => acc + getGroupTotal(g), 0);
 
   return (
-    <div id="pl-report" className="p-4 space-y-6 max-w-5xl mx-auto">
-      <div className="flex justify-between items-end border-b-2 border-red-700 pb-2">
-        <h2 className="text-xl font-black text-red-700 uppercase flex items-center gap-2">
-          <BarChart3 className="w-6 h-6" />
-          Profit & Loss Account
-        </h2>
-        <div className="flex gap-2">
-           <button className="flex items-center gap-1 text-[10px] bg-gray-100 hover:bg-gray-200 px-3 py-1 font-bold uppercase border" onClick={() => printReport('pl-report')}>
-            <Printer className="w-3 h-3" /> Print (Alt+P)
-          </button>
-          <button className="flex items-center gap-1 text-[10px] bg-red-700 text-white hover:bg-red-800 px-3 py-1 font-bold uppercase shadow" onClick={handleExport}>
-            <Download className="w-3 h-3" /> Export Excel
-          </button>
+    <div id="pl-report" className="flex flex-col h-full bg-tally-bg">
+      {/* Report Header */}
+      <div className="bg-tally-sidebar text-white px-4 py-1 font-bold text-xs uppercase flex justify-between sticky top-0 z-10">
+        <span>Profit & Loss Account</span>
+        <span className="text-tally-accent">{companyName}</span>
+      </div>
+
+      <div className="flex-grow p-4 overflow-auto">
+        <div className="max-w-6xl mx-auto bg-white tally-border tally-shadow">
+          {/* Company Title */}
+          <div className="text-center py-4 border-b border-gray-200">
+            <h1 className="text-lg font-bold uppercase">{companyName}</h1>
+            <p className="text-xs font-bold">Profit & Loss A/c</p>
+            <p className="text-[10px]">1-Apr-26 to 31-Mar-27</p>
+          </div>
+
+          {/* Main Table Structure */}
+          <div className="flex divide-x divide-tally-teal border-b border-tally-teal">
+            {/* Expenditure Column */}
+            <div className="w-1/2 flex flex-col">
+              <div className="bg-tally-light px-4 py-1 border-b border-tally-teal flex justify-between font-bold text-xs uppercase">
+                <span>Particulars</span>
+                <span>For 31-Mar-27</span>
+              </div>
+              <div className="flex-grow p-2">
+                {renderSection('Expenses', ['Purchase Account', 'Direct Expenses', 'Indirect Expenses'])}
+              </div>
+            </div>
+
+            {/* Income Column */}
+            <div className="w-1/2 flex flex-col">
+              <div className="bg-tally-light px-4 py-1 border-b border-tally-teal flex justify-between font-bold text-xs uppercase">
+                <span>Particulars</span>
+                <span>For 31-Mar-27</span>
+              </div>
+              <div className="flex-grow p-2">
+                {renderSection('Income', ['Sales Account', 'Direct Income', 'Indirect Income'])}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-tally-bg p-4 flex justify-between items-center text-sm font-black uppercase text-tally-teal border-t border-tally-teal">
+             <span>Net Profit for the Period</span>
+             <span className="text-xl">₹ {(incomeTotal - expenseTotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="border border-red-700 bg-white shadow-xl p-4 md:p-6">
-          <h3 className="text-xs md:text-sm font-black text-red-700 uppercase mb-4 md:mb-6 border-b-2 border-red-700 pb-1 italic">Expenditure</h3>
-          {renderSection('Expenses', ['Purchase Account', 'Direct Expenses', 'Indirect Expenses'])}
-        </div>
-        <div className="border border-red-700 bg-white shadow-xl p-4 md:p-6">
-          <h3 className="text-xs md:text-sm font-black text-green-700 uppercase mb-4 md:mb-6 border-b-2 border-green-700 pb-1 italic">Incomes</h3>
-          {renderSection('Income', ['Sales Account', 'Direct Income', 'Indirect Income'])}
-        </div>
-      </div>
-
-      <div className="bg-gray-100 p-4 border flex justify-between items-center text-xs md:text-sm font-black uppercase text-tally-teal">
-         <span>Net Profit for the Period</span>
-         <span className="text-lg md:text-xl">₹ {(incomeTotal - expenseTotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+      {/* Button Bar */}
+      <div className="fixed right-0 top-12 bottom-0 w-24 bg-tally-sidebar flex flex-col gap-0.5 p-0.5 text-[10px] text-white">
+        {[
+          { label: 'F1: Condensed', key: 'F1' },
+          { label: 'F2: Period', key: 'F2' },
+          { label: 'F3: Company', key: 'F3' },
+          { label: 'Alt+P: Print', action: () => printReport('pl-report') },
+          { label: 'Alt+E: Export', action: handleExport },
+          { label: 'F12: Configure', key: 'F12' }
+        ].map((btn) => (
+          <div 
+            key={btn.label} 
+            onClick={btn.action}
+            className="h-10 bg-tally-hotkey flex items-center px-2 cursor-pointer hover:bg-tally-accent hover:text-black"
+          >
+            {btn.label}
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -126,192 +126,153 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
   };
 
   return (
-    <div className="flex h-full gap-4">
-      {/* Sidebar Selector */}
-      <div className="w-64 border-r pr-4 space-y-2">
-        <h3 className="text-[10px] font-black text-gray-400 uppercase mb-4">Select Master Type</h3>
-        {(['LEDGER', 'GROUP', 'EMPLOYEE', 'COST_CENTRE'] as const).map(type => (
-          <button 
-            key={type}
-            onClick={() => { setActiveType(type); setEditingItem(null); }}
-            className={`w-full text-left px-3 py-2 text-xs font-bold uppercase transition-colors ${activeType === type ? 'bg-tally-teal text-white' : 'hover:bg-tally-accent/10 text-tally-teal'}`}
-          >
-            {type.replace('_', ' ')}s
-          </button>
-        ))}
+    <div className="flex flex-col h-full bg-tally-bg">
+      <div className="bg-tally-sidebar text-white px-4 py-1 font-bold text-xs uppercase flex justify-between sticky top-0 z-10">
+        <span>List of Masters</span>
+        <span className="text-tally-accent">Alteration Mode</span>
       </div>
 
-      {/* List View */}
-      <div className="flex-1 overflow-auto pr-4">
-        {editingItem ? (
-          <form onSubmit={handleUpdate} className="max-w-md space-y-4 border p-6 bg-white shadow-xl">
-            <h2 className="text-sm font-black text-tally-teal uppercase border-b pb-2">Alter {activeType}</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase">Name</label>
-                <input 
-                  autoFocus
-                  type="text" 
-                  value={editingItem.name} 
-                  onChange={e => setEditingItem({ ...editingItem, name: e.target.value })}
-                  className="w-full border-b border-tally-teal p-1 text-sm font-bold outline-none focus:bg-tally-accent/5"
-                />
-              </div>
-              {activeType === 'LEDGER' && (
-                <>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase">Under Group</label>
-                    <select 
-                      value={editingItem.group_name} 
-                      onChange={e => setEditingItem({ ...editingItem, group_name: e.target.value })}
-                      className="w-full border-b border-tally-teal p-1 text-sm outline-none bg-transparent"
-                    >
-                      {groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase">Opening Balance</label>
-                    <input 
-                      type="number" 
-                      value={editingItem.openingBalance} 
-                      onChange={e => setEditingItem({ ...editingItem, openingBalance: Number(e.target.value) })}
-                      className="w-full border-b border-tally-teal p-1 text-sm outline-none"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-            <div className="flex gap-2 pt-4">
-              <button type="submit" className="flex-1 bg-tally-teal text-white py-2 text-xs font-bold uppercase shadow">Update</button>
-              <button type="button" onClick={() => setEditingItem(null)} className="flex-1 bg-gray-100 text-gray-500 py-2 text-xs font-bold uppercase">Cancel</button>
-            </div>
-          </form>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center border-b pb-2">
-              <h3 className="text-sm font-black text-tally-teal uppercase">{activeType} LIST</h3>
-              <div className="text-[10px] text-gray-400 italic">Total: {
-                activeType === 'LEDGER' ? ledgers.length : 
-                activeType === 'GROUP' ? groups.length : 
-                activeType === 'COST_CENTRE' ? costCentres.length : employees.length
-              }</div>
-            </div>
+      <div className="flex h-full gap-4 p-4 overflow-hidden">
+        {/* Sidebar Selector */}
+        <div className="w-64 bg-white tally-border tally-shadow p-2 space-y-1">
+          <h3 className="text-[10px] font-black text-gray-400 uppercase mb-4 px-2">Master Type</h3>
+          {(['LEDGER', 'GROUP', 'EMPLOYEE', 'COST_CENTRE'] as const).map(type => (
+            <button 
+              key={type}
+              onClick={() => { setActiveType(type); setEditingItem(null); }}
+              className={`w-full text-left px-3 py-1 text-xs font-bold uppercase transition-colors ${activeType === type ? 'bg-tally-accent text-black' : 'hover:bg-tally-bg text-tally-teal'}`}
+            >
+              {type.replace('_', ' ')}s
+            </button>
+          ))}
+        </div>
 
-            {activeType === 'LEDGER' && (
-              <div className="space-y-1">
-                <div className="flex justify-end mb-2">
-                  <button onClick={() => setExpandedGroups(groups.reduce((acc, g) => ({ ...acc, [g.id]: true }), {}))} className="text-[9px] font-bold bg-gray-100 px-2 py-1 uppercase mr-2">Expand All</button>
-                  <button onClick={() => setExpandedGroups({})} className="text-[9px] font-bold bg-gray-100 px-2 py-1 uppercase">Collapse All</button>
+        {/* List View */}
+        <div className="flex-1 overflow-auto bg-white tally-border tally-shadow">
+          {editingItem ? (
+            <form onSubmit={handleUpdate} className="p-8 max-w-2xl mx-auto space-y-8">
+              <div className="border-b-2 border-tally-teal pb-2">
+                <h2 className="text-sm font-black text-tally-teal uppercase">Alter {activeType}: {editingItem.name}</h2>
+              </div>
+              
+              <div className="grid grid-cols-1 gap-6">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase">Name</label>
+                  <input 
+                    autoFocus
+                    type="text" 
+                    value={editingItem.name} 
+                    onChange={e => setEditingItem({ ...editingItem, name: e.target.value })}
+                    className="w-full border-b-2 border-tally-teal p-1 text-sm font-bold outline-none focus:bg-tally-accent/10 uppercase"
+                  />
                 </div>
-                {(() => {
-                  let globalIdx = -1;
-                  return groupedLedgers.map(group => {
-                    globalIdx++;
-                    const isGroupSelected = selectedIndex === globalIdx;
-                    const groupIdx = globalIdx;
-                    return (
-                      <div key={group.id} className="border-b border-gray-100 last:border-0">
+                {activeType === 'LEDGER' && (
+                  <div className="grid grid-cols-2 gap-8">
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase">Under Group</label>
+                      <select 
+                        value={editingItem.group_name} 
+                        onChange={e => setEditingItem({ ...editingItem, group_name: e.target.value })}
+                        className="w-full border-b-2 border-tally-teal p-1 text-sm outline-none bg-transparent font-bold"
+                      >
+                        {groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase">Opening Balance</label>
+                      <input 
+                        type="number" 
+                        value={editingItem.openingBalance} 
+                        onChange={e => setEditingItem({ ...editingItem, openingBalance: Number(e.target.value) })}
+                        className="w-full border-b-2 border-tally-teal p-1 text-sm outline-none text-right font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex justify-end gap-4 pt-8">
+                <button type="submit" className="bg-tally-teal text-white px-8 py-2 text-xs font-bold uppercase tally-shadow hover:bg-tally-header">Accept (Enter)</button>
+                <button type="button" onClick={() => setEditingItem(null)} className="bg-gray-200 px-8 py-2 text-xs font-bold uppercase tally-shadow hover:bg-gray-300">Quit (Esc)</button>
+              </div>
+            </form>
+          ) : (
+            <div className="flex flex-col h-full">
+              <div className="bg-tally-light px-4 py-1 border-b border-tally-teal flex justify-between font-bold text-[10px] uppercase">
+                <span>Name of {activeType}</span>
+                <span>Actions</span>
+              </div>
+              <div className="flex-grow overflow-auto">
+                {activeType === 'LEDGER' && (
+                  <div className="space-y-0.5">
+                    {groupedLedgers.map(group => (
+                      <div key={group.id} className="border-b border-gray-50 last:border-0">
                         <div 
-                          className={`flex items-center justify-between py-2 cursor-pointer px-2 group transition-colors ${isGroupSelected ? 'bg-tally-accent text-black font-bold' : 'hover:bg-gray-50'}`}
-                          onClick={() => { setSelectedIndex(groupIdx); toggleGroup(group.id); }}
+                          className="flex items-center justify-between py-1 px-4 bg-gray-50/50 cursor-pointer group"
+                          onClick={() => toggleGroup(group.id)}
                         >
                           <div className="flex items-center gap-2">
-                            {expandedGroups[group.id] ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-                            <span className={`text-xs uppercase ${isGroupSelected ? 'text-black' : 'font-black text-gray-700'}`}>{group.name}</span>
+                            {expandedGroups[group.id] ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                            <span className="text-[11px] font-black text-gray-500 uppercase">{group.name}</span>
                           </div>
-                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100">
-                             <button onClick={(e) => { e.stopPropagation(); setEditingItem(group); setActiveType('GROUP'); }} className="p-1 hover:text-tally-teal"><Edit2 className="w-3 h-3" /></button>
-                             <button onClick={(e) => { e.stopPropagation(); handleDelete(group.id, 'GROUP'); }} className="p-1 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
-                          </div>
+                          <button onClick={(e) => { e.stopPropagation(); setEditingItem(group); setActiveType('GROUP'); }} className="opacity-0 group-hover:opacity-100 p-1 hover:text-tally-teal"><Edit2 className="w-3 h-3" /></button>
                         </div>
                         {expandedGroups[group.id] && (
-                          <div className="pl-6 space-y-1 pb-2">
-                            {group.ledgers.length === 0 && <div className="text-[10px] text-gray-400 italic py-1">No ledgers under this group</div>}
-                            {group.ledgers.map((ledger: any) => {
-                              globalIdx++;
-                              const isLedgerSelected = selectedIndex === globalIdx;
-                              const currentLedgerIdx = globalIdx;
-                              return (
-                                <div 
-                                  key={ledger.id} 
-                                  onClick={() => setSelectedIndex(currentLedgerIdx)}
-                                  className={`flex justify-between items-center py-1.5 px-2 rounded group transition-colors cursor-pointer ${isLedgerSelected ? 'bg-tally-accent text-black font-bold' : 'hover:bg-tally-accent/10'}`}
-                                >
-                                  <span className={`text-xs uppercase ${isLedgerSelected ? 'text-black' : 'font-medium text-tally-teal'}`}>{ledger.name}</span>
-                                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100">
-                                     <button onClick={() => { setEditingItem(ledger); }} className="p-1 hover:text-tally-teal"><Edit2 className="w-3 h-3" /></button>
-                                     <button onClick={() => handleDelete(ledger.id, 'LEDGER')} className="p-1 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
-                                  </div>
+                          <div className="space-y-0.5">
+                            {group.ledgers.map((ledger: any) => (
+                              <div 
+                                key={ledger.id} 
+                                onClick={() => setEditingItem(ledger)}
+                                className="flex justify-between items-center py-1 px-8 hover:bg-tally-accent cursor-pointer group"
+                              >
+                                <span className="text-xs uppercase font-bold text-tally-teal">{ledger.name}</span>
+                                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100">
+                                   <button onClick={(e) => { e.stopPropagation(); setEditingItem(ledger); }} className="p-1 hover:text-tally-teal"><Edit2 className="w-3 h-3" /></button>
+                                   <button onClick={(e) => { e.stopPropagation(); handleDelete(ledger.id, 'LEDGER'); }} className="p-1 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
                                 </div>
-                              );
-                            })}
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
-                    );
-                  });
-                })()}
-              </div>
-            )}
-
-            {activeType === 'GROUP' && (
-              <div className="grid grid-cols-2 gap-2">
-                {groups.map((g, idx) => (
-                  <div 
-                    key={g.id} 
-                    onClick={() => setSelectedIndex(idx)}
-                    className={`p-2 border flex justify-between items-center transition-all group cursor-pointer ${selectedIndex === idx ? 'bg-tally-accent border-black ring-1 ring-black' : 'bg-white hover:shadow-md'}`}
-                  >
-                    <span className={`text-xs uppercase ${selectedIndex === idx ? 'font-black' : 'font-bold'}`}>{g.name}</span>
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100">
-                       <button onClick={() => { setEditingItem(g); }} className="p-1 hover:text-tally-teal"><Edit2 className="w-4 h-4" /></button>
-                       <button onClick={() => handleDelete(g.id, 'GROUP')} className="p-1 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
-
-            {activeType === 'COST_CENTRE' && (
-              <div className="grid grid-cols-2 gap-2">
-                {costCentres.map((cc, idx) => (
-                  <div 
-                    key={cc.id} 
-                    onClick={() => setSelectedIndex(idx)}
-                    className={`p-2 border flex justify-between items-center transition-all group cursor-pointer ${selectedIndex === idx ? 'bg-tally-accent border-black ring-1 ring-black' : 'bg-white hover:shadow-md'}`}
-                  >
-                    <span className={`text-xs uppercase ${selectedIndex === idx ? 'font-black' : 'font-bold'}`}>{cc.name}</span>
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100">
-                       <button onClick={() => { setEditingItem(cc); }} className="p-1 hover:text-tally-teal"><Edit2 className="w-4 h-4" /></button>
-                       <button onClick={() => handleDelete(cc.id, 'COST_CENTRE')} className="p-1 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
-                    </div>
+                )}
+                {/* Simplified rendering for other types */}
+                {activeType !== 'LEDGER' && (
+                  <div className="space-y-0.5">
+                    {getVisibleItems().map((item, idx) => (
+                      <div 
+                        key={item.id} 
+                        onClick={() => setEditingItem(item.data)}
+                        className={`flex justify-between items-center py-1.5 px-4 cursor-pointer group ${selectedIndex === idx ? 'bg-tally-accent' : 'hover:bg-tally-bg'}`}
+                      >
+                        <span className="text-xs uppercase font-bold text-tally-teal">{item.data.name}</span>
+                        <div className="flex gap-2 opacity-0 group-hover:opacity-100">
+                           <button onClick={(e) => { e.stopPropagation(); setEditingItem(item.data); }} className="p-1 hover:text-tally-teal"><Edit2 className="w-3 h-3" /></button>
+                           <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id, activeType); }} className="p-1 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
-            )}
+            </div>
+          )}
+        </div>
+      </div>
 
-            {activeType === 'EMPLOYEE' && (
-              <div className="grid grid-cols-2 gap-2">
-                {employees.map((emp, idx) => (
-                  <div 
-                    key={emp.id} 
-                    onClick={() => setSelectedIndex(idx)}
-                    className={`p-2 border flex justify-between items-center transition-all group cursor-pointer ${selectedIndex === idx ? 'bg-tally-accent border-black ring-1 ring-black' : 'bg-white hover:shadow-md'}`}
-                  >
-                    <div>
-                      <div className={`text-xs uppercase ${selectedIndex === idx ? 'font-black' : 'font-bold'}`}>{emp.name}</div>
-                      <div className="text-[10px] text-gray-400 font-mono">{emp.code}</div>
-                    </div>
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100">
-                       <button onClick={() => { setEditingItem(emp); }} className="p-1 hover:text-tally-teal"><Edit2 className="w-4 h-4" /></button>
-                       <button onClick={() => handleDelete(emp.id, 'EMPLOYEE')} className="p-1 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+      {/* Button Bar */}
+      <div className="fixed right-0 top-12 bottom-0 w-24 bg-tally-sidebar flex flex-col gap-0.5 p-0.5 text-[10px] text-white">
+        {[
+          { label: 'F3: Company', key: 'F3' },
+          { label: 'Alt+G: Go To', key: 'Alt+G' },
+          { label: 'F12: Configure', key: 'F12' }
+        ].map((btn) => (
+          <div key={btn.label} className="h-10 bg-tally-hotkey flex items-center px-2 cursor-pointer hover:bg-tally-accent hover:text-black">
+            {btn.label}
           </div>
-        )}
+        ))}
       </div>
     </div>
   );

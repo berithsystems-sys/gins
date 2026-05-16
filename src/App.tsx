@@ -39,6 +39,7 @@ import CompanyScreen from './components/CompanyScreen';
 import DataScreen from './components/DataScreen';
 import CashBankBookScreen from './components/CashBankBookScreen';
 import TrialBalanceScreen from './components/TrialBalanceScreen';
+import ChartOfAccountsScreen from './components/ChartOfAccountsScreen';
 import SettingsScreen from './components/SettingsScreen';
 import PrintScreen from './components/PrintScreen';
 import ExportScreen from './components/ExportScreen';
@@ -656,7 +657,7 @@ export default function App() {
               {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} />}
               {currentScreen === 'TRIAL_BALANCE' && <TrialBalanceScreen branchId={selectedBranchId} />}
               {currentScreen === 'CASH_BANK_BOOK' && <CashBankBookScreen branchId={selectedBranchId} />}
-              {currentScreen === 'CHART' && <AlterMasterScreen branchId={selectedBranchId} />} {/* Chart of accounts is similar list */}
+              {currentScreen === 'CHART' && <ChartOfAccountsScreen branchId={selectedBranchId} />}
               {currentScreen === 'RATIO' && <RatioAnalysisScreen onBack={handleBack} />}
               {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} />}
               {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} initialDate={currentDate} />}

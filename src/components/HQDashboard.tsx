@@ -56,102 +56,106 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
   };
 
   return (
-    <div className="p-6 space-y-6 w-full">
-      <div className="flex justify-between items-end border-b-2 border-tally-teal pb-2">
-        <div>
-          <h1 className="text-2xl font-bold text-tally-teal uppercase tracking-widest">HQ Control Center</h1>
-          <p className="text-xs text-gray-500 uppercase">Manage Church Branches & Consolidated Reports</p>
-        </div>
-        <button 
-          onClick={() => setShowAdd(true)}
-          className="bg-tally-teal text-white px-4 py-2 text-xs font-bold uppercase flex items-center gap-2 hover:bg-tally-header transition-colors shadow-md"
-        >
-          <Plus className="w-4 h-4" /> Add New Branch
-        </button>
+    <div className="flex flex-col h-full bg-tally-bg">
+      <div className="bg-tally-sidebar text-white px-4 py-1 font-bold text-xs uppercase flex justify-between sticky top-0 z-10">
+        <span>HQ Control Centre</span>
+        <span className="text-tally-accent">Global Administration</span>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Branch List */}
-        <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-sm font-bold uppercase text-gray-400">Active Branches (Click to access data)</h2>
-          <div className="grid grid-cols-1 gap-3">
-            {branches.map(branch => (
-              <div key={branch.id} className="bg-white border-2 border-gray-100 p-4 flex justify-between items-center hover:border-tally-teal transition-all group shadow-sm hover:shadow-md">
-                <div 
-                  className="flex items-center gap-4 cursor-pointer flex-grow" 
-                  onClick={() => onSelectBranch(branch.id)}
-                >
-                  <div className="w-12 h-12 bg-tally-bg flex items-center justify-center rounded border border-tally-teal/20 text-tally-teal group-hover:bg-tally-teal group-hover:text-white transition-colors">
-                    <Building2 className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-tally-teal uppercase group-hover:text-tally-header">{branch.name}</h3>
-                    <div className="flex gap-3 text-[10px] text-gray-500 font-bold uppercase">
-                      <span>Code: {branch.code}</span>
-                      <span>•</span>
-                      <span>Location: {branch.location}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex gap-2 items-center">
-                  <button 
-                    onClick={() => onSelectBranch(branch.id)}
-                    className="p-2 hover:bg-tally-bg text-tally-teal rounded transition-colors hidden md:block" 
-                    title="View Branch Analytics"
-                  >
-                    <BarChart3 className="w-5 h-5" />
-                  </button>
-                  <button 
-                    onClick={() => handleResetPassword(branch.id)}
-                    className="p-2 hover:bg-teal-50 text-tally-teal rounded transition-colors" 
-                    title="Reset Password"
-                  >
-                    <KeyRound className="w-5 h-5" />
-                  </button>
-                  <button 
-                    onClick={() => handleDelete(branch.id)}
-                    className="p-2 hover:bg-red-50 text-red-500 rounded transition-colors" 
-                    title="Delete Branch"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                  <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-tally-teal transition-transform group-hover:translate-x-1" />
-                </div>
-              </div>
-            ))}
-            {branches.length === 0 && (
-              <div className="p-12 text-center border-2 border-dashed border-gray-200 rounded text-gray-400 font-bold uppercase text-xs">
-                No branches configured. Click "Add New Branch" to start.
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Global Stats */}
-        <div className="space-y-4">
-          <h2 className="text-sm font-bold uppercase text-gray-400">Consolidated Summary</h2>
-          <div className="bg-tally-teal text-white p-6 space-y-6 shadow-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-4 opacity-10">
-              <BarChart3 className="w-24 h-24" />
-            </div>
+      <div className="flex-grow p-6 overflow-auto">
+        <div className="max-w-6xl mx-auto space-y-6">
+          <div className="flex justify-between items-end border-b-2 border-tally-teal pb-2">
             <div>
-              <p className="text-[10px] uppercase opacity-70">Total Branches</p>
-              <p className="text-3xl font-bold">{branches.length}</p>
-            </div>
-            <div className="pt-4 border-t border-white/10">
-              <p className="text-[10px] uppercase opacity-70">Global Combined Balance</p>
-              <p className="text-2xl font-bold font-mono">₹ 1,24,50,000.00</p>
+              <h1 className="text-xl font-bold text-tally-teal uppercase tracking-widest">List of Church Branches</h1>
+              <p className="text-[10px] text-gray-500 uppercase">Select a branch to manage its financial data</p>
             </div>
             <button 
-              onClick={() => alert('Generating aggregate financial report across all branches. PDF will be available shortly.')}
-              className="w-full bg-tally-accent text-black font-bold py-3 uppercase text-xs hover:bg-yellow-500 transition-colors shadow-lg"
+              onClick={() => setShowAdd(true)}
+              className="bg-tally-teal text-white px-4 py-1 text-[10px] font-bold uppercase flex items-center gap-2 hover:bg-tally-header transition-colors tally-shadow"
             >
-              Generate All-Branch Report
+              <Plus className="w-3 h-3" /> Create New Branch (Alt+C)
             </button>
-            <p className="text-[9px] text-center opacity-50 uppercase italic">Financial Data is consolidated in real-time from all child branches.</p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Branch List */}
+            <div className="lg:col-span-2 space-y-2">
+              <div className="bg-white tally-border tally-shadow overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead className="bg-tally-light border-b border-tally-teal text-[10px] font-bold uppercase">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Branch Name</th>
+                      <th className="px-4 py-2 text-left w-24">Code</th>
+                      <th className="px-4 py-2 text-left">Location</th>
+                      <th className="px-4 py-2 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {branches.map(branch => (
+                      <tr 
+                        key={branch.id} 
+                        className="hover:bg-tally-accent cursor-pointer border-b border-gray-50 group"
+                        onClick={() => onSelectBranch(branch.id)}
+                      >
+                        <td className="px-4 py-2 font-bold text-tally-teal uppercase">{branch.name}</td>
+                        <td className="px-4 py-2 font-mono">{branch.code}</td>
+                        <td className="px-4 py-2 italic">{branch.location}</td>
+                        <td className="px-4 py-2 text-right flex justify-end gap-2 opacity-0 group-hover:opacity-100">
+                           <button onClick={(e) => { e.stopPropagation(); handleResetPassword(branch.id); }} className="p-1 hover:text-tally-teal"><KeyRound className="w-4 h-4" /></button>
+                           <button onClick={(e) => { e.stopPropagation(); handleDelete(branch.id); }} className="p-1 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {branches.length === 0 && (
+                  <div className="p-12 text-center italic text-gray-400 uppercase text-[10px]">
+                    No branches configured.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Global Stats */}
+            <div className="space-y-4">
+              <div className="bg-white tally-border tally-shadow p-6 space-y-6">
+                <h2 className="text-[10px] font-bold text-gray-400 uppercase border-b pb-2">Consolidated Summary</h2>
+                <div>
+                  <p className="text-[10px] uppercase text-tally-teal font-bold">Total Branches</p>
+                  <p className="text-3xl font-black text-tally-teal">{branches.length}</p>
+                </div>
+                <div className="pt-4 border-t border-gray-100">
+                  <p className="text-[10px] uppercase text-tally-teal font-bold">Global Combined Balance</p>
+                  <p className="text-2xl font-black text-tally-teal font-mono">₹ 1,24,50,000.00</p>
+                </div>
+                <button 
+                  onClick={() => alert('Consolidating data...')}
+                  className="w-full bg-tally-teal text-white font-bold py-2 uppercase text-[10px] hover:bg-tally-header transition-colors tally-shadow"
+                >
+                  View All-Branch Reports
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Button Bar */}
+      <div className="fixed right-0 top-12 bottom-0 w-24 bg-tally-sidebar flex flex-col gap-0.5 p-0.5 text-[10px] text-white">
+        {[
+          { label: 'F3: Company', key: 'F3' },
+          { label: 'Alt+C: Create', action: () => setShowAdd(true) },
+          { label: 'Alt+G: Go To', key: 'Alt+G' },
+          { label: 'F11: Features', key: 'F11' },
+          { label: 'F12: Configure', key: 'F12' }
+        ].map((btn) => (
+          <div key={btn.label} onClick={btn.action} className="h-10 bg-tally-hotkey flex items-center px-2 cursor-pointer hover:bg-tally-accent hover:text-black">
+            {btn.label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
