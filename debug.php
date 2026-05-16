@@ -10,8 +10,8 @@ ini_set('display_errors', 1);
 $db_config = [
     'host' => 'srv1994.hstgr.io', // External Host for local testing
     'local_host' => 'localhost',   // Host to use when running ON Hostinger
-    'db'   => 'u698772346_tallyebccs',
-    'user' => 'u698772346_tallyebccs',
+    'db'   => 'u698772346_ebctallys',
+    'user' => 'u698772346_ebctallys',
     'pass' => '1pA2QIL5|xA|'
 ];
 

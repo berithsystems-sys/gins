@@ -11,8 +11,8 @@ header("Content-Type: application/json");
 
 // 1. Database Configuration
 $host = 'localhost'; 
-$db   = 'u698772346_tallyebccs'; // YOUR_DATABASE_NAME
-$user = 'u698772346_tallyebccs';  // YOUR_DATABASE_USER
+$db   = 'u698772346_ebctallys'; // Corrected based on error message
+$user = 'u698772346_ebctallys';  // Corrected based on error message
 $pass = '1pA2QIL5|xA|'; // Your database password
 $charset = 'utf8mb4';
 
