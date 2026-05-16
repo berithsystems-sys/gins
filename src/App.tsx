@@ -130,8 +130,22 @@ export default function App() {
   const [dateInput, setDateInput] = useState(currentDate);
 
   const getFilteredGotoOptions = () => {
-    const options = ['Balance Sheet', 'Profit & Loss A/c', 'Trial Balance', 'Day Book', 'Cash/Bank Book', 'Ratio Analysis', 'Audit Logs', 'Admin Panel', 'Banking'];
-    return options.filter(o => o.toLowerCase().includes(gotoSearch.toLowerCase()));
+    const options = [
+      { label: 'Balance Sheet', id: 'BALANCE_SHEET' },
+      { label: 'Profit & Loss A/c', id: 'PL_ACCOUNT' },
+      { label: 'Trial Balance', id: 'TRIAL_BALANCE' },
+      { label: 'Day Book', id: 'DAYBOOK' },
+      { label: 'Cash/Bank Book', id: 'CASH_BANK_BOOK' },
+      { label: 'Ratio Analysis', id: 'RATIO' },
+      { label: 'Chart of Accounts', id: 'CHART' },
+      { label: 'Create Master', id: 'LEDGER' },
+      { label: 'Alter Master', id: 'ALTER' },
+      { label: 'Create Voucher', id: 'VOUCHER' },
+      { label: 'Banking', id: 'BANKING' },
+      { label: 'Audit Logs', id: 'AUDIT' },
+      { label: 'Admin Panel', id: 'ADMIN' },
+    ];
+    return options.filter(o => o.label.toLowerCase().includes(gotoSearch.toLowerCase()));
   };
 
   useHotkeys('g', (e) => {
@@ -141,16 +155,8 @@ export default function App() {
     setGotoHighlightedIdx(0);
   });
 
-  const handleGotoSelect = (item: string) => {
-    if (item === 'Day Book') setCurrentScreen('DAYBOOK');
-    else if (item === 'Balance Sheet') setCurrentScreen('BALANCE_SHEET');
-    else if (item === 'Profit & Loss A/c') setCurrentScreen('PL_ACCOUNT');
-    else if (item === 'Trial Balance') setCurrentScreen('TRIAL_BALANCE');
-    else if (item === 'Banking') setCurrentScreen('BANKING');
-    else if (item === 'Audit Logs') setCurrentScreen('AUDIT');
-    else if (item === 'Admin Panel') setCurrentScreen('ADMIN');
-    else if (item === 'Ratio Analysis') setCurrentScreen('RATIO');
-    else if (item === 'Cash/Bank Book') setCurrentScreen('CASH_BANK_BOOK');
+  const handleGotoSelect = (item: any) => {
+    setCurrentScreen(item.id);
   };
 
   useHotkeys('up', (e) => {
@@ -569,17 +575,7 @@ export default function App() {
                             onDoubleClick={() => {
                               const idx = flatMenu.findIndex(f => f.id === item.id);
                               setSelectedIndex(idx);
-                              if (item.id === 'vouchers') setCurrentScreen('VOUCHER');
-                              if (item.id === 'masters') setCurrentScreen('LEDGER'); 
-                              if (item.id === 'alter') setCurrentScreen('ALTER');
-                              if (item.id === 'daybook') setCurrentScreen('DAYBOOK');
-                              if (item.id === 'banking') setCurrentScreen('BANKING');
-                              if (item.id === 'balance_sheet') setCurrentScreen('BALANCE_SHEET');
-                              if (item.id === 'pl_account') setCurrentScreen('PL_ACCOUNT');
-                              if (item.id === 'ratio_analysis') setCurrentScreen('RATIO');
-                              if (item.id === 'chart') setCurrentScreen('CHART');
-                              if (item.id === 'audit') setCurrentScreen('AUDIT');
-                              if (item.id === 'trial_balance') setCurrentScreen('TRIAL_BALANCE');
+                              handleGotoSelect(item);
                             }}
                           >
                             <span className="text-xs">
