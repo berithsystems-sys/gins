@@ -60,17 +60,25 @@ type MenuOption = {
   shortcut?: string;
 };
 
-const GATEWAY_MENU: MenuOption[] = [
-  { id: 'masters', label: 'Create', key: 'C', icon: <PlusCircle className="w-4 h-4" /> },
-  { id: 'alter', label: 'Alter', key: 'A', icon: <Edit3 className="w-4 h-4" /> },
-  { id: 'chart', label: 'Chart of Accounts', key: 'H', icon: <Building2 className="w-4 h-4" /> },
-  { id: 'vouchers', label: 'Vouchers', key: 'V', icon: <Receipt className="w-4 h-4" />, shortcut: 'F4-F9' },
-  { id: 'daybook', label: 'Day Book', key: 'K', icon: <BookOpen className="w-4 h-4" /> },
-  { id: 'banking', label: 'Banking', key: 'N', icon: <Wallet className="w-4 h-4" /> },
-  { id: 'balance_sheet', label: 'Balance Sheet', key: 'B', icon: <FileText className="w-4 h-4" /> },
-  { id: 'pl_account', label: 'Profit & Loss A/c', key: 'P', icon: <FileText className="w-4 h-4" /> },
-  { id: 'ratio_analysis', label: 'Ratio Analysis', key: 'R', icon: <BarChart3 className="w-4 h-4" /> },
-  { id: 'audit', label: 'Audit Logs', key: 'L', icon: <ShieldCheck className="w-4 h-4" /> },
+const GATEWAY_MENU = [
+  { section: 'Masters', items: [
+    { id: 'masters', label: 'Create', key: 'C' },
+    { id: 'alter', label: 'Alter', key: 'A' },
+    { id: 'chart', label: 'Chart of Accounts', key: 'H' },
+  ]},
+  { section: 'Transactions', items: [
+    { id: 'vouchers', label: 'Vouchers', key: 'V' },
+    { id: 'daybook', label: 'Day Book', key: 'K' },
+  ]},
+  { section: 'Utilities', items: [
+    { id: 'banking', label: 'Banking', key: 'N' },
+  ]},
+  { section: 'Reports', items: [
+    { id: 'balance_sheet', label: 'Balance Sheet', key: 'B' },
+    { id: 'pl_account', label: 'Profit & Loss A/c', key: 'P' },
+    { id: 'ratio_analysis', label: 'Ratio Analysis', key: 'R' },
+    { id: 'trial_balance', label: 'Trial Balance', key: 'T' },
+  ]}
 ];
 
 export default function App() {
@@ -86,6 +94,9 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showCalculator, setShowCalculator] = useState(false);
   const [calcInput, setCalcInput] = useState('');
+
+  // Flattened menu for keyboard navigation
+  const flatMenu = GATEWAY_MENU.flatMap(s => s.items);
 
   useEffect(() => {
     if (user?.role === 'HQ') {
@@ -153,17 +164,17 @@ export default function App() {
   
   useHotkeys('down', (e) => {
     if (currentScreen === 'GATEWAY') {
-      setSelectedIndex(prev => Math.min(GATEWAY_MENU.length - 1, prev + 1));
+      setSelectedIndex(prev => Math.min(flatMenu.length - 1, prev + 1));
     } else if (currentScreen === 'GOTO') {
       e.preventDefault();
       const filtered = getFilteredGotoOptions();
       setGotoHighlightedIdx(prev => Math.min(filtered.length - 1, prev + 1));
     }
-  }, { enableOnFormTags: true }, [currentScreen, gotoSearch]);
+  }, { enableOnFormTags: true }, [currentScreen, gotoSearch, flatMenu.length]);
 
   useHotkeys('enter', (e) => {
     if (currentScreen === 'GATEWAY') {
-      const selectedId = GATEWAY_MENU[selectedIndex].id;
+      const selectedId = flatMenu[selectedIndex].id;
       if (selectedId === 'vouchers') setCurrentScreen('VOUCHER');
       if (selectedId === 'masters') setCurrentScreen('LEDGER'); 
       if (selectedId === 'alter') setCurrentScreen('ALTER');
@@ -172,6 +183,7 @@ export default function App() {
       if (selectedId === 'balance_sheet') setCurrentScreen('BALANCE_SHEET');
       if (selectedId === 'pl_account') setCurrentScreen('PL_ACCOUNT');
       if (selectedId === 'ratio_analysis') setCurrentScreen('RATIO');
+      if (selectedId === 'trial_balance') setCurrentScreen('TRIAL_BALANCE');
       if (selectedId === 'chart') setCurrentScreen('CHART');
       if (selectedId === 'audit') setCurrentScreen('AUDIT');
     } else if (currentScreen === 'GOTO') {
@@ -226,6 +238,7 @@ export default function App() {
   useHotkeys('b', () => setCurrentScreen('BALANCE_SHEET'));
   useHotkeys('p', () => setCurrentScreen('PL_ACCOUNT'));
   useHotkeys('r', () => setCurrentScreen('RATIO'));
+  useHotkeys('t', () => setCurrentScreen('TRIAL_BALANCE'));
   useHotkeys('h', () => setCurrentScreen('CHART'));
   useHotkeys('l', () => setCurrentScreen('AUDIT'));
   useHotkeys('ctrl+n', () => setShowCalculator(true));
@@ -507,93 +520,93 @@ export default function App() {
         {currentScreen === 'HQ' ? (
           <HQDashboard onSelectBranch={(id) => { setSelectedBranchId(id); setCurrentScreen('GATEWAY'); }} />
         ) : currentScreen === 'GATEWAY' ? (
-          <>
-            {/* Left Side: Current Status */}
-            <section className="w-[35%] border-r border-teal-200 p-4 bg-transparent flex flex-col gap-6">
-              <div className="flex justify-between border-b border-teal-300 pb-2">
-                <div className="flex flex-col">
-                  <span className="text-[10px] uppercase opacity-60">Current Period</span>
-                  <span className="text-[13px] font-bold">1-Apr-2024 to 31-Mar-2025</span>
-                </div>
-                <div className="flex flex-col text-right">
-                  <span className="text-[10px] uppercase opacity-60">Current Date</span>
-                  <span className="text-[13px] font-bold">{currentTime.toLocaleDateString()}</span>
-                </div>
+          <div className="flex h-full w-full overflow-hidden bg-tally-bg">
+            {/* Left Side: Company Info */}
+            <div className="w-1/2 p-4 flex flex-col gap-4 border-r border-gray-300">
+              <div className="bg-white tally-border tally-shadow p-3">
+                <h2 className="text-[10px] font-bold uppercase text-gray-500 border-b mb-2">Current Period</h2>
+                <p className="font-bold text-sm">1-Apr-26 to 31-Mar-27</p>
               </div>
-
-              <div className="flex flex-col">
-                <span className="text-[11px] font-bold uppercase mb-2 border-b border-teal-200">Selected Church Branch</span>
-                <div className="flex justify-between items-center bg-white p-2 border border-teal-200">
-                  <div className="flex flex-col">
-                    <span className="font-bold text-blue-900 uppercase">
-                      {user.role === 'HQ' ? 'Admin Drilldown' : 'Local Branch Access'}
-                    </span>
-                    <span className="text-[10px] text-gray-500 italic">Financial Year: 2024-25</span>
+              
+              <div className="bg-white tally-border tally-shadow p-3 flex-grow">
+                <h2 className="text-[10px] font-bold uppercase text-gray-500 border-b mb-2">List of Selected Companies</h2>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-bold text-tally-teal uppercase text-sm">{branches.find(b => b.id === selectedBranchId)?.name || 'Local Branch Access'}</p>
+                    <p className="text-[10px] text-gray-400 mt-1 uppercase">CODE: {branches.find(b => b.id === selectedBranchId)?.code || 'N/A'}</p>
                   </div>
-                  <span className="text-[11px] opacity-60">{selectedBranchId || 'N/A'}</span>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold uppercase text-gray-500">Date of Last Entry</p>
+                    <p className="font-bold text-xs">{currentDate}</p>
+                  </div>
                 </div>
               </div>
+            </div>
 
-              <div className="mt-auto bg-[#fff9c4] border border-[#fbc02d] p-3 text-[12px] text-gray-800">
-                <p className="font-bold mb-1 uppercase">Notice:</p>
-                <p>Press <span className="font-bold text-red-600">G</span> for Go To. Use keyboard shortcuts for faster entry.</p>
-              </div>
-            </section>
-
-            {/* Right Side: Gateway of Tally Menu */}
-            <section className="flex-grow bg-[#f5f5f5] flex items-center justify-center relative">
-              <div className="gateway-box w-[320px] flex flex-col shadow-xl">
-                <div className="bg-tally-teal text-white text-center py-1 text-[13px] font-bold uppercase tracking-wider">
+            {/* Right Side: Gateway Menu */}
+            <div className="w-1/2 flex items-center justify-center p-8">
+              <div className="w-80 bg-white tally-border tally-shadow overflow-hidden">
+                <div className="bg-tally-teal text-white text-center py-1 font-bold text-sm uppercase tracking-wider">
                   Gateway of Tally
                 </div>
-                <div className="p-4 flex flex-col gap-1 text-[14px]">
-                  {GATEWAY_MENU.map((item, index) => (
-                    <React.Fragment key={item.id}>
-                      {index === 0 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Masters</div>}
-                      {index === 1 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Transactions</div>}
-                      {index === 3 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Reports</div>}
-                      {index === 8 && <div className="text-gray-400 text-[10px] font-bold uppercase mb-1 mt-2">Utilities</div>}
-                      
-                      <div
-                        id={`menu-item-${index}`}
-                        className={`flex justify-between px-2 py-0.5 cursor-pointer transition-colors ${
-                          selectedIndex === index 
-                            ? 'bg-tally-accent text-black font-bold' 
-                            : 'hover:bg-gray-100'
-                        }`}
-                        onClick={() => setSelectedIndex(index)}
-                        onDoubleClick={() => {
-                          if (item.id === 'vouchers') setCurrentScreen('VOUCHER');
-                          if (item.id === 'masters') setCurrentScreen('LEDGER'); 
-                          if (item.id === 'alter') setCurrentScreen('ALTER');
-                          if (item.id === 'daybook') setCurrentScreen('DAYBOOK');
-                          if (item.id === 'banking') setCurrentScreen('BANKING');
-                          if (item.id === 'balance_sheet') setCurrentScreen('BALANCE_SHEET');
-                          if (item.id === 'pl_account') setCurrentScreen('PL_ACCOUNT');
-                          if (item.id === 'ratio_analysis') setCurrentScreen('RATIO');
-                          if (item.id === 'chart') setCurrentScreen('CHART');
-                          if (item.id === 'audit') setCurrentScreen('AUDIT');
-                        }}
-                      >
-                        <div className="flex gap-2">
-                          <span className={selectedIndex === index ? 'text-black' : 'text-red-700 font-bold'}>{item.key}</span>
-                          <span>{item.label.replace(item.key, '')}</span>
-                        </div>
-                        {item.shortcut && (
-                          <span className="text-[10px] opacity-40 uppercase font-mono">
-                            {item.shortcut}
-                          </span>
-                        )}
-                      </div>
-                    </React.Fragment>
+                
+                <div className="py-2">
+                  {GATEWAY_MENU.map((section, sIdx) => (
+                    <div key={section.section} className={sIdx > 0 ? "mt-2 pt-2 border-t border-gray-100" : ""}>
+                      <h3 className="px-4 text-[10px] font-bold text-gray-400 uppercase mb-1">{section.section}</h3>
+                      {section.items.map((item) => {
+                        const isSelected = flatMenu[selectedIndex]?.id === item.id;
+                        const labelParts = item.label.split(new RegExp(`(${item.key})`, 'i'));
+                        
+                        return (
+                          <div 
+                            key={item.id}
+                            className={`px-4 py-0.5 flex justify-between cursor-pointer transition-colors ${isSelected ? 'bg-tally-accent text-black font-bold' : 'hover:bg-gray-100'}`}
+                            onClick={() => {
+                              const idx = flatMenu.findIndex(f => f.id === item.id);
+                              setSelectedIndex(idx);
+                            }}
+                            onDoubleClick={() => {
+                              const idx = flatMenu.findIndex(f => f.id === item.id);
+                              setSelectedIndex(idx);
+                              if (item.id === 'vouchers') setCurrentScreen('VOUCHER');
+                              if (item.id === 'masters') setCurrentScreen('LEDGER'); 
+                              if (item.id === 'alter') setCurrentScreen('ALTER');
+                              if (item.id === 'daybook') setCurrentScreen('DAYBOOK');
+                              if (item.id === 'banking') setCurrentScreen('BANKING');
+                              if (item.id === 'balance_sheet') setCurrentScreen('BALANCE_SHEET');
+                              if (item.id === 'pl_account') setCurrentScreen('PL_ACCOUNT');
+                              if (item.id === 'ratio_analysis') setCurrentScreen('RATIO');
+                              if (item.id === 'chart') setCurrentScreen('CHART');
+                              if (item.id === 'audit') setCurrentScreen('AUDIT');
+                              if (item.id === 'trial_balance') setCurrentScreen('TRIAL_BALANCE');
+                            }}
+                          >
+                            <span className="text-xs">
+                              {labelParts.map((part, i) => 
+                                part.toLowerCase() === item.key.toLowerCase() 
+                                  ? <span key={i} className="text-red-700 font-bold">{part}</span> 
+                                  : part
+                              )}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   ))}
-                  <div className="border-t border-gray-300 pt-1 flex justify-between px-2 hover:bg-red-100 cursor-pointer mt-2" onClick={() => setShowQuit(true)}>
-                    <span><u>Q</u>uit</span>
+                  
+                  <div className="mt-4 pt-2 border-t border-gray-100">
+                    <div 
+                      className="px-4 py-0.5 flex justify-between cursor-pointer hover:bg-red-100"
+                      onClick={() => setShowQuit(true)}
+                    >
+                      <span className="text-xs font-bold text-red-700 uppercase tracking-tight">Q<u>uit</u></span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </section>
-          </>
+            </div>
+          </div>
         ) : (
           <div className="flex-1 bg-white p-4 overflow-auto">
             <div className="max-w-4xl mx-auto border-2 border-tally-teal rounded-sm p-4 shadow-lg bg-white">
