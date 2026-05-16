@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "clear-demo-data": "tsx scripts/clear-demo-data.js"
+    "clear-demo-data": "tsx scripts/clear-demo-data.js",
+    "seed": "tsx scripts/seed.js"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
