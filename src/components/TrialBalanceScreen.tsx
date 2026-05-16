@@ -4,6 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { FileText, Download, Printer } from 'lucide-react';
+import { exportToExcel } from '../lib/ReportUtils';
 
 interface Ledger {
   id: string;
@@ -68,45 +70,66 @@ export default function TrialBalanceScreen({ branchId }: { branchId?: string }) 
   const drTotal = Object.values(groups).reduce((acc, g) => acc + g.dr, 0);
   const crTotal = Object.values(groups).reduce((acc, g) => acc + g.cr, 0);
 
+  const handleExport = () => {
+    const data = Object.entries(groups).map(([name, vals]) => ({
+      Group: name,
+      Debit: vals.dr,
+      Credit: vals.cr
+    }));
+    exportToExcel(data, 'Trial_Balance');
+  };
+
   return (
-    <div className="space-y-4 w-full">
-      <div className="bg-tally-teal text-white p-2 text-center text-xs font-bold uppercase tracking-widest flex items-center justify-between">
-        <div className="w-20"></div>
-        <span>Trial Balance {drillDownGroup ? `- ${drillDownGroup}` : ''}</span>
-        <button 
-          onClick={() => setDrillDownGroup(null)}
-          className={`text-[10px] bg-white/20 px-2 py-0.5 rounded transition-opacity ${drillDownGroup ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-        >
-          Back to Groups
-        </button>
+    <div id="trial-balance-report" className="p-4 space-y-6 max-w-5xl mx-auto">
+      <div className="flex justify-between items-end border-b-2 border-tally-teal pb-2">
+        <h2 className="text-xl font-black text-tally-teal uppercase flex items-center gap-2">
+          <FileText className="w-6 h-6" />
+          Trial Balance {drillDownGroup && `- ${drillDownGroup}`}
+        </h2>
+        <div className="flex gap-2">
+          <button className="flex items-center gap-1 text-[10px] bg-gray-100 hover:bg-gray-200 px-3 py-1 font-bold uppercase border" onClick={() => window.print()}>
+            <Printer className="w-3 h-3" /> Print (Alt+P)
+          </button>
+          <button className="flex items-center gap-1 text-[10px] bg-tally-teal text-white hover:bg-teal-700 px-3 py-1 font-bold uppercase shadow" onClick={handleExport}>
+            <Download className="w-3 h-3" /> Export Excel
+          </button>
+          {drillDownGroup && (
+            <button 
+              onClick={() => setDrillDownGroup(null)}
+              className="text-[10px] bg-orange-500 text-white hover:bg-orange-600 px-3 py-1 rounded font-bold uppercase"
+            >
+              Back to Groups
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="border border-tally-teal/20 bg-white overflow-x-auto">
-        <table className="w-full text-xs min-w-[500px]">
-          <thead className="bg-gray-50 border-b border-tally-teal/10 font-bold uppercase text-gray-500">
+      <div className="border border-tally-teal/20 bg-white overflow-x-auto shadow-lg">
+        <table className="w-full text-xs md:text-sm min-w-[500px]">
+          <thead className="bg-gradient-to-r from-tally-teal to-teal-600 text-white font-black uppercase text-[10px] md:text-[11px]">
             <tr>
-              <th className="px-4 py-2 text-left">Particulars</th>
-              <th className="px-4 py-2 text-right w-32 md:w-48">Debit</th>
-              <th className="px-4 py-2 text-right w-32 md:w-48">Credit</th>
+              <th className="px-4 md:px-6 py-3 text-left">Particulars</th>
+              <th className="px-4 md:px-6 py-3 text-right">Debit (₹)</th>
+              <th className="px-4 md:px-6 py-3 text-right">Credit (₹)</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-gray-100">
             {!drillDownGroup ? (
               // Group View
-              Object.entries(groups).map(([groupName, totals]) => (
+              Object.entries(groups).map(([groupName, totals], idx) => (
                 <tr 
                   key={groupName} 
-                  className="hover:bg-tally-accent/10 cursor-pointer transition-colors group"
+                  className="hover:bg-teal-50 cursor-pointer transition-colors group"
                   onClick={() => setDrillDownGroup(groupName)}
                 >
-                  <td className="px-4 py-2 font-bold text-blue-900 group-hover:underline">
+                  <td className="px-4 md:px-6 py-2 font-bold text-blue-900 group-hover:underline uppercase tracking-tight text-[11px]">
                     {groupName}
                   </td>
-                  <td className="px-4 py-2 text-right font-mono">
-                    {totals.dr > 0 ? totals.dr.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ''}
+                  <td className="px-4 md:px-6 py-2 text-right font-mono text-gray-700 group-hover:font-black">
+                    {totals.dr > 0 ? totals.dr.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}
                   </td>
-                  <td className="px-4 py-2 text-right font-mono">
-                    {totals.cr > 0 ? totals.cr.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ''}
+                  <td className="px-4 md:px-6 py-2 text-right font-mono text-gray-700 group-hover:font-black">
+                    {totals.cr > 0 ? totals.cr.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}
                   </td>
                 </tr>
               ))
@@ -116,34 +139,34 @@ export default function TrialBalanceScreen({ branchId }: { branchId?: string }) 
                 const balance = calculateBalance(l.id);
                 if (balance === 0) return null;
                 return (
-                  <tr key={l.id} className="hover:bg-tally-accent/5 transition-colors">
-                    <td className="px-4 py-1.5 pl-8 italic">{l.name}</td>
-                    <td className="px-4 py-1.5 text-right font-mono text-gray-600">
-                      {balance > 1 ? balance.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ''}
+                  <tr key={l.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 md:px-6 py-1.5 pl-8 italic text-gray-600">{l.name}</td>
+                    <td className="px-4 md:px-6 py-1.5 text-right font-mono text-gray-700">
+                      {balance > 0 ? balance.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}
                     </td>
-                    <td className="px-4 py-1.5 text-right font-mono text-gray-600">
-                      {balance < -1 ? Math.abs(balance).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ''}
+                    <td className="px-4 md:px-6 py-1.5 text-right font-mono text-gray-700">
+                      {balance < 0 ? Math.abs(balance).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}
                     </td>
                   </tr>
                 );
               })
             )}
           </tbody>
-          <tfoot className="bg-tally-teal/5 border-t-2 border-tally-teal font-extrabold">
+          <tfoot className="bg-gradient-to-r from-gray-100 to-gray-50 border-t-4 border-double border-tally-teal font-black uppercase text-[11px]">
             <tr>
-              <td className="px-4 py-2 uppercase tracking-tighter">Grand Total</td>
-              <td className="px-4 py-2 text-right font-mono border-l border-tally-teal/10">
+              <td className="px-4 md:px-6 py-3 text-tally-teal">Grand Total</td>
+              <td className="px-4 md:px-6 py-3 text-right font-mono text-tally-teal text-base md:text-lg">
                 {drTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </td>
-              <td className="px-4 py-2 text-right font-mono border-l border-tally-teal/10">
+              <td className="px-4 md:px-6 py-3 text-right font-mono text-tally-teal text-base md:text-lg">
                 {crTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </td>
             </tr>
           </tfoot>
         </table>
       </div>
-      <div className="text-[9px] text-gray-400 italic">
-        * Click on any group name to see breakdown by individual ledgers.
+      <div className="text-[10px] text-gray-400 italic bg-gray-50 p-2 border-l-2 border-tally-teal">
+        💡 Tip: Click on any group name to see breakdown by individual ledgers. Debit and Credit totals should always match for a balanced trial balance.
       </div>
     </div>
   );

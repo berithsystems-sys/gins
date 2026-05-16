@@ -26,3 +26,109 @@
 .hotkey-btn {
   @apply border-l border-tally-hotkey px-2 py-0.5 text-[11px] uppercase flex items-center justify-between cursor-pointer transition-colors hover:bg-tally-hotkey;
 }
+
+/* Print Styles for Professional Reports */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body {
+    @apply bg-white;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Report containers */
+  #balance-sheet-report,
+  #pl-report,
+  #trial-balance-report,
+  #daybook-report {
+    @apply max-w-full;
+    page-break-after: always;
+  }
+
+  /* Headers for print */
+  h1, h2, h3 {
+    page-break-after: avoid;
+  }
+
+  /* Tables print styles */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  thead {
+    page-break-inside: avoid;
+    display: table-header-group;
+  }
+
+  tbody {
+    display: table-row-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+    page-break-inside: avoid;
+  }
+
+  tr {
+    page-break-inside: avoid;
+  }
+
+  /* Remove interactive elements from print */
+  button,
+  .hotkey-btn,
+  [onclick],
+  .cursor-pointer {
+    display: none !important;
+  }
+
+  /* Borders for better readability */
+  td, th {
+    border: 0.5px solid #999;
+  }
+
+  /* Padding adjustments */
+  td, th {
+    padding: 6px 4px;
+  }
+
+  /* Font sizes for print */
+  body {
+    font-size: 11pt;
+    line-height: 1.4;
+  }
+
+  h2 {
+    font-size: 16pt;
+    margin-bottom: 12pt;
+  }
+
+  /* Prevent orphans and widows */
+  p {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* Margins */
+  @page {
+    margin: 0.5in;
+    size: A4;
+  }
+
+  /* Remove shadows and animations for print */
+  * {
+    box-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* Footer text */
+  .text-[10px].text-gray-400 {
+    display: none;
+  }
+}

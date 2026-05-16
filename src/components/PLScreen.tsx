@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart3, Download, Printer } from 'lucide-react';
+import { BarChart3, Download, Printer, ChevronDown, ChevronRight } from 'lucide-react';
 import { exportToExcel } from '../lib/ReportUtils';
 
 export default function PLScreen({ branchId }: { branchId?: string }) {
@@ -7,6 +7,8 @@ export default function PLScreen({ branchId }: { branchId?: string }) {
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+  const [companyName, setCompanyName] = useState('BERITHSYSTEMS');
+  const [reportDate, setReportDate] = useState(new Date().toLocaleDateString('en-IN'));
 
   useEffect(() => {
     const query = branchId ? `?branchId=${branchId}` : '';
