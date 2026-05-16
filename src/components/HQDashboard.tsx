@@ -154,8 +154,6 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
           </div>
         ))}
       </div>
-    </div>
-  );
 
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
