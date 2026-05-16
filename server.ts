@@ -23,6 +23,43 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Database Connection Debug Endpoint
+  app.get("/api/db-test", async (req, res) => {
+    console.log("Starting DB connection test...");
+    try {
+      // Test basic connection
+      await db.raw('SELECT 1 as connected');
+      
+      // Get table list
+      const tablesResult = await db.raw("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ?", [(db.client.config.connection as any).database]);
+      const tables = tablesResult[0].map((t: any) => t.TABLE_NAME);
+      
+      // Get user count
+      const userCount = await db('users').count('* as count').first();
+
+      res.json({
+        status: "success",
+        message: "Connected to Hostinger successfully!",
+        config: {
+          host: (db.client.config.connection as any).host,
+          database: (db.client.config.connection as any).database,
+          user: (db.client.config.connection as any).user
+        },
+        tables: tables,
+        users_in_db: userCount?.count || 0
+      });
+    } catch (err: any) {
+      console.error("DB Test Error:", err.message);
+      res.status(500).json({
+        status: "error",
+        message: err.message,
+        code: err.code,
+        hint: "If this is a timeout or access denied, make sure you added your IP to 'Remote MySQL' in Hostinger hPanel.",
+        your_ip_hint: "Check 'what is my ip' on Google and add it to Hostinger."
+      });
+    }
+  });
+
   // API routes
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", service: "Tally Prime ERP", db: db.client.config.client });
