@@ -114,31 +114,67 @@ export default function BalanceSheetScreen({ branchId }: { branchId?: string }) 
   };
 
   return (
-    <div id="balance-sheet-report" className="p-4 space-y-6 max-w-5xl mx-auto">
-      <div className="flex justify-between items-end border-b-2 border-tally-teal pb-2">
-        <h2 className="text-xl font-black text-tally-teal uppercase flex items-center gap-2">
-          <FileText className="w-6 h-6" />
-          Balance Sheet
-        </h2>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-1 text-[10px] bg-gray-100 hover:bg-gray-200 px-3 py-1 font-bold uppercase border" onClick={() => printReport('balance-sheet-report')}>
-            <Printer className="w-3 h-3" /> Print (Alt+P)
-          </button>
-          <button className="flex items-center gap-1 text-[10px] bg-tally-teal text-white hover:bg-teal-700 px-3 py-1 font-bold uppercase shadow" onClick={handleExport}>
-            <Download className="w-3 h-3" /> Export Excel
-          </button>
+    <div id="balance-sheet-report" className="flex flex-col h-full bg-tally-bg">
+      {/* Report Header */}
+      <div className="bg-tally-sidebar text-white px-4 py-1 font-bold text-xs uppercase flex justify-between sticky top-0 z-10">
+        <span>Balance Sheet</span>
+        <span className="text-tally-accent">{companyName}</span>
+      </div>
+
+      <div className="flex-grow p-4 overflow-auto">
+        <div className="max-w-6xl mx-auto bg-white tally-border tally-shadow">
+          {/* Company Title */}
+          <div className="text-center py-4 border-b border-gray-200">
+            <h1 className="text-lg font-bold uppercase">{companyName}</h1>
+            <p className="text-xs font-bold">Balance Sheet</p>
+            <p className="text-[10px]">1-Apr-26 to 31-Mar-27</p>
+          </div>
+
+          {/* Main Table Structure */}
+          <div className="flex divide-x divide-tally-teal border-b border-tally-teal">
+            {/* Liabilities Column */}
+            <div className="w-1/2 flex flex-col">
+              <div className="bg-tally-light px-4 py-1 border-b border-tally-teal flex justify-between font-bold text-xs uppercase">
+                <span>Liabilities</span>
+                <span>as at 31-Mar-27</span>
+              </div>
+              <div className="flex-grow p-2">
+                {renderSection('Liabilities', ['Capital Account', 'Loans (Liability)', 'Current Liabilities', 'Suspense Account'])}
+              </div>
+            </div>
+
+            {/* Assets Column */}
+            <div className="w-1/2 flex flex-col">
+              <div className="bg-tally-light px-4 py-1 border-b border-tally-teal flex justify-between font-bold text-xs uppercase">
+                <span>Assets</span>
+                <span>as at 31-Mar-27</span>
+              </div>
+              <div className="flex-grow p-2">
+                {renderSection('Assets', ['Fixed Assets', 'Investments', 'Current Assets'])}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="border border-tally-teal bg-white shadow-xl p-4 md:p-6">
-          <h3 className="text-xs md:text-sm font-black text-red-700 uppercase mb-4 md:mb-6 border-b-2 border-red-700 pb-1 italic">Liabilities</h3>
-          {renderSection('Liabilities', ['Capital Account', 'Loans (Liability)', 'Current Liabilities', 'Suspense Account'])}
-        </div>
-        <div className="border border-tally-teal bg-white shadow-xl p-4 md:p-6">
-          <h3 className="text-xs md:text-sm font-black text-green-700 uppercase mb-4 md:mb-6 border-b-2 border-green-700 pb-1 italic">Assets</h3>
-          {renderSection('Assets', ['Fixed Assets', 'Investments', 'Current Assets'])}
-        </div>
+      {/* Button Bar */}
+      <div className="fixed right-0 top-12 bottom-0 w-24 bg-tally-sidebar flex flex-col gap-0.5 p-0.5 text-[10px] text-white">
+        {[
+          { label: 'F1: Condensed', key: 'F1' },
+          { label: 'F2: Period', key: 'F2' },
+          { label: 'F3: Company', key: 'F3' },
+          { label: 'Alt+P: Print', action: () => printReport('balance-sheet-report') },
+          { label: 'Alt+E: Export', action: handleExport },
+          { label: 'F12: Configure', key: 'F12' }
+        ].map((btn) => (
+          <div 
+            key={btn.label} 
+            onClick={btn.action}
+            className="h-10 bg-tally-hotkey flex items-center px-2 cursor-pointer hover:bg-tally-accent hover:text-black"
+          >
+            {btn.label}
+          </div>
+        ))}
       </div>
     </div>
   );

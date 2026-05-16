@@ -49,70 +49,76 @@ export default function DayBookScreen({ branchId, initialDate }: { branchId?: st
   const totalAmount = vouchers.reduce((acc, v) => acc + v.amount, 0);
 
   return (
-    <div id="daybook-report" className="p-4 space-y-6 max-w-5xl mx-auto">
-      <div className="flex justify-between items-end border-b-2 border-blue-700 pb-2">
-        <div>
-          <h2 className="text-xl font-black text-blue-700 uppercase flex items-center gap-2">
-            <FileText className="w-6 h-6" />
-            Day Book
-          </h2>
-          <p className="text-[10px] text-gray-500 mt-1">
-            {initialDate ? format(new Date(initialDate), 'dd MMMM yyyy') : format(new Date(), 'dd MMMM yyyy')}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-1 text-[10px] bg-gray-100 hover:bg-gray-200 px-3 py-1 font-bold uppercase border" onClick={() => printReport('daybook-report')}>
-            <Printer className="w-3 h-3" /> Print (Alt+P)
-          </button>
-          <button className="flex items-center gap-1 text-[10px] bg-blue-700 text-white hover:bg-blue-800 px-3 py-1 font-bold uppercase shadow" onClick={handleExport}>
-            <Download className="w-3 h-3" /> Export Excel
-          </button>
-        </div>
+    <div id="daybook-report" className="flex flex-col h-full bg-tally-bg">
+      {/* Report Header */}
+      <div className="bg-tally-sidebar text-white px-4 py-1 font-bold text-xs uppercase flex justify-between sticky top-0 z-10">
+        <span>Day Book</span>
+        <span className="text-tally-accent">Company Name</span>
       </div>
 
-      <div className="border border-blue-700/20 overflow-hidden bg-white shadow-lg rounded-lg">
-        <table className="w-full text-xs md:text-sm">
-          <thead className="bg-gradient-to-r from-blue-700 to-blue-600 text-white font-black uppercase text-[10px] md:text-[11px]">
-            <tr>
-              <th className="px-3 md:px-4 py-3 text-left">Date</th>
-              <th className="px-3 md:px-4 py-3 text-left">Particulars</th>
-              <th className="px-3 md:px-4 py-3 text-center">Vch Type</th>
-              <th className="px-3 md:px-4 py-3 text-center">Vch No.</th>
-              <th className="px-3 md:px-4 py-3 text-right">Amount (₹)</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {loading ? (
-              <tr><td colSpan={5} className="p-4 text-center italic text-gray-400">Loading vouchers...</td></tr>
-            ) : vouchers.length === 0 ? (
-              <tr><td colSpan={5} className="p-4 text-center italic text-gray-400">No vouchers for this date</td></tr>
-            ) : vouchers.map((v, idx) => (
-              <tr key={v.id} className="hover:bg-blue-50/50 transition-colors">
-                <td className="px-3 md:px-4 py-2 font-medium text-gray-700">{format(new Date(v.date), 'dd-MMM-yy')}</td>
-                <td className="px-3 md:px-4 py-2 text-gray-600 font-medium">{v.narration || 'No Narration'}</td>
-                <td className="px-3 md:px-4 py-2 text-center text-blue-700 font-bold italic text-[10px] md:text-xs bg-blue-50/30">{v.type}</td>
-                <td className="px-3 md:px-4 py-2 text-center text-gray-700 font-bold">{v.number || `${idx + 1}`}</td>
-                <td className="px-3 md:px-4 py-2 text-right font-mono font-black text-blue-900">
-                  {v.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+      <div className="flex-grow p-4 overflow-auto">
+        <div className="max-w-6xl mx-auto bg-white tally-border tally-shadow min-h-[500px]">
+          <div className="text-center py-4 border-b border-gray-200">
+            <h1 className="text-lg font-bold uppercase">Company Name</h1>
+            <p className="text-xs font-bold italic">Day Book</p>
+            <p className="text-[10px]">1-Apr-26 to 31-Mar-27</p>
+          </div>
+
+          <table className="w-full text-xs">
+            <thead className="bg-tally-light border-b border-tally-teal">
+              <tr className="font-bold uppercase text-[10px]">
+                <th className="px-4 py-1 text-left w-24">Date</th>
+                <th className="px-4 py-1 text-left">Particulars</th>
+                <th className="px-4 py-1 text-left w-32">Vch Type</th>
+                <th className="px-4 py-1 text-center w-24">Vch No.</th>
+                <th className="px-4 py-1 text-right w-40">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={5} className="p-8 text-center italic text-gray-400">Loading vouchers...</td></tr>
+              ) : vouchers.length === 0 ? (
+                <tr><td colSpan={5} className="p-8 text-center italic text-gray-400">No vouchers found</td></tr>
+              ) : vouchers.map((v, idx) => (
+                <tr key={v.id} className="hover:bg-tally-accent cursor-pointer border-b border-gray-50">
+                  <td className="px-4 py-0.5">{format(new Date(v.date), 'dd-MMM-yy')}</td>
+                  <td className="px-4 py-0.5 font-bold">{v.narration || '(Blank)'}</td>
+                  <td className="px-4 py-0.5 italic">{v.type}</td>
+                  <td className="px-4 py-0.5 text-center">{v.number || idx + 1}</td>
+                  <td className="px-4 py-0.5 text-right font-bold">{v.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="border-t-2 border-tally-teal bg-tally-light">
+              <tr className="font-bold uppercase text-[10px]">
+                <td colSpan={4} className="px-4 py-1 text-right">Total</td>
+                <td className="px-4 py-1 text-right font-bold text-xs border-t-2 border-double border-tally-teal">
+                  ₹ {totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
               </tr>
-            ))}
-          </tbody>
-          <tfoot className="bg-gradient-to-r from-gray-100 to-gray-50 border-t-4 border-double border-blue-700 font-black uppercase text-[11px]">
-            <tr>
-              <td colSpan={4} className="px-3 md:px-4 py-3 text-right text-blue-700">Daily Total</td>
-              <td className="px-3 md:px-4 py-3 text-right font-mono text-blue-700 text-base md:text-lg">
-                ₹ {totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+            </tfoot>
+          </table>
+        </div>
       </div>
 
-      <div className="flex gap-4 text-[10px] uppercase font-bold text-gray-600 bg-gray-50 p-3 border-l-4 border-blue-700 rounded">
-        <span className="bg-gray-200 px-2 py-1 rounded">F2: Change Date</span>
-        <span className="bg-gray-200 px-2 py-1 rounded">F4: Chg Vch Type</span>
-        <span className="bg-gray-200 px-2 py-1 rounded">Alt+P: Print</span>
+      {/* Button Bar */}
+      <div className="fixed right-0 top-12 bottom-0 w-24 bg-tally-sidebar flex flex-col gap-0.5 p-0.5 text-[10px] text-white">
+        {[
+          { label: 'F2: Period', key: 'F2' },
+          { label: 'F3: Company', key: 'F3' },
+          { label: 'F4: Vch Type', key: 'F4' },
+          { label: 'Alt+P: Print', action: () => printReport('daybook-report') },
+          { label: 'Alt+E: Export', action: handleExport },
+          { label: 'F12: Configure', key: 'F12' }
+        ].map((btn) => (
+          <div 
+            key={btn.label} 
+            onClick={btn.action}
+            className="h-10 bg-tally-hotkey flex items-center px-2 cursor-pointer hover:bg-tally-accent hover:text-black"
+          >
+            {btn.label}
+          </div>
+        ))}
       </div>
     </div>
   );

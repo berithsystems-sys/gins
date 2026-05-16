@@ -124,61 +124,54 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="flex justify-between items-start mb-4">
-        <div className="flex flex-wrap gap-2">
-          {['Contra', 'Payment', 'Receipt', 'Journal'].map((t, idx) => (
-            <button 
-              key={t}
-              type="button" 
-              onClick={() => handleTypeChange(t as any)}
-              className={`px-3 py-1 text-[10px] font-bold border rounded transition-colors ${type === t ? 'bg-tally-teal text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
-            >
-              F{idx + 4}: {t}
-            </button>
-          ))}
+    <form onSubmit={handleSubmit} className="flex flex-col h-full bg-tally-bg">
+      {/* Header Info */}
+      <div className="flex justify-between items-start bg-tally-light p-2 tally-border tally-shadow mb-4">
+        <div className="flex flex-col">
+          <span className="text-red-700 font-bold text-sm uppercase">{type} Voucher</span>
+          <span className="text-[10px] font-bold text-gray-500 uppercase">No. {entries.length}</span>
         </div>
-        <div className="text-right">
-          <div className="text-[10px] font-bold text-gray-500 uppercase">Date</div>
+        <div className="flex flex-col text-right">
+          <span className="text-[10px] font-bold text-gray-500 uppercase">Date</span>
           <input 
-            type="date" 
+            type="text" 
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="text-sm font-bold border-b-2 border-tally-teal focus:outline-none focus:bg-tally-bg p-1"
+            className="text-sm font-bold bg-transparent border-b border-tally-teal focus:outline-none text-right"
           />
         </div>
       </div>
 
-      <div className="border-2 border-tally-teal/20 bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-100 text-[10px] font-bold uppercase text-gray-500 border-b-2 border-tally-teal/10">
-            <tr>
-              <th className="px-4 py-2 text-left w-16">Dr/Cr</th>
-              <th className="px-4 py-2 text-left">Particulars</th>
-              <th className="px-4 py-2 text-left w-40">Cost Centre</th>
-              <th className="px-4 py-2 text-right w-32">Debit (₹)</th>
-              <th className="px-4 py-2 text-right w-32">Credit (₹)</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {entries.map((entry, idx) => (
-              <tr key={idx} className="hover:bg-tally-accent/5">
-                <td className="px-1 py-1">
-                  <select 
-                    value={entry.type}
-                    onChange={(e) => {
-                      const newEntries = [...entries];
-                      newEntries[idx].type = e.target.value as 'Dr' | 'Cr';
-                      setEntries(newEntries);
-                    }}
-                    className="w-full focus:outline-none font-bold text-tally-teal bg-transparent px-2"
-                  >
-                    <option value="Dr">Dr</option>
-                    <option value="Cr">Cr</option>
-                  </select>
-                </td>
-                <td className="px-2 py-1">
-                  <div className="relative">
+      {/* Main Entry Table */}
+      <div className="flex-grow bg-white tally-border tally-shadow overflow-hidden flex flex-col">
+        <div className="overflow-auto flex-grow">
+          <table className="w-full text-xs">
+            <thead className="bg-tally-sidebar text-white sticky top-0">
+              <tr>
+                <th className="px-4 py-1 text-left w-16">Dr/Cr</th>
+                <th className="px-4 py-1 text-left">Particulars</th>
+                <th className="px-4 py-1 text-right w-40">Debit (₹)</th>
+                <th className="px-4 py-1 text-right w-40">Credit (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((entry, idx) => (
+                <tr key={idx} className="border-b border-gray-100 hover:bg-tally-accent">
+                  <td className="px-4 py-0.5 font-bold text-tally-teal">
+                    <select 
+                      value={entry.type}
+                      onChange={(e) => {
+                        const newEntries = [...entries];
+                        newEntries[idx].type = e.target.value as 'Dr' | 'Cr';
+                        setEntries(newEntries);
+                      }}
+                      className="w-full bg-transparent focus:outline-none"
+                    >
+                      <option value="Dr">Dr</option>
+                      <option value="Cr">Cr</option>
+                    </select>
+                  </td>
+                  <td className="px-4 py-0.5 relative">
                     <input 
                       type="text"
                       value={entry.tempSearch || ledgers.find(l => l.id === entry.ledgerId)?.name || ''}
@@ -195,124 +188,97 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                         setActiveDropdownIdx(idx);
                         setHighlightedIdx(0);
                       }}
-                      onBlur={() => {
-                        // Small delay to allow onMouseDown on items to fire
-                        setTimeout(() => setActiveDropdownIdx(null), 200);
-                      }}
+                      onBlur={() => setTimeout(() => setActiveDropdownIdx(null), 200)}
                       onKeyDown={(e) => handleKeyDown(e, idx)}
-                      className="w-full focus:outline-none font-bold bg-transparent italic border-b border-transparent focus:border-tally-teal"
-                      placeholder="Type ledger name..."
-                      required
+                      className="w-full bg-transparent focus:outline-none font-bold"
+                      placeholder="Select Ledger..."
                     />
-                    {/* Custom search results */}
                     {activeDropdownIdx === idx && (
-                      <div className="absolute z-[60] left-0 mt-1 w-64 bg-white border-2 border-tally-teal shadow-2xl max-h-48 overflow-auto">
+                      <div className="absolute z-[60] left-0 mt-1 w-full bg-white tally-border tally-shadow max-h-48 overflow-auto">
                         {getFilteredLedgers(entry.tempSearch || '').map((l, lIdx) => (
                           <div 
                             key={l.id} 
                             onMouseDown={() => handleSelectLedger(idx, l)}
-                            className={`px-2 py-1.5 text-xs font-bold border-b last:border-0 cursor-pointer flex justify-between uppercase transition-colors ${
-                              highlightedIdx === lIdx ? 'bg-tally-accent text-black' : 'hover:bg-tally-accent/10'
-                            }`}
+                            className={`px-4 py-1 text-xs font-bold border-b last:border-0 cursor-pointer flex justify-between uppercase ${highlightedIdx === lIdx ? 'bg-tally-accent' : ''}`}
                           >
                              <span>{l.name}</span>
-                             <span className="text-[9px] opacity-40">₹ {Math.abs(ledgerBalances[l.id] || 0)} {ledgerBalances[l.id] >= 0 ? 'Dr' : 'Cr'}</span>
+                             <span className="text-[10px] opacity-60">₹ {Math.abs(ledgerBalances[l.id] || 0)} {ledgerBalances[l.id] >= 0 ? 'Dr' : 'Cr'}</span>
                           </div>
                         ))}
                       </div>
                     )}
-                    {entry.ledgerId && (
-                      <div className="text-[9px] font-bold text-gray-400 mt-0.5 flex justify-between">
-                         <span className="uppercase tracking-widest">Balance:</span>
-                         <span className={ledgerBalances[entry.ledgerId] >= 0 ? 'text-blue-600' : 'text-red-600'}>
-                           ₹ {Math.abs(ledgerBalances[entry.ledgerId]).toLocaleString()} {ledgerBalances[entry.ledgerId] >= 0 ? 'Dr' : 'Cr'}
-                         </span>
-                      </div>
+                  </td>
+                  <td className="px-4 py-0.5">
+                    {entry.type === 'Dr' && (
+                      <input 
+                        type="number" 
+                        value={entry.amount}
+                        onChange={(e) => {
+                          const newEntries = [...entries];
+                          newEntries[idx].amount = e.target.value;
+                          setEntries(newEntries);
+                        }}
+                        className="w-full text-right bg-transparent focus:outline-none font-bold"
+                      />
                     )}
-                  </div>
-                </td>
-                <td className="px-2 py-1">
-                  <select
-                    value={entry.costCentreId}
-                    onChange={(e) => {
-                      const newEntries = [...entries];
-                      newEntries[idx].costCentreId = e.target.value;
-                      setEntries(newEntries);
-                    }}
-                    className="w-full focus:outline-none text-[11px] bg-transparent opacity-70"
-                  >
-                    <option value="">(None)</option>
-                    {costCentres.map(cc => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
-                  </select>
-                </td>
-                <td className="px-4 py-1">
-                  {entry.type === 'Dr' && (
-                    <input 
-                      type="number" 
-                      value={entry.amount}
-                      onChange={(e) => {
-                        const newEntries = [...entries];
-                        newEntries[idx].amount = e.target.value;
-                        setEntries(newEntries);
-                      }}
-                      className="w-full text-right focus:outline-none bg-transparent font-mono font-bold"
-                      placeholder="0.00"
-                    />
-                  )}
-                </td>
-                <td className="px-4 py-1">
-                  {entry.type === 'Cr' && (
-                    <input 
-                      type="number" 
-                      value={entry.amount}
-                      onChange={(e) => {
-                        const newEntries = [...entries];
-                        newEntries[idx].amount = e.target.value;
-                        setEntries(newEntries);
-                      }}
-                      className="w-full text-right focus:outline-none bg-transparent font-mono font-bold"
-                      placeholder="0.00"
-                    />
-                  )}
-                </td>
+                  </td>
+                  <td className="px-4 py-0.5">
+                    {entry.type === 'Cr' && (
+                      <input 
+                        type="number" 
+                        value={entry.amount}
+                        onChange={(e) => {
+                          const newEntries = [...entries];
+                          newEntries[idx].amount = e.target.value;
+                          setEntries(newEntries);
+                        }}
+                        className="w-full text-right bg-transparent focus:outline-none font-bold"
+                      />
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {/* New Entry Trigger Row */}
+              <tr onClick={handleAddEntry} className="cursor-pointer hover:bg-gray-50">
+                <td className="px-4 py-1 italic text-gray-400" colSpan={4}>Click or Alt+A to add more entries...</td>
               </tr>
-            ))}
-          </tbody>
-          <tfoot className="bg-gray-50 border-t-2 border-tally-teal/10 invisible">
-             <tr><td colSpan={5}>Space for total</td></tr>
-          </tfoot>
-        </table>
-        <button 
-          type="button" 
-          onClick={handleAddEntry}
-          className="w-full py-2 text-[10px] text-tally-teal font-extrabold uppercase hover:bg-tally-accent/20 border-t border-tally-teal/10 transition-colors"
-        >
-          + Add Particulars (Alt+C to new ledger)
-        </button>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Totals Bar */}
+        <div className="bg-tally-sidebar text-white flex justify-between px-4 py-1 font-bold text-xs uppercase">
+          <span>Total</span>
+          <div className="flex gap-20">
+            <span className="w-40 text-right">₹ {calculateTotal().toLocaleString()}</span>
+            <span className="w-40 text-right">₹ {calculateTotal().toLocaleString()}</span>
+          </div>
+        </div>
       </div>
 
-      <div className="flex gap-6 mt-4">
-        <div className="flex-1">
-          <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Narration</label>
+      {/* Footer Area: Narration & Buttons */}
+      <div className="mt-4 flex gap-4">
+        <div className="flex-grow">
+          <label className="text-[10px] font-bold text-gray-500 uppercase">Narration:</label>
           <textarea 
             value={narration}
             onChange={(e) => setNarration(e.target.value)}
-            rows={2}
-            placeholder="Enter narration for this transaction..."
-            className="w-full border border-tally-teal/20 p-2 text-xs focus:outline-none focus:border-tally-teal bg-gray-50 italic"
+            className="w-full tally-border tally-shadow p-2 text-xs focus:outline-none h-12 italic bg-white"
           />
         </div>
-        <div className="w-1/3 flex flex-col justify-end gap-2 border-l border-gray-100 pl-6">
-          <div className="flex justify-between items-center text-xs font-bold text-gray-500 uppercase">
-             <span>Sub Total</span>
-             <span className="font-mono">{calculateTotal().toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between items-center text-sm font-black text-tally-teal">
-             <span>Total Dr/Cr</span>
-             <span className="font-mono">₹ {calculateTotal().toLocaleString()}</span>
-          </div>
-          <button type="submit" className="w-full bg-tally-teal text-white py-2 text-xs font-bold uppercase shadow-lg hover:bg-teal-700 transition-all active:scale-95">Accept (Enter)</button>
+        <div className="flex flex-col gap-2 w-48 justify-end">
+          <button type="submit" className="w-full bg-tally-teal text-white py-2 font-bold uppercase text-xs tally-shadow hover:bg-tally-header transition-colors">Accept (Enter)</button>
+          <button type="button" onClick={() => window.history.back()} className="w-full bg-gray-200 py-2 font-bold uppercase text-xs tally-shadow hover:bg-gray-300">No (Esc)</button>
         </div>
+      </div>
+
+      {/* Tally Vertical Button Bar Placeholder */}
+      <div className="fixed right-0 top-12 bottom-0 w-24 bg-tally-sidebar flex flex-col gap-0.5 p-0.5 text-[10px] text-white">
+        {['F2:Date', 'F3:Company', 'F4:Contra', 'F5:Payment', 'F6:Receipt', 'F7:Journal', 'F8:Sales', 'F9:Purchase', 'F10:Other', 'F11:Features', 'F12:Config'].map((btn) => (
+          <div key={btn} className="flex-grow bg-tally-hotkey flex items-center px-2 cursor-pointer hover:bg-tally-accent hover:text-black border-l-2 border-transparent hover:border-black">
+            {btn}
+          </div>
+        ))}
       </div>
     </form>
   );

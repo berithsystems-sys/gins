@@ -54,125 +54,105 @@ export default function LedgerScreen({ branchId }: { branchId?: string }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="grid grid-cols-2 gap-8">
-        <div className="space-y-6">
-          <section className="space-y-4">
-            <h3 className="text-[10px] font-black text-tally-teal/50 border-b border-tally-teal/10 pb-1 uppercase tracking-tighter">Identity</h3>
-            <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase">Name</label>
-              <input 
-                autoFocus
-                type="text" 
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full border-b border-tally-teal focus:outline-none focus:bg-tally-accent/10 p-1 font-bold text-tally-teal"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase">Under (Parent Group)</label>
-              <select 
-                value={groupId}
-                onChange={(e) => setGroupId(e.target.value)}
-                className="w-full border-b border-tally-teal focus:outline-none focus:bg-tally-accent/10 p-1 font-semibold"
-              >
-                <option value="">Primary</option>
-                {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-              </select>
-            </div>
-          </section>
+    <div className="flex flex-col h-full bg-tally-bg">
+      <div className="bg-tally-sidebar text-white px-4 py-1 font-bold text-xs uppercase flex justify-between">
+        <span>Ledger Creation</span>
+        <span className="text-tally-accent">Company: {branchId || 'HQ'}</span>
+      </div>
 
-          <section className="space-y-4">
-            <h3 className="text-[10px] font-black text-tally-teal/50 border-b border-tally-teal/10 pb-1 uppercase tracking-tighter">Taxation & GST</h3>
-            <div className="grid grid-cols-2 gap-4">
+      <form onSubmit={handleSubmit} className="p-8 flex-grow">
+        <div className="max-w-4xl mx-auto bg-white tally-border tally-shadow p-8 space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+            {/* Left Column: Basic Details */}
+            <div className="space-y-6">
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase">GST Type</label>
-                <select 
-                  value={gstType}
-                  onChange={(e) => setGstType(e.target.value)}
-                  className="w-full border-b border-gray-300 focus:outline-none p-1 text-xs"
-                >
-                  <option value="Unregistered">Unregistered</option>
-                  <option value="Regular">Regular</option>
-                  <option value="Composition">Composition</option>
-                  <option value="Consumer">Consumer</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase">GSTIN/UIN</label>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Name</label>
                 <input 
+                  autoFocus
                   type="text" 
-                  value={gstin}
-                  onChange={(e) => setGstin(e.target.value)}
-                  className="w-full border-b border-gray-300 focus:outline-none p-1 text-xs font-mono"
-                  placeholder="27AAAAA0000A1Z5"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full border-b-2 border-tally-teal focus:bg-tally-accent/10 p-1 font-bold text-sm uppercase outline-none"
+                  required
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase">PAN/IT No.</label>
-              <input 
-                type="text" 
-                value={pan}
-                onChange={(e) => setPan(e.target.value)}
-                className="w-full border-b border-gray-300 focus:outline-none p-1 text-xs font-mono"
-              />
-            </div>
-          </section>
-        </div>
 
-        <div className="space-y-6 border-l border-tally-teal/5 pl-8">
-          <section className="space-y-4">
-             <h3 className="text-[10px] font-black text-tally-teal/50 border-b border-tally-teal/10 pb-1 uppercase tracking-tighter">Opening Balance</h3>
-             <div>
-              <div className="flex gap-2">
-                <input 
-                  type="number" 
-                  value={openingBalance}
-                  onChange={(e) => setOpeningBalance(e.target.value)}
-                  className="flex-1 border-b border-tally-teal focus:outline-none focus:bg-tally-accent/10 p-1 text-right font-mono"
-                />
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">(alias)</label>
+                <input type="text" className="w-full border-b border-gray-200 focus:bg-tally-accent/10 p-1 text-xs outline-none" />
+              </div>
+
+              <div className="pt-4">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Under</label>
                 <select 
-                  value={balanceType}
-                  onChange={(e) => setBalanceType(e.target.value as 'Dr' | 'Cr')}
-                  className="w-16 border-b border-tally-teal focus:outline-none focus:bg-tally-accent/10 p-1 font-bold text-tally-teal"
+                  value={groupId}
+                  onChange={(e) => setGroupId(e.target.value)}
+                  className="w-full border-b-2 border-tally-teal focus:bg-tally-accent/10 p-1 font-bold text-sm outline-none"
                 >
-                  <option value="Dr">Dr</option>
-                  <option value="Cr">Cr</option>
+                  <option value="">Primary</option>
+                  {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
               </div>
             </div>
-          </section>
 
-          <section className="space-y-4">
-            <h3 className="text-[10px] font-black text-tally-teal/50 border-b border-tally-teal/10 pb-1 uppercase tracking-tighter">Contact Information</h3>
-            <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase">Email Address</label>
-              <input 
-                type="email" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full border-b border-gray-300 focus:outline-none p-1 text-xs"
-                placeholder="accounts@example.com"
-              />
+            {/* Right Column: Statutory & Opening Balance */}
+            <div className="space-y-6 border-l border-gray-100 pl-12">
+              <div>
+                <h3 className="text-[10px] font-bold text-tally-teal border-b mb-4 uppercase">Statutory Details</h3>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">GST Applicable</label>
+                    <span className="text-xs font-bold text-tally-teal">Applicable</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">Set/Alter GST Details</label>
+                    <span className="text-xs font-bold text-red-700 cursor-pointer">No</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-8">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Opening Balance (on 1-Apr-26)</label>
+                <div className="flex gap-2 items-end">
+                  <input 
+                    type="number" 
+                    value={openingBalance}
+                    onChange={(e) => setOpeningBalance(e.target.value)}
+                    className="flex-grow border-b-2 border-tally-teal focus:bg-tally-accent/10 p-1 text-right font-mono font-bold text-sm outline-none"
+                  />
+                  <select 
+                    value={balanceType}
+                    onChange={(e) => setBalanceType(e.target.value as 'Dr' | 'Cr')}
+                    className="w-16 border-b-2 border-tally-teal focus:bg-tally-accent/10 p-1 font-bold text-tally-teal outline-none"
+                  >
+                    <option value="Dr">Dr</option>
+                    <option value="Cr">Cr</option>
+                  </select>
+                </div>
+              </div>
             </div>
-            <div className="bg-gray-50 p-2 text-[10px] text-gray-400 italic">
-               Enable Mailing details in F12 configuration for advanced address fields.
+          </div>
+
+          <div className="flex justify-end gap-4 pt-12">
+            <div className="bg-tally-light tally-border p-4 w-48 text-center tally-shadow">
+               <p className="text-[10px] font-bold text-gray-400 mb-2 uppercase">Accept?</p>
+               <div className="flex gap-4 justify-center">
+                  <button type="submit" className="bg-tally-teal text-white px-4 py-1 text-xs font-bold uppercase hover:bg-tally-header">Yes</button>
+                  <button type="button" onClick={() => window.history.back()} className="bg-gray-200 px-4 py-1 text-xs font-bold uppercase hover:bg-gray-300">No</button>
+               </div>
             </div>
-          </section>
+          </div>
         </div>
-      </div>
+      </form>
 
-      <div className="flex justify-between items-center pt-6 border-t border-tally-teal/20">
-        <p className="text-[10px] text-gray-400 italic font-medium">Auto-fill GST details from portal using API key (F11 feature)</p>
-        <button 
-          type="submit"
-          className="bg-tally-teal text-white px-12 py-2 text-xs font-bold uppercase hover:bg-teal-700 shadow-xl transition-all active:scale-95"
-        >
-          Accept (Enter)
-        </button>
+      {/* Right Button Bar */}
+      <div className="fixed right-0 top-12 bottom-0 w-24 bg-tally-sidebar flex flex-col gap-0.5 p-0.5 text-[10px] text-white">
+        {['F2:Date', 'F3:Company', 'F11:Features', 'F12:Configure'].map((btn) => (
+          <div key={btn} className="h-10 bg-tally-hotkey flex items-center px-2 cursor-pointer hover:bg-tally-accent hover:text-black">
+            {btn}
+          </div>
+        ))}
       </div>
-    </form>
+    </div>
   );
 }
