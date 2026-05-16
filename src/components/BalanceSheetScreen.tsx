@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Download, Printer, ChevronDown, ChevronRight } from 'lucide-react';
-import { exportToExcel } from '../lib/ReportUtils';
+import { exportToExcel, printReport } from '../lib/ReportUtils';
 
 export default function BalanceSheetScreen({ branchId }: { branchId?: string }) {
   const [ledgers, setLedgers] = useState<any[]>([]);
@@ -121,7 +121,7 @@ export default function BalanceSheetScreen({ branchId }: { branchId?: string }) 
           Balance Sheet
         </h2>
         <div className="flex gap-2">
-          <button className="flex items-center gap-1 text-[10px] bg-gray-100 hover:bg-gray-200 px-3 py-1 font-bold uppercase border" onClick={() => window.print()}>
+          <button className="flex items-center gap-1 text-[10px] bg-gray-100 hover:bg-gray-200 px-3 py-1 font-bold uppercase border" onClick={() => printReport('balance-sheet-report')}>
             <Printer className="w-3 h-3" /> Print (Alt+P)
           </button>
           <button className="flex items-center gap-1 text-[10px] bg-tally-teal text-white hover:bg-teal-700 px-3 py-1 font-bold uppercase shadow" onClick={handleExport}>

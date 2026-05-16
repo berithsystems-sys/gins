@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { FileText, Download, Printer } from 'lucide-react';
-import { exportToExcel } from '../lib/ReportUtils';
+import { exportToExcel, printReport } from '../lib/ReportUtils';
 
 interface Ledger {
   id: string;
@@ -87,7 +87,7 @@ export default function TrialBalanceScreen({ branchId }: { branchId?: string }) 
           Trial Balance {drillDownGroup && `- ${drillDownGroup}`}
         </h2>
         <div className="flex gap-2">
-          <button className="flex items-center gap-1 text-[10px] bg-gray-100 hover:bg-gray-200 px-3 py-1 font-bold uppercase border" onClick={() => window.print()}>
+          <button className="flex items-center gap-1 text-[10px] bg-gray-100 hover:bg-gray-200 px-3 py-1 font-bold uppercase border" onClick={() => printReport('trial-balance-report')}>
             <Printer className="w-3 h-3" /> Print (Alt+P)
           </button>
           <button className="flex items-center gap-1 text-[10px] bg-tally-teal text-white hover:bg-teal-700 px-3 py-1 font-bold uppercase shadow" onClick={handleExport}>

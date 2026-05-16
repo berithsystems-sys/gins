@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { FileText, Download, Printer } from 'lucide-react';
-import { exportToExcel } from '../lib/ReportUtils';
+import { exportToExcel, printReport } from '../lib/ReportUtils';
 
 interface Voucher {
   id: string;
@@ -61,7 +61,7 @@ export default function DayBookScreen({ branchId, initialDate }: { branchId?: st
           </p>
         </div>
         <div className="flex gap-2">
-          <button className="flex items-center gap-1 text-[10px] bg-gray-100 hover:bg-gray-200 px-3 py-1 font-bold uppercase border" onClick={() => window.print()}>
+          <button className="flex items-center gap-1 text-[10px] bg-gray-100 hover:bg-gray-200 px-3 py-1 font-bold uppercase border" onClick={() => printReport('daybook-report')}>
             <Printer className="w-3 h-3" /> Print (Alt+P)
           </button>
           <button className="flex items-center gap-1 text-[10px] bg-blue-700 text-white hover:bg-blue-800 px-3 py-1 font-bold uppercase shadow" onClick={handleExport}>

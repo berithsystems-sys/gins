@@ -17,6 +17,12 @@ interface Settings {
   decimalPlaces: number;
   autoBackup: boolean;
   backupFrequency: 'Daily' | 'Weekly' | 'Monthly';
+  printShowHeader: boolean;
+  printShowFooter: boolean;
+  printShowPageNumbers: boolean;
+  printShowCompanyName: boolean;
+  printPageSize: 'A4' | 'A3' | 'Letter';
+  printMargin: number;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -34,11 +40,17 @@ const DEFAULT_SETTINGS: Settings = {
   decimalPlaces: 2,
   autoBackup: true,
   backupFrequency: 'Weekly',
+  printShowHeader: true,
+  printShowFooter: true,
+  printShowPageNumbers: true,
+  printShowCompanyName: true,
+  printPageSize: 'A4',
+  printMargin: 0.5,
 };
 
 export default function SettingsScreen({ onBack }: { onBack: () => void }) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [activeTab, setActiveTab] = useState<'general' | 'company' | 'display' | 'backup'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'company' | 'display' | 'backup' | 'print'>('general');
   const [message, setMessage] = useState('');
 
   useEffect(() => {
@@ -78,6 +90,7 @@ export default function SettingsScreen({ onBack }: { onBack: () => void }) {
           { id: 'general' as const, label: 'General' },
           { id: 'company' as const, label: 'Company' },
           { id: 'display' as const, label: 'Display' },
+          { id: 'print' as const, label: 'Print' },
           { id: 'backup' as const, label: 'Backup' },
         ].map((tab) => (
           <button
@@ -311,6 +324,95 @@ export default function SettingsScreen({ onBack }: { onBack: () => void }) {
                     >
                       Create Manual Backup Now
                     </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Print Settings */}
+          {activeTab === 'print' && (
+            <>
+              <div className="bg-white border-2 border-tally-teal p-4 space-y-3">
+                <h3 className="text-[12px] font-bold text-tally-teal border-b border-tally-teal/20 pb-2">
+                  Report Header & Footer
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[11px] font-bold">Show Company Name in Header</label>
+                    <select
+                      value={settings.printShowCompanyName ? 'Yes' : 'No'}
+                      onChange={(e) => setSettings({ ...settings, printShowCompanyName: e.target.value === 'Yes' })}
+                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
+                    >
+                      <option>Yes</option>
+                      <option>No</option>
+                    </select>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <label className="text-[11px] font-bold">Show Report Header</label>
+                    <select
+                      value={settings.printShowHeader ? 'Yes' : 'No'}
+                      onChange={(e) => setSettings({ ...settings, printShowHeader: e.target.value === 'Yes' })}
+                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
+                    >
+                      <option>Yes</option>
+                      <option>No</option>
+                    </select>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <label className="text-[11px] font-bold">Show Page Footer</label>
+                    <select
+                      value={settings.printShowFooter ? 'Yes' : 'No'}
+                      onChange={(e) => setSettings({ ...settings, printShowFooter: e.target.value === 'Yes' })}
+                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
+                    >
+                      <option>Yes</option>
+                      <option>No</option>
+                    </select>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <label className="text-[11px] font-bold">Show Page Numbers</label>
+                    <select
+                      value={settings.printShowPageNumbers ? 'Yes' : 'No'}
+                      onChange={(e) => setSettings({ ...settings, printShowPageNumbers: e.target.value === 'Yes' })}
+                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
+                    >
+                      <option>Yes</option>
+                      <option>No</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white border-2 border-tally-teal p-4 space-y-3">
+                <h3 className="text-[12px] font-bold text-tally-teal border-b border-tally-teal/20 pb-2">
+                  Page Layout
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[11px] font-bold">Page Size</label>
+                    <select
+                      value={settings.printPageSize}
+                      onChange={(e) => setSettings({ ...settings, printPageSize: e.target.value as 'A4' | 'A3' | 'Letter' })}
+                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
+                    >
+                      <option>A4</option>
+                      <option>A3</option>
+                      <option>Letter</option>
+                    </select>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <label className="text-[11px] font-bold">Margin (inches)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="2"
+                      value={settings.printMargin}
+                      onChange={(e) => setSettings({ ...settings, printMargin: parseFloat(e.target.value) })}
+                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold w-[100px]"
+                    />
                   </div>
                 </div>
               </div>
