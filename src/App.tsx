@@ -675,8 +675,7 @@ export default function App() {
               {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} />}
               {currentScreen === 'TRIAL_BALANCE' && <TrialBalanceScreen branchId={selectedBranchId} />}
               {currentScreen === 'CASH_BANK_BOOK' && <CashBankBookScreen branchId={selectedBranchId} />}
-              {currentScreen === 'CHART' && <ChartOfAccountsScreen branchId={selectedBranchId} />}
-              {currentScreen === 'RATIO' && <RatioAnalysisScreen onBack={handleBack} />}
+              {currentScreen === 'RATIO' && <RatioAnalysisScreen onBack={handleBack} branchId={selectedBranchId} />}
               {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} />}
               {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} initialDate={currentDate} />}
               {currentScreen === 'LEDGER_DETAIL' && <LedgerVouchersScreen branchId={selectedBranchId} ledgerId={selectedLedgerId} onBack={() => setCurrentScreen('GATEWAY')} />}

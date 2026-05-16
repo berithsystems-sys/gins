@@ -24,12 +24,20 @@ interface ReconciliationItem {
 export default function BankingScreen({ branchId }: { branchId?: string }) {
    const [activeTab, setActiveTab] = useState<'MENU' | 'RECON' | 'CHEQUE' | 'STATEMENT' | 'PDC'>('MENU');
    const [selectedIndex, setSelectedIndex] = useState(0);
-   const [reconItems, setReconItems] = useState<ReconciliationItem[]>([
-      { id: '1', date: '2026-05-10', particulars: 'Salary Payment', amount: 50000, type: 'Dr' },
-      { id: '2', date: '2026-05-11', particulars: 'Church Offering', amount: 15000, type: 'Cr' },
-      { id: '3', date: '2026-05-12', particulars: 'Electricity Bill', amount: 2500, type: 'Dr' },
-   ]);
+   const [reconItems, setReconItems] = useState<ReconciliationItem[]>([]);
+   const [bankLedgers, setBankLedgers] = useState<any[]>([]);
    const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+   useEffect(() => {
+     // Fetch bank ledgers for the branch
+     const query = branchId ? `?branchId=${branchId}` : '';
+     fetch(`/api/ledgers${query}`)
+       .then(res => res.json())
+       .then(ledgers => {
+         const banks = ledgers.filter((l: any) => l.group === 'Bank Accounts' || l.group_name === 'Bank Accounts');
+         setBankLedgers(banks);
+       });
+   }, [branchId]);
 
    const storageKey = `bank_recon_${branchId || 'global'}`;
 
@@ -194,14 +202,14 @@ export default function BankingScreen({ branchId }: { branchId?: string }) {
         <div className="bg-white tally-border tally-shadow p-3">
           <h4 className="text-[10px] font-bold text-gray-400 uppercase border-b mb-2 pb-1">Bank Accounts</h4>
           <div className="space-y-2">
-            <div className="flex justify-between text-[11px] font-bold text-tally-teal">
-               <span>SBI HQ A/C</span>
-               <span className="font-mono">12,45,670.00 Dr</span>
-            </div>
-            <div className="flex justify-between text-[11px] font-bold text-tally-teal">
-               <span>HDFC Operations</span>
-               <span className="font-mono">1,22,340.00 Dr</span>
-            </div>
+            {bankLedgers.length > 0 ? bankLedgers.map(bank => (
+              <div key={bank.id} className="flex justify-between text-[11px] font-bold text-tally-teal">
+                 <span>{bank.name}</span>
+                 <span className="font-mono">{bank.openingBalance?.toLocaleString()} {bank.openingBalance >= 0 ? 'Dr' : 'Cr'}</span>
+              </div>
+            )) : (
+              <div className="text-[10px] italic text-gray-400">No bank accounts found for this branch</div>
+            )}
           </div>
         </div>
       </div>

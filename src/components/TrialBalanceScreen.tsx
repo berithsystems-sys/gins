@@ -3,9 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { FileText, Download, Printer } from 'lucide-react';
 import { exportToExcel, printReport } from '../lib/ReportUtils';
+import { useHotkeys } from '../hooks/useHotkeys';
 
 interface Ledger {
   id: string;
@@ -27,6 +28,11 @@ export default function TrialBalanceScreen({ branchId }: { branchId?: string }) 
   const [ledgers, setLedgers] = useState<Ledger[]>([]);
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [drillDownGroup, setDrillDownGroup] = useState<string | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [drillDownGroup]);
 
   useEffect(() => {
     const query = branchId ? `?branchId=${branchId}` : '';
@@ -55,23 +61,61 @@ export default function TrialBalanceScreen({ branchId }: { branchId?: string }) 
     return balance;
   };
 
-  const getGroups = () => {
+  const groupsData = useMemo(() => {
     const groups: Record<string, { dr: number; cr: number }> = {};
     ledgers.forEach(l => {
       const bal = calculateBalance(l.id);
       if (!groups[l.group]) groups[l.group] = { dr: 0, cr: 0 };
       if (bal > 0) groups[l.group].dr += bal;
-      else groups[l.group].cr += Math.abs(bal);
+      else if (bal < 0) groups[l.group].cr += Math.abs(bal);
     });
     return groups;
-  };
+  }, [ledgers, vouchers]);
 
-  const groups = getGroups();
-  const drTotal = Object.values(groups).reduce((acc, g) => acc + g.dr, 0);
-  const crTotal = Object.values(groups).reduce((acc, g) => acc + g.cr, 0);
+  const visibleItems = useMemo(() => {
+    if (!drillDownGroup) {
+      return Object.entries(groupsData).map(([name, totals]) => ({ type: 'GROUP', name, totals }));
+    } else {
+      return ledgers
+        .filter(l => l.group === drillDownGroup)
+        .map(l => {
+          const balance = calculateBalance(l.id);
+          return { type: 'LEDGER', name: l.name, balance, id: l.id };
+        })
+        .filter(item => item.balance !== 0);
+    }
+  }, [drillDownGroup, groupsData, ledgers, vouchers]);
+
+  useHotkeys('down', (e) => {
+    e.preventDefault();
+    setSelectedIndex(prev => Math.min(visibleItems.length - 1, prev + 1));
+  }, { enableOnFormTags: true }, [visibleItems]);
+
+  useHotkeys('up', (e) => {
+    e.preventDefault();
+    setSelectedIndex(prev => Math.max(0, prev - 1));
+  }, { enableOnFormTags: true }, [visibleItems]);
+
+  useHotkeys('enter', (e) => {
+    e.preventDefault();
+    const item = visibleItems[selectedIndex];
+    if (item?.type === 'GROUP') {
+      setDrillDownGroup(item.name);
+    }
+  }, { enableOnFormTags: true }, [visibleItems, selectedIndex]);
+
+  useHotkeys('esc', (e) => {
+    if (drillDownGroup) {
+      e.preventDefault();
+      setDrillDownGroup(null);
+    }
+  }, { enableOnFormTags: true }, [drillDownGroup]);
+
+  const drTotal = Object.values(groupsData).reduce((acc, g) => acc + g.dr, 0);
+  const crTotal = Object.values(groupsData).reduce((acc, g) => acc + g.cr, 0);
 
   const handleExport = () => {
-    const data = Object.entries(groups).map(([name, vals]) => ({
+    const data = Object.entries(groupsData).map(([name, vals]) => ({
       Group: name,
       Debit: vals.dr,
       Credit: vals.cr
@@ -116,35 +160,46 @@ export default function TrialBalanceScreen({ branchId }: { branchId?: string }) 
           <tbody className="divide-y divide-gray-100">
             {!drillDownGroup ? (
               // Group View
-              Object.entries(groups).map(([groupName, totals], idx) => (
-                <tr 
-                  key={groupName} 
-                  className="hover:bg-teal-50 cursor-pointer transition-colors group"
-                  onClick={() => setDrillDownGroup(groupName)}
-                >
-                  <td className="px-4 md:px-6 py-2 font-bold text-blue-900 group-hover:underline uppercase tracking-tight text-[11px]">
-                    {groupName}
-                  </td>
-                  <td className="px-4 md:px-6 py-2 text-right font-mono text-gray-700 group-hover:font-black">
-                    {totals.dr > 0 ? totals.dr.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}
-                  </td>
-                  <td className="px-4 md:px-6 py-2 text-right font-mono text-gray-700 group-hover:font-black">
-                    {totals.cr > 0 ? totals.cr.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}
-                  </td>
-                </tr>
-              ))
+              Object.entries(groupsData).map(([groupName, totals], idx) => {
+                const isSelected = selectedIndex === idx;
+                return (
+                  <tr 
+                    key={groupName} 
+                    className={`cursor-pointer transition-colors group ${isSelected ? 'bg-tally-accent' : 'hover:bg-teal-50'}`}
+                    onClick={() => {
+                      setSelectedIndex(idx);
+                      setDrillDownGroup(groupName);
+                    }}
+                  >
+                    <td className={`px-4 md:px-6 py-2 font-bold uppercase tracking-tight text-[11px] ${isSelected ? 'text-black' : 'text-blue-900 group-hover:underline'}`}>
+                      {groupName}
+                    </td>
+                    <td className={`px-4 md:px-6 py-2 text-right font-mono ${isSelected ? 'text-black font-black' : 'text-gray-700 group-hover:font-black'}`}>
+                      {totals.dr > 0 ? totals.dr.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}
+                    </td>
+                    <td className={`px-4 md:px-6 py-2 text-right font-mono ${isSelected ? 'text-black font-black' : 'text-gray-700 group-hover:font-black'}`}>
+                      {totals.cr > 0 ? totals.cr.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}
+                    </td>
+                  </tr>
+                );
+              })
             ) : (
               // Ledger View (Drill-down)
-              ledgers.filter(l => l.group === drillDownGroup).map(l => {
+              ledgers.filter(l => l.group === drillDownGroup).map((l, idx) => {
                 const balance = calculateBalance(l.id);
                 if (balance === 0) return null;
+                const isSelected = selectedIndex === idx;
                 return (
-                  <tr key={l.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 md:px-6 py-1.5 pl-8 italic text-gray-600">{l.name}</td>
-                    <td className="px-4 md:px-6 py-1.5 text-right font-mono text-gray-700">
+                  <tr 
+                    key={l.id} 
+                    className={`transition-colors cursor-pointer ${isSelected ? 'bg-tally-accent' : 'hover:bg-gray-50'}`}
+                    onClick={() => setSelectedIndex(idx)}
+                  >
+                    <td className={`px-4 md:px-6 py-1.5 pl-8 italic ${isSelected ? 'text-black font-bold' : 'text-gray-600'}`}>{l.name}</td>
+                    <td className={`px-4 md:px-6 py-1.5 text-right font-mono ${isSelected ? 'text-black font-bold' : 'text-gray-700'}`}>
                       {balance > 0 ? balance.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}
                     </td>
-                    <td className="px-4 md:px-6 py-1.5 text-right font-mono text-gray-700">
+                    <td className={`px-4 md:px-6 py-1.5 text-right font-mono ${isSelected ? 'text-black font-bold' : 'text-gray-700'}`}>
                       {balance < 0 ? Math.abs(balance).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}
                     </td>
                   </tr>

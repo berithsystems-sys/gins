@@ -14,113 +14,111 @@ interface Ratio {
 
 const COLORS = ['#20b2aa', '#ff6b6b', '#ffd93d'];
 
-export default function RatioAnalysisScreen({ onBack }: { onBack: () => void }) {
+export default function RatioAnalysisScreen({ onBack, branchId }: { onBack: () => void; branchId?: string }) {
   const [activeTab, setActiveTab] = useState<'liquidity' | 'profitability' | 'solvency' | 'efficiency'>('liquidity');
   const [timeRange, setTimeRange] = useState<'quarterly' | 'annual'>('annual');
+  const [ledgers, setLedgers] = useState<any[]>([]);
+  const [vouchers, setVouchers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Sample data for demonstration
+  useEffect(() => {
+    const query = branchId ? `?branchId=${branchId}` : '';
+    Promise.all([
+      fetch(`/api/ledgers${query}`).then(res => res.json()),
+      fetch(`/api/vouchers${query}`).then(res => res.json())
+    ]).then(([l, v]) => {
+      setLedgers(l);
+      setVouchers(v);
+      setLoading(false);
+    });
+  }, [branchId]);
+
+  const calculateBalance = (ledgerId: string) => {
+    const ledger = ledgers.find(l => l.id === ledgerId);
+    let balance = ledger?.openingBalance || 0;
+    vouchers.forEach(v => {
+      v.entries?.forEach((e: any) => {
+        if (e.ledgerId === ledgerId) {
+          if (e.type === 'Dr') balance += e.amount;
+          else balance -= e.amount;
+        }
+      });
+    });
+    return balance;
+  };
+
+  const getGroupTotal = (groupNames: string[]) => {
+    return ledgers
+      .filter(l => groupNames.includes(l.group) || groupNames.includes(l.group_name))
+      .reduce((acc, l) => acc + calculateBalance(l.id), 0);
+  };
+
+  const currentAssets = Math.abs(getGroupTotal(['Current Assets', 'Bank Accounts', 'Cash-in-hand']));
+  const currentLiabilities = Math.abs(getGroupTotal(['Current Liabilities', 'Duties & Taxes', 'Provisions']));
+  const fixedAssets = Math.abs(getGroupTotal(['Fixed Assets']));
+  const sales = Math.abs(getGroupTotal(['Sales Account', 'Direct Income']));
+  const directExpenses = Math.abs(getGroupTotal(['Direct Expenses', 'Purchase Account']));
+  const indirectExpenses = Math.abs(getGroupTotal(['Indirect Expenses']));
+  const indirectIncome = Math.abs(getGroupTotal(['Indirect Income']));
+
+  const grossProfit = sales - directExpenses;
+  const netProfit = grossProfit + indirectIncome - indirectExpenses;
+
+  const currentRatio = currentLiabilities !== 0 ? currentAssets / currentLiabilities : 0;
+  const quickRatio = currentLiabilities !== 0 ? (currentAssets * 0.8) / currentLiabilities : 0; // Simplified quick ratio
+  const debtToEquity = 0.5; // Placeholder for now
+
   const ratios = {
     liquidity: [
       {
         name: 'Current Ratio',
-        value: 2.5,
+        value: currentRatio,
         benchmark: 1.5,
-        status: 'good' as const,
+        status: currentRatio >= 1.5 ? 'good' : (currentRatio >= 1.0 ? 'average' : 'poor'),
         description: 'Current Assets / Current Liabilities'
       },
       {
         name: 'Quick Ratio',
-        value: 2.1,
+        value: quickRatio,
         benchmark: 1.0,
-        status: 'good' as const,
+        status: quickRatio >= 1.0 ? 'good' : (quickRatio >= 0.8 ? 'average' : 'poor'),
         description: '(Current Assets - Inventory) / Current Liabilities'
-      },
-      {
-        name: 'Cash Ratio',
-        value: 1.8,
-        benchmark: 0.5,
-        status: 'good' as const,
-        description: 'Cash & Equivalents / Current Liabilities'
       },
     ],
     profitability: [
       {
         name: 'Gross Profit Margin',
-        value: 45.5,
-        percentage: 45.5,
+        value: sales !== 0 ? (grossProfit / sales) * 100 : 0,
+        percentage: sales !== 0 ? (grossProfit / sales) * 100 : 0,
         benchmark: 40,
-        status: 'good' as const,
+        status: (sales !== 0 && (grossProfit / sales) * 100 >= 40) ? 'good' : 'average',
         description: 'Gross Profit / Revenue × 100'
       },
       {
         name: 'Net Profit Margin',
-        value: 18.3,
-        percentage: 18.3,
+        value: sales !== 0 ? (netProfit / sales) * 100 : 0,
+        percentage: sales !== 0 ? (netProfit / sales) * 100 : 0,
         benchmark: 15,
-        status: 'good' as const,
+        status: (sales !== 0 && (netProfit / sales) * 100 >= 15) ? 'good' : 'average',
         description: 'Net Profit / Revenue × 100'
-      },
-      {
-        name: 'Return on Assets (ROA)',
-        value: 12.5,
-        percentage: 12.5,
-        benchmark: 10,
-        status: 'good' as const,
-        description: 'Net Profit / Total Assets × 100'
-      },
-      {
-        name: 'Return on Equity (ROE)',
-        value: 22.8,
-        percentage: 22.8,
-        benchmark: 20,
-        status: 'good' as const,
-        description: 'Net Profit / Shareholders Equity × 100'
       },
     ],
     solvency: [
       {
         name: 'Debt-to-Equity Ratio',
-        value: 0.65,
+        value: debtToEquity,
         benchmark: 1.0,
-        status: 'good' as const,
+        status: 'good',
         description: 'Total Debt / Total Equity'
-      },
-      {
-        name: 'Debt Ratio',
-        value: 0.39,
-        benchmark: 0.5,
-        status: 'good' as const,
-        description: 'Total Debt / Total Assets'
-      },
-      {
-        name: 'Interest Coverage',
-        value: 8.5,
-        benchmark: 5,
-        status: 'good' as const,
-        description: 'EBIT / Interest Expense'
       },
     ],
     efficiency: [
       {
         name: 'Asset Turnover',
-        value: 1.85,
+        value: fixedAssets !== 0 ? sales / fixedAssets : 0,
         benchmark: 1.5,
-        status: 'good' as const,
-        description: 'Revenue / Average Total Assets'
-      },
-      {
-        name: 'Inventory Turnover',
-        value: 8.2,
-        benchmark: 7,
-        status: 'good' as const,
-        description: 'Cost of Goods Sold / Average Inventory'
-      },
-      {
-        name: 'Receivables Turnover',
-        value: 12.5,
-        benchmark: 10,
-        status: 'good' as const,
-        description: 'Revenue / Average Accounts Receivable'
+        status: 'average',
+        description: 'Revenue / Fixed Assets'
       },
     ],
   };
