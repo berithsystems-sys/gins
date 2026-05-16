@@ -11,7 +11,7 @@ import { db } from '../src/db.js';
 async function testConnection() {
   console.log('🔍 Testing Database Connection...\n');
   
-  const config = (db.client.config.connection as any);
+  const config = db.client.config.connection;
   
   console.log('📋 Connection Configuration:');
   console.log(`  • Client: ${db.client.config.client}`);
@@ -35,9 +35,9 @@ async function testConnection() {
       WHERE TABLE_SCHEMA = ?
     `, [config.database]);
     
-    const tableList = tables[0].map((t: any) => t.TABLE_NAME);
+    const tableList = tables[0].map((t) => t.TABLE_NAME);
     console.log(`Found ${tableList.length} tables:`);
-    tableList.forEach((t: string) => console.log(`  • ${t}`));
+    tableList.forEach((t) => console.log(`  • ${t}`));
     console.log();
 
     // Check for required tables
@@ -61,7 +61,7 @@ async function testConnection() {
           const userCount = await db('users').count('* as count').first();
           console.log(`   Users in database: ${userCount?.count || 0}`);
         }
-      } catch (e: any) {
+      } catch (e) {
         console.log(`⚠️  Could not query users table: ${e.message}`);
       }
     }
@@ -69,7 +69,7 @@ async function testConnection() {
     console.log('\n✅ Database connection is working!');
     process.exit(0);
     
-  } catch (err: any) {
+  } catch (err) {
     console.error('\n❌ Connection failed!');
     console.error(`Error: ${err.message}`);
     console.error(`Code: ${err.code}\n`);
