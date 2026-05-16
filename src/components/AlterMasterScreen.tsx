@@ -219,37 +219,47 @@ export default function AlterMasterScreen({ branchId, onSelectLedger }: AlterMas
               <div className="flex-grow overflow-auto">
                 {activeType === 'LEDGER' && (
                   <div className="space-y-0.5">
-                    {groupedLedgers.map(group => (
-                      <div key={group.id} className="border-b border-gray-50 last:border-0">
-                        <div 
-                          className="flex items-center justify-between py-1 px-4 bg-gray-50/50 cursor-pointer group"
-                          onClick={() => toggleGroup(group.id)}
-                        >
-                          <div className="flex items-center gap-2">
-                            {expandedGroups[group.id] ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                            <span className="text-[11px] font-black text-gray-500 uppercase">{group.name}</span>
-                          </div>
-                          <button onClick={(e) => { e.stopPropagation(); setEditingItem(group); setActiveType('GROUP'); }} className="opacity-0 group-hover:opacity-100 p-1 hover:text-tally-teal"><Edit2 className="w-3 h-3" /></button>
-                        </div>
-                        {expandedGroups[group.id] && (
-                          <div className="space-y-0.5">
-                            {group.ledgers.map((ledger: any) => (
-                              <div 
-                                key={ledger.id} 
-                                onClick={() => handleItemClick(ledger)}
-                                className="flex justify-between items-center py-1 px-8 hover:bg-tally-accent cursor-pointer group"
-                              >
-                                <span className="text-xs uppercase font-bold text-tally-teal">{ledger.name}</span>
-                                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100">
-                                   <button onClick={(e) => { e.stopPropagation(); setEditingItem(ledger); }} className="p-1 hover:text-tally-teal"><Edit2 className="w-3 h-3" /></button>
-                                   <button onClick={(e) => { e.stopPropagation(); handleDelete(ledger.id, 'LEDGER'); }} className="p-1 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
-                                </div>
+                    {getVisibleItems().map((item, idx) => {
+                      const isSelected = selectedIndex === idx;
+                      if (item.type === 'GROUP') {
+                        const group = item.data;
+                        return (
+                          <div key={group.id} className="border-b border-gray-50 last:border-0">
+                            <div 
+                              className={`flex items-center justify-between py-1 px-4 cursor-pointer group ${isSelected ? 'bg-tally-accent' : 'bg-gray-50/50'}`}
+                              onClick={() => {
+                                setSelectedIndex(idx);
+                                toggleGroup(group.id);
+                              }}
+                            >
+                              <div className="flex items-center gap-2">
+                                {expandedGroups[group.id] ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                <span className={`text-[11px] font-black uppercase ${isSelected ? 'text-black' : 'text-gray-500'}`}>{group.name}</span>
                               </div>
-                            ))}
+                              <button onClick={(e) => { e.stopPropagation(); setEditingItem(group); setActiveType('GROUP'); }} className="opacity-0 group-hover:opacity-100 p-1 hover:text-tally-teal"><Edit2 className="w-3 h-3" /></button>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    ))}
+                        );
+                      } else {
+                        const ledger = item.data;
+                        return (
+                          <div 
+                            key={ledger.id} 
+                            onClick={() => {
+                              setSelectedIndex(idx);
+                              handleItemClick(ledger);
+                            }}
+                            className={`flex justify-between items-center py-1 px-8 cursor-pointer group ${isSelected ? 'bg-tally-accent' : 'hover:bg-tally-accent/50'}`}
+                          >
+                            <span className={`text-xs uppercase font-bold ${isSelected ? 'text-black' : 'text-tally-teal'}`}>{ledger.name}</span>
+                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100">
+                               <button onClick={(e) => { e.stopPropagation(); setEditingItem(ledger); }} className="p-1 hover:text-tally-teal"><Edit2 className="w-3 h-3" /></button>
+                               <button onClick={(e) => { e.stopPropagation(); handleDelete(ledger.id, 'LEDGER'); }} className="p-1 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+                            </div>
+                          </div>
+                        );
+                      }
+                    })}
                   </div>
                 )}
                 {/* Simplified rendering for other types */}

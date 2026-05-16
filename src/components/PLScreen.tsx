@@ -38,7 +38,7 @@ export default function PLScreen({ branchId }: { branchId?: string }) {
   };
 
   const getGroupTotal = (groupName: string) => {
-    const relevantLedgers = ledgers.filter(l => l.group === groupName);
+    const relevantLedgers = ledgers.filter(l => l.group === groupName || l.group_name === groupName);
     return relevantLedgers.reduce((acc, l) => acc + calculateBalance(l.id), 0);
   };
 
@@ -77,7 +77,7 @@ export default function PLScreen({ branchId }: { branchId?: string }) {
                   </div>
                   {isExpanded && (
                     <div className="pl-6 mb-2 space-y-1 animate-in slide-in-from-top-2 duration-200">
-                       {ledgers.filter(l => l.group === s.name).map(l => {
+                       {ledgers.filter(l => l.group === s.name || l.group_name === s.name).map(l => {
                           const bal = calculateBalance(l.id);
                           if (bal === 0) return null;
                           return (

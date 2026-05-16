@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
+import { useHotkeys } from '../hooks/useHotkeys';
 
 interface ChartOfAccountsScreenProps {
   branchId?: string;
@@ -10,6 +11,7 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -33,42 +35,91 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
     setExpandedGroups(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const renderTree = (parentId: string | null = null, level = 0) => {
+  const visibleItems = useMemo(() => {
+    const items: any[] = [];
+    const traverse = (parentId: string | null = null) => {
+      const currentGroups = groups.filter(g => g.parent_id === parentId || (!parentId && !g.parent_id));
+      currentGroups.forEach(group => {
+        items.push({ type: 'GROUP', id: group.id, data: group });
+        if (expandedGroups[group.id]) {
+          traverse(group.id);
+          const groupLedgers = ledgers.filter(l => l.group_id === group.id || l.group_name === group.name);
+          groupLedgers.forEach(l => items.push({ type: 'LEDGER', id: l.id, data: l }));
+        }
+      });
+    };
+    traverse();
+    return items;
+  }, [groups, ledgers, expandedGroups]);
+
+  useHotkeys('down', (e) => {
+    e.preventDefault();
+    setSelectedIndex(prev => Math.min(visibleItems.length - 1, prev + 1));
+  }, { enableOnFormTags: true }, [visibleItems]);
+
+  useHotkeys('up', (e) => {
+    e.preventDefault();
+    setSelectedIndex(prev => Math.max(0, prev - 1));
+  }, { enableOnFormTags: true }, [visibleItems]);
+
+  useHotkeys('enter', (e) => {
+    e.preventDefault();
+    const item = visibleItems[selectedIndex];
+    if (item?.type === 'GROUP') {
+      toggleGroup(item.id);
+    }
+  }, { enableOnFormTags: true }, [visibleItems, selectedIndex, expandedGroups]);
+
+  const renderTree = (parentId: string | null = null, level = 0, startIndex = 0) => {
     const currentGroups = groups.filter(g => g.parent_id === parentId || (!parentId && !g.parent_id));
-    
+    let globalIdx = startIndex;
+
     return currentGroups.map(group => {
       const isExpanded = expandedGroups[group.id];
       const childGroups = groups.filter(g => g.parent_id === group.id);
       const groupLedgers = ledgers.filter(l => l.group_id === group.id || l.group_name === group.name);
       
+      const isSelected = visibleItems[selectedIndex]?.id === group.id && visibleItems[selectedIndex]?.type === 'GROUP';
+      
       return (
         <div key={group.id} className="select-none">
           <div 
-            onClick={() => toggleGroup(group.id)}
-            className="flex items-center gap-2 py-1 px-2 hover:bg-tally-accent cursor-pointer group"
+            onClick={() => {
+              const idx = visibleItems.findIndex(v => v.id === group.id && v.type === 'GROUP');
+              setSelectedIndex(idx);
+              toggleGroup(group.id);
+            }}
+            className={`flex items-center gap-2 py-1 px-2 cursor-pointer group ${isSelected ? 'bg-tally-accent' : 'hover:bg-tally-accent/30'}`}
             style={{ paddingLeft: `${level * 20 + 8}px` }}
           >
             { (childGroups.length > 0 || groupLedgers.length > 0) ? (
               isExpanded ? <ChevronDown className="w-3 h-3 text-tally-teal" /> : <ChevronRight className="w-3 h-3 text-tally-teal" />
             ) : <div className="w-3" /> }
-            <span className="text-xs font-bold uppercase text-tally-teal">{group.name}</span>
+            <span className={`text-xs font-bold uppercase ${isSelected ? 'text-black' : 'text-tally-teal'}`}>{group.name}</span>
             <span className="text-[9px] text-gray-400 italic opacity-0 group-hover:opacity-100">(Group)</span>
           </div>
           
           {isExpanded && (
             <>
               {renderTree(group.id, level + 1)}
-              {groupLedgers.map(ledger => (
-                <div 
-                  key={ledger.id}
-                  className="flex items-center gap-2 py-0.5 px-2 hover:bg-tally-accent cursor-pointer group"
-                  style={{ paddingLeft: `${(level + 1) * 20 + 8}px` }}
-                >
-                  <FileText className="w-3 h-3 text-gray-400" />
-                  <span className="text-xs text-gray-700 uppercase">{ledger.name}</span>
-                  <span className="text-[9px] text-gray-400 italic opacity-0 group-hover:opacity-100">(Ledger)</span>
-                </div>
-              ))}
+              {groupLedgers.map(ledger => {
+                const isLedgerSelected = visibleItems[selectedIndex]?.id === ledger.id && visibleItems[selectedIndex]?.type === 'LEDGER';
+                return (
+                  <div 
+                    key={ledger.id}
+                    onClick={() => {
+                      const idx = visibleItems.findIndex(v => v.id === ledger.id && v.type === 'LEDGER');
+                      setSelectedIndex(idx);
+                    }}
+                    className={`flex items-center gap-2 py-0.5 px-2 cursor-pointer group ${isLedgerSelected ? 'bg-tally-accent' : 'hover:bg-tally-accent/30'}`}
+                    style={{ paddingLeft: `${(level + 1) * 20 + 8}px` }}
+                  >
+                    <FileText className={`w-3 h-3 ${isLedgerSelected ? 'text-black' : 'text-gray-400'}`} />
+                    <span className={`text-xs uppercase ${isLedgerSelected ? 'text-black font-bold' : 'text-gray-700'}`}>{ledger.name}</span>
+                    <span className="text-[9px] text-gray-400 italic opacity-0 group-hover:opacity-100">(Ledger)</span>
+                  </div>
+                );
+              })}
             </>
           )}
         </div>

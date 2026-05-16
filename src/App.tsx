@@ -156,10 +156,67 @@ export default function App() {
     setCurrentScreen('GOTO');
     setGotoSearch('');
     setGotoHighlightedIdx(0);
+    // Focus the search input after a short delay
+    setTimeout(() => {
+      const input = document.getElementById('goto-search-input');
+      if (input) input.focus();
+    }, 50);
   });
 
   const handleGotoSelect = (item: any) => {
     setCurrentScreen(item.id);
+  };
+
+  const renderGoTo = () => {
+    const filtered = getFilteredGotoOptions();
+    return (
+      <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <motion.div 
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          className="w-[400px] bg-white border-4 border-tally-teal shadow-2xl overflow-hidden"
+        >
+          <div className="bg-tally-teal text-white px-4 py-1 text-[10px] font-bold uppercase flex justify-between items-center">
+            <span>Go To / Switch To</span>
+            <button onClick={() => setCurrentScreen('GATEWAY')} className="hover:text-red-200">ESC: Close</button>
+          </div>
+          <div className="p-2 space-y-1">
+            <input 
+              id="goto-search-input"
+              autoFocus 
+              type="text" 
+              placeholder="Type name of report up here..." 
+              className="w-full border-b-2 border-tally-teal p-2 text-sm outline-none bg-blue-50/50 uppercase font-bold" 
+              value={gotoSearch}
+              onChange={(e) => {
+                setGotoSearch(e.target.value);
+                setGotoHighlightedIdx(0);
+              }}
+            />
+            <div className="max-h-[300px] overflow-y-auto">
+              {filtered.length > 0 ? filtered.map((item, idx) => (
+                <div 
+                  key={item.id} 
+                  className={`px-4 py-2 cursor-pointer text-xs font-bold border-b border-gray-50 flex justify-between group transition-colors ${
+                    gotoHighlightedIdx === idx ? 'bg-tally-accent text-black' : 'hover:bg-tally-teal hover:text-white'
+                  }`}
+                  onMouseEnter={() => setGotoHighlightedIdx(idx)}
+                  onClick={() => {
+                    handleGotoSelect(item);
+                  }}
+                >
+                  <span>{item.label}</span>
+                  <span className="text-[10px] text-gray-300 group-hover:text-white/50 opacity-0 group-hover:opacity-100 italic">Select</span>
+                </div>
+              )) : (
+                <div className="p-4 text-center text-xs italic text-gray-400 uppercase">No matching reports found</div>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
   };
 
   useHotkeys('up', (e) => {
@@ -221,8 +278,6 @@ export default function App() {
     }
 
     if (currentScreen === 'GATEWAY') {
-      // Do nothing on ESC in Gateway to stay in the same company as requested
-      // In Tally this would normally prompt "Quit? Yes/No"
       return;
     }
 
@@ -372,46 +427,7 @@ export default function App() {
           </div>
         )}
 
-        {currentScreen === 'GOTO' && (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[110]">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-[400px] border-4 border-tally-teal shadow-2xl overflow-hidden">
-              <div className="bg-tally-teal text-white px-4 py-1 text-[10px] font-bold uppercase flex justify-between items-center">
-                 <span>Go To / Switch To</span>
-                 <button onClick={() => setCurrentScreen('GATEWAY')} className="hover:text-red-200">ESC: Close</button>
-              </div>
-              <div className="p-2 space-y-1">
-                 <input 
-                   autoFocus 
-                   type="text" 
-                   placeholder="Type name of report up here..." 
-                   className="w-full border-b-2 border-tally-teal p-2 text-sm outline-none bg-blue-50/50" 
-                   value={gotoSearch}
-                   onChange={(e) => {
-                     setGotoSearch(e.target.value);
-                     setGotoHighlightedIdx(0);
-                   }}
-                 />
-                 <div className="max-h-[300px] overflow-y-auto">
-                    {getFilteredGotoOptions().map((item, idx) => (
-                      <div 
-                        key={item} 
-                        className={`px-4 py-2 cursor-pointer text-xs font-bold border-b border-gray-50 flex justify-between group transition-colors ${
-                          gotoHighlightedIdx === idx ? 'bg-tally-accent text-black' : 'hover:bg-tally-teal hover:text-white'
-                        }`}
-                        onMouseEnter={() => setGotoHighlightedIdx(idx)}
-                        onClick={() => {
-                          handleGotoSelect(item);
-                        }}
-                      >
-                         <span>{item}</span>
-                         <span className="text-[10px] text-gray-300 group-hover:text-white/50 opacity-0 group-hover:opacity-100 italic">Select</span>
-                      </div>
-                    ))}
-                 </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
+        {currentScreen === 'GOTO' && renderGoTo()}
       </AnimatePresence>
 
       {/* Top Header Bar */}
