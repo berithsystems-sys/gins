@@ -22,6 +22,9 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
   const [date, setDate] = useState(initialDate || '2026-05-12');
   const [narration, setNarration] = useState('');
   const [entries, setEntries] = useState([{ ledgerId: '', costCentreId: '', amount: '', type: (initialType === 'Receipt' ? 'Cr' : 'Dr') as 'Dr' | 'Cr', tempSearch: '', methodAdjustment: 'On Account', refNo: '' }]);
+  const [accountLedgerId, setAccountLedgerId] = useState('');
+  const [accountSearch, setAccountSearch] = useState('');
+  const [showAccountDropdown, setShowAccountDropdown] = useState(false);
 
   useEffect(() => {
     if (initialType) {
@@ -35,22 +38,12 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
     }
   }, [initialType]);
 
-  const handleSelectLedger = (idx: number, ledger: Ledger) => {
-    const newEntries = [...entries];
-    newEntries[idx].ledgerId = ledger.id;
-    newEntries[idx].tempSearch = ledger.name;
-    
-    // Set default Dr/Cr for subsequent entries based on balance
-    if (idx > 0) {
-      const drTotal = newEntries.slice(0, idx).filter(e => e.type === 'Dr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
-      const crTotal = newEntries.slice(0, idx).filter(e => e.type === 'Cr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
-      const diff = drTotal - crTotal;
-      if (diff > 0) newEntries[idx].type = 'Cr';
-      else if (diff < 0) newEntries[idx].type = 'Dr';
-    }
-    
-    setEntries(newEntries);
-    setActiveDropdownIdx(null);
+  const handleSelectAccount = (ledger: Ledger) => {
+    setAccountLedgerId(ledger.id);
+    setAccountSearch(ledger.name);
+    setShowAccountDropdown(false);
+    // Focus first particulars field
+    setTimeout(() => document.getElementById('ledger-0')?.focus(), 10);
   };
 
   const handleAddEntry = () => {
@@ -81,6 +74,28 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
   const [highlightedIdx, setHighlightedIdx] = useState(0);
   const [focusedField, setFocusedField] = useState<{ idx: number, field: 'ledger' | 'amount' } | null>(null);
 
+  useEffect(() => {
+    if (initialDate) setDate(initialDate);
+  }, [initialDate]);
+
+  useEffect(() => {
+    const query = branchId ? `?branchId=${branchId}` : '';
+    fetch(`api/ledgers${query}`).then(res => res.json()).then(data => {
+      setLedgers(data);
+      const balances: Record<string, number> = {};
+      data.forEach((l: any) => {
+        balances[l.id] = l.openingBalance * (l.balanceType === 'Cr' ? -1 : 1);
+      });
+      setLedgerBalances(balances);
+    });
+    fetch(`api/cost-centres${query}`).then(res => res.json()).then(setCostCentres);
+  }, [branchId]);
+
+  const getFilteredLedgers = (searchTerm: string) => {
+    const search = searchTerm?.toLowerCase() || '';
+    return ledgers.filter(l => l.name.toLowerCase().includes(search));
+  };
+
   const handleSelectLedger = (idx: number, ledger: Ledger) => {
     const newEntries = [...entries];
     newEntries[idx].ledgerId = ledger.id;
@@ -105,46 +120,50 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
     }, 10);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent, entryIdx: number, field: 'ledger' | 'amount') => {
-    const filtered = getFilteredLedgers(entries[entryIdx].tempSearch || '');
+  const handleKeyDown = (e: React.KeyboardEvent, entryIdx: number, field: 'ledger' | 'amount' | 'account') => {
+    const searchTerm = field === 'account' ? accountSearch : entries[entryIdx].tempSearch;
+    const filtered = getFilteredLedgers(searchTerm || '');
     
     if (e.key === 'ArrowDown') {
-      if (field === 'ledger' && activeDropdownIdx !== null) {
+      if ((field === 'ledger' && activeDropdownIdx !== null) || (field === 'account' && showAccountDropdown)) {
         e.preventDefault();
         setHighlightedIdx(prev => Math.min(filtered.length - 1, prev + 1));
       }
     } else if (e.key === 'ArrowUp') {
-      if (field === 'ledger' && activeDropdownIdx !== null) {
+      if ((field === 'ledger' && activeDropdownIdx !== null) || (field === 'account' && showAccountDropdown)) {
         e.preventDefault();
         setHighlightedIdx(prev => Math.max(0, prev - 1));
       }
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (field === 'ledger') {
+      if (field === 'account') {
+        if (showAccountDropdown && filtered.length > 0) {
+          handleSelectAccount(filtered[highlightedIdx]);
+        } else if (accountLedgerId) {
+          document.getElementById('ledger-0')?.focus();
+        }
+      } else if (field === 'ledger') {
         if (activeDropdownIdx !== null && filtered.length > 0) {
           const selected = filtered[highlightedIdx];
           if (selected) handleSelectLedger(entryIdx, selected);
         } else if (entries[entryIdx].ledgerId) {
-          // Already have a ledger, move to amount
           document.getElementById(`amount-${entryIdx}`)?.focus();
         } else if (!entries[entryIdx].tempSearch && entryIdx === entries.length - 1) {
-          // Empty enter on last line particulars -> Accept/Save
           handleSubmit();
         }
       } else if (field === 'amount') {
         if (entryIdx === entries.length - 1) {
-          // Last line amount enter -> Add new line
           handleAddEntry();
           setTimeout(() => {
             document.getElementById(`ledger-${entryIdx + 1}`)?.focus();
-          }, 10);
+          }, 50);
         } else {
-          // Move to next line ledger
           document.getElementById(`ledger-${entryIdx + 1}`)?.focus();
         }
       }
     } else if (e.key === 'Escape') {
       setActiveDropdownIdx(null);
+      setShowAccountDropdown(false);
     }
   };
 
@@ -165,28 +184,6 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
       setEntries([{ ledgerId: '', costCentreId: '', amount: '', type: (type === 'Receipt' ? 'Cr' : 'Dr'), tempSearch: '', methodAdjustment: 'On Account', refNo: '' }]);
       setNarration('');
     }
-  };
-
-  useEffect(() => {
-    if (initialDate) setDate(initialDate);
-  }, [initialDate]);
-
-  useEffect(() => {
-    const query = branchId ? `?branchId=${branchId}` : '';
-    fetch(`api/ledgers${query}`).then(res => res.json()).then(data => {
-      setLedgers(data);
-      const balances: Record<string, number> = {};
-      data.forEach((l: any) => {
-        balances[l.id] = l.openingBalance * (l.balanceType === 'Cr' ? -1 : 1);
-      });
-      setLedgerBalances(balances);
-    });
-    fetch(`api/cost-centres${query}`).then(res => res.json()).then(setCostCentres);
-  }, [branchId]);
-
-  const getFilteredLedgers = (searchTerm: string) => {
-    const search = searchTerm?.toLowerCase() || '';
-    return ledgers.filter(l => l.name.toLowerCase().includes(search));
   };
 
   const [showConfig, setShowConfig] = useState(false);
@@ -211,26 +208,65 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
       return;
     }
 
-    // AUTO-BALANCE LOGIC: If only one side is entered, balance it automatically
-    // This allows saving a voucher with just one Dr or one Cr entry
-    const finalEntries = [...entries];
-    if (drTotal > 0 && crTotal === 0 && type !== 'Journal') {
-       alert(`Auto-Balancing: Adding Credit of ₹${drTotal} to balance the voucher.`);
-       crTotal = drTotal;
-    } else if (crTotal > 0 && drTotal === 0 && type !== 'Journal') {
-       alert(`Auto-Balancing: Adding Debit of ₹${crTotal} to balance the voucher.`);
-       drTotal = crTotal;
-    }
-
-    if (Math.abs(drTotal - crTotal) > 0.01) {
-      alert(`Validation Error: Debit (₹${drTotal}) and Credit (₹${crTotal}) do not match!`);
+    // Account field validation for Single Entry
+    if (config.singleEntry && !accountLedgerId) {
+      alert('Validation Error: Please select an Account (Cash/Bank).');
       return;
     }
 
-    // Clean up empty lines before submission
-    const submitEntries = finalEntries.filter(e => e.ledgerId && e.amount);
+    let finalSubmitEntries: any[] = [];
 
-    if (submitEntries.length === 0) {
+    if (config.singleEntry) {
+      // In single entry mode, the 'Account' is one side and 'Particulars' are the other
+      const side = (type === 'Receipt' ? 'Dr' : 'Cr');
+      
+      finalSubmitEntries = entries.filter(e => e.ledgerId && e.amount).map(e => ({
+        ledgerId: e.ledgerId,
+        costCentreId: e.costCentreId || null,
+        amount: Number(e.amount),
+        type: e.type,
+        methodAdjustment: e.methodAdjustment,
+        refNo: e.refNo
+      }));
+
+      // Add the balancing account entry
+      finalSubmitEntries.push({
+        ledgerId: accountLedgerId,
+        costCentreId: null,
+        amount: (type === 'Receipt' ? crTotal : drTotal),
+        type: side,
+        methodAdjustment: 'On Account',
+        refNo: ''
+      });
+
+      drTotal = (type === 'Receipt' ? crTotal : drTotal);
+      crTotal = drTotal;
+    } else {
+      // AUTO-BALANCE LOGIC (Multi-entry)
+      if (drTotal > 0 && crTotal === 0 && type !== 'Journal') {
+         alert(`Auto-Balancing: Adding Credit of ₹${drTotal} to balance the voucher.`);
+         crTotal = drTotal;
+      } else if (crTotal > 0 && drTotal === 0 && type !== 'Journal') {
+         alert(`Auto-Balancing: Adding Debit of ₹${crTotal} to balance the voucher.`);
+         drTotal = crTotal;
+      }
+
+      if (Math.abs(drTotal - crTotal) > 0.01) {
+        alert(`Validation Error: Debit (₹${drTotal}) and Credit (₹${crTotal}) do not match!`);
+        return;
+      }
+
+      finalSubmitEntries = entries.filter(e => e.ledgerId && e.amount).map(e => ({
+        ledgerId: e.ledgerId,
+        costCentreId: e.costCentreId || null,
+        amount: Number(e.amount),
+        type: e.type,
+        methodAdjustment: e.methodAdjustment,
+        refNo: e.refNo
+      }));
+    }
+
+    if (finalSubmitEntries.length === 0) {
       alert('Validation Error: No valid entries to save.');
       return;
     }
@@ -242,21 +278,14 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
         narration, 
         amount: drTotal,
         branchId: branchId || 'HQ', 
-        entries: submitEntries.map(e => ({ 
-          ledgerId: e.ledgerId,
-          costCentreId: e.costCentreId || null,
-          amount: Number(e.amount),
-          type: e.type,
-          methodAdjustment: e.methodAdjustment,
-          refNo: e.refNo
-        }))
+        entries: finalSubmitEntries
       };
 
       console.log('SENDING PAYLOAD:', payload);
 
       const response = await fetch('api/vouchers', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
@@ -284,6 +313,8 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
           methodAdjustment: 'On Account', 
           refNo: '' 
         }]);
+        setAccountLedgerId('');
+        setAccountSearch('');
         setNarration('');
       } else {
         alert(`SERVER ERROR: ${result.error || 'Unknown error'}`);
@@ -317,7 +348,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
   return (
     <div className="flex flex-col h-full bg-tally-bg">
       {/* Header Info */}
-      <div className="flex justify-between items-start bg-tally-light p-2 tally-border tally-shadow mb-4">
+      <div className="flex justify-between items-start bg-tally-light p-2 tally-border tally-shadow mb-2">
         <div className="flex flex-col">
           <span className="text-red-700 font-bold text-sm uppercase">{type} Voucher</span>
           <span className="text-[10px] font-bold text-gray-500 uppercase">No. {entries.length}</span>
@@ -332,6 +363,58 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
           />
         </div>
       </div>
+
+      {/* Account Field (Single Entry Mode) */}
+      {config.singleEntry && type !== 'Journal' && (
+        <div className="px-4 py-2 bg-white tally-border tally-shadow mb-2">
+          <div className="flex items-center gap-4">
+            <label className="text-xs font-bold uppercase w-20">Account</label>
+            <div className="relative flex-grow max-w-md">
+              <div className="flex flex-col">
+                <input 
+                  id="account-field"
+                  type="text"
+                  value={accountSearch || ledgers.find(l => l.id === accountLedgerId)?.name || ''}
+                  onChange={(e) => {
+                    setAccountSearch(e.target.value);
+                    setAccountLedgerId('');
+                    setShowAccountDropdown(true);
+                  }}
+                  onFocus={() => setShowAccountDropdown(true)}
+                  onKeyDown={(e) => handleKeyDown(e, 0, 'account')}
+                  className="w-full border-b border-tally-teal focus:outline-none font-bold uppercase text-sm"
+                  placeholder="Select Cash/Bank Account..."
+                />
+                {accountLedgerId && (
+                  <div className="text-[10px] italic text-gray-500">
+                    Current balance: {Math.abs(ledgerBalances[accountLedgerId] || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {ledgerBalances[accountLedgerId] >= 0 ? 'Dr' : 'Cr'}
+                  </div>
+                )}
+              </div>
+              {showAccountDropdown && (
+                <div className="absolute z-[110] left-0 mt-1 w-full bg-white border-2 border-tally-teal shadow-2xl max-h-60 overflow-y-auto">
+                  <div className="bg-tally-teal text-white text-[10px] px-2 py-0.5 font-bold flex justify-between">
+                    <span>List of Cash/Bank Accounts</span>
+                    <span>Balance</span>
+                  </div>
+                  {getFilteredLedgers(accountSearch).filter(l => l.name.toLowerCase().includes('cash') || l.name.toLowerCase().includes('bank')).map((l, lIdx) => (
+                    <div 
+                      key={l.id} 
+                      onMouseDown={() => handleSelectAccount(l)}
+                      className={`px-2 py-1 text-xs font-bold border-b border-gray-50 cursor-pointer flex justify-between uppercase ${highlightedIdx === lIdx ? 'bg-tally-accent text-black' : 'hover:bg-gray-100'}`}
+                    >
+                       <span>{l.name}</span>
+                       <span className="text-[10px] opacity-60 font-mono">
+                         {Math.abs(ledgerBalances[l.id] || 0).toLocaleString()} {ledgerBalances[l.id] >= 0 ? 'Dr' : 'Cr'}
+                       </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Entry Table */}
       <div className="flex-grow bg-white tally-border tally-shadow overflow-hidden flex flex-col relative">
@@ -639,7 +722,8 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
           { label: 'F7:Journal', action: () => handleTypeChange('Journal') },
           { label: 'F8:Sales', action: () => handleTypeChange('Sales') },
           { label: 'F9:Purchase', action: () => handleTypeChange('Purchase') },
-          { label: 'F12:Config' }
+          { label: 'H: Single Entry', action: () => setConfig(prev => ({ ...prev, singleEntry: !prev.singleEntry })) },
+          { label: 'F12:Config', action: () => setShowConfig(true) }
         ].map((btn) => (
           <div 
             key={btn.label} 
