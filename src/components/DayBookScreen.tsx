@@ -22,7 +22,10 @@ export default function DayBookScreen({ branchId, initialDate }: { branchId?: st
   const [loading, setLoading] = useState(true);
   const [displayDate, setDisplayDate] = useState(initialDate || new Date().toISOString().split('T')[0]);
 
-  useEffect(() => {
+  const [selectedVoucherId, setSelectedVoucherId] = useState<string | null>(null);
+
+  const fetchData = () => {
+    setLoading(true);
     fetch(`/api/vouchers${branchId ? `?branchId=${branchId}` : ''}`)
       .then(res => res.json())
       .then(data => {
@@ -33,7 +36,31 @@ export default function DayBookScreen({ branchId, initialDate }: { branchId?: st
         setVouchers(filtered);
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    fetchData();
   }, [branchId, initialDate]);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('VOID VOUCHER: Are you sure you want to delete this transaction? This cannot be undone.')) return;
+    try {
+      const res = await fetch(`api/vouchers/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        alert('Voucher Voided Successfully');
+        fetchData();
+      } else {
+        alert('Failed to void voucher');
+      }
+    } catch (err) {
+      alert('Network error');
+    }
+  };
+
+  if (selectedVoucherId) {
+    // We would need a way to pass the voucher to VoucherScreen for editing
+    // For now, let's keep it simple and just show the list
+  }
 
   const handleExport = () => {
     const data = vouchers.map(v => ({
@@ -53,15 +80,15 @@ export default function DayBookScreen({ branchId, initialDate }: { branchId?: st
       {/* Report Header */}
       <div className="bg-tally-sidebar text-white px-4 py-1 font-bold text-xs uppercase flex justify-between sticky top-0 z-10">
         <span>Day Book</span>
-        <span className="text-tally-accent">Company Name</span>
+        <span className="text-tally-accent">Transaction List</span>
       </div>
 
       <div className="flex-grow p-4 overflow-auto">
         <div className="max-w-6xl mx-auto bg-white tally-border tally-shadow min-h-[500px]">
           <div className="text-center py-4 border-b border-gray-200">
-            <h1 className="text-lg font-bold uppercase">Company Name</h1>
-            <p className="text-xs font-bold italic">Day Book</p>
-            <p className="text-[10px]">1-Apr-26 to 31-Mar-27</p>
+            <h1 className="text-lg font-bold uppercase">Day Book</h1>
+            <p className="text-xs font-bold italic">List of All Vouchers</p>
+            <p className="text-[10px]">{initialDate || 'All Dates'}</p>
           </div>
 
           <table className="w-full text-xs">
@@ -72,20 +99,29 @@ export default function DayBookScreen({ branchId, initialDate }: { branchId?: st
                 <th className="px-4 py-1 text-left w-32">Vch Type</th>
                 <th className="px-4 py-1 text-center w-24">Vch No.</th>
                 <th className="px-4 py-1 text-right w-40">Amount</th>
+                <th className="px-4 py-1 text-center w-24">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} className="p-8 text-center italic text-gray-400">Loading vouchers...</td></tr>
+                <tr><td colSpan={6} className="p-8 text-center italic text-gray-400">Loading vouchers...</td></tr>
               ) : vouchers.length === 0 ? (
-                <tr><td colSpan={5} className="p-8 text-center italic text-gray-400">No vouchers found</td></tr>
+                <tr><td colSpan={6} className="p-8 text-center italic text-gray-400">No vouchers found</td></tr>
               ) : vouchers.map((v, idx) => (
-                <tr key={v.id} className="hover:bg-tally-accent cursor-pointer border-b border-gray-50">
-                  <td className="px-4 py-0.5">{format(new Date(v.date), 'dd-MMM-yy')}</td>
-                  <td className="px-4 py-0.5 font-bold">{v.narration || '(Blank)'}</td>
-                  <td className="px-4 py-0.5 italic">{v.type}</td>
-                  <td className="px-4 py-0.5 text-center">{v.number || idx + 1}</td>
-                  <td className="px-4 py-0.5 text-right font-bold">{v.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <tr key={v.id} className="hover:bg-tally-accent cursor-pointer border-b border-gray-50 group">
+                  <td className="px-4 py-0.5" onClick={() => setSelectedVoucherId(v.id)}>{format(new Date(v.date), 'dd-MMM-yy')}</td>
+                  <td className="px-4 py-0.5 font-bold" onClick={() => setSelectedVoucherId(v.id)}>{v.narration || '(Blank)'}</td>
+                  <td className="px-4 py-0.5 italic" onClick={() => setSelectedVoucherId(v.id)}>{v.type}</td>
+                  <td className="px-4 py-0.5 text-center" onClick={() => setSelectedVoucherId(v.id)}>{v.number || idx + 1}</td>
+                  <td className="px-4 py-0.5 text-right font-bold" onClick={() => setSelectedVoucherId(v.id)}>{v.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td className="px-4 py-0.5 text-center">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleDelete(v.id); }}
+                      className="text-red-500 hover:text-red-700 font-bold uppercase text-[9px] opacity-0 group-hover:opacity-100"
+                    >
+                      Void
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -95,6 +131,7 @@ export default function DayBookScreen({ branchId, initialDate }: { branchId?: st
                 <td className="px-4 py-1 text-right font-bold text-xs border-t-2 border-double border-tally-teal">
                   ₹ {totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
+                <td></td>
               </tr>
             </tfoot>
           </table>

@@ -25,6 +25,8 @@ export default function LedgerScreen({ branchId }: { branchId?: string }) {
       });
   }, [branchId]);
 
+  const [methodAdjustment, setMethodAdjustment] = useState('On Account');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const response = await fetch('api/ledgers', {
@@ -40,7 +42,8 @@ export default function LedgerScreen({ branchId }: { branchId?: string }) {
         gstin,
         email,
         pan,
-        branchId 
+        branchId,
+        methodAdjustment
       }),
     });
     if (response.ok) {
@@ -91,6 +94,20 @@ export default function LedgerScreen({ branchId }: { branchId?: string }) {
                 >
                   <option value="">Primary</option>
                   {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </select>
+              </div>
+
+              <div className="pt-4">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Method of Adjustment</label>
+                <select 
+                  value={methodAdjustment}
+                  onChange={(e) => setMethodAdjustment(e.target.value)}
+                  className="w-full border-b-2 border-tally-teal focus:bg-tally-accent/10 p-1 font-bold text-sm outline-none"
+                >
+                  <option>Advance</option>
+                  <option>Against Ref</option>
+                  <option>New Ref</option>
+                  <option>On Account</option>
                 </select>
               </div>
             </div>

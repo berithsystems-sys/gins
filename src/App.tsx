@@ -84,7 +84,10 @@ const GATEWAY_MENU = [
 ];
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('tally_user');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'HQ' | 'ANALYTICS' | 'AUDIT' | 'BANKING' | 'PAYROLL' | 'DAYBOOK' | 'COMPANY' | 'DATA' | 'EXCHANGE' | 'GOTO' | 'IMPORT' | 'EXPORT' | 'PRINT' | 'EMAIL' | 'SETTINGS' | 'ALTER' | 'BALANCE_SHEET' | 'PL_ACCOUNT' | 'RATIO' | 'CHART' | 'ADMIN' | 'TRIAL_BALANCE' | 'CASH_BANK_BOOK' | 'LEDGER_DETAIL'>('GATEWAY');
   const [voucherType, setVoucherType] = useState('Payment');
   const [selectedBranchId, setSelectedBranchId] = useState<string | undefined>(undefined);

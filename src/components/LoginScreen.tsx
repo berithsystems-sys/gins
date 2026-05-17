@@ -33,6 +33,8 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Login failed');
       
+      // Store in local storage for faster subsequent loads (PWA optimization)
+      localStorage.setItem('tally_user', JSON.stringify(data));
       onLogin(data);
     } catch (err: any) {
       setError(err.message);

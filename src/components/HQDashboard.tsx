@@ -16,8 +16,17 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
   const [showAdd, setShowAdd] = useState(false);
   const [newBranch, setNewBranch] = useState({ name: '', code: '', location: '', email: '', password: '' });
 
+  const [globalBalance, setGlobalBalance] = useState(0);
+
   useEffect(() => {
     fetch('api/branches').then(res => res.json()).then(data => setBranches(data));
+    fetch('api/ledgers').then(res => res.json()).then(ledgers => {
+      const total = ledgers.reduce((acc: number, l: any) => {
+        const bal = Number(l.openingBalance || 0);
+        return l.balanceType === 'Dr' ? acc + bal : acc - bal;
+      }, 0);
+      setGlobalBalance(total);
+    });
   }, []);
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -126,7 +135,9 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
                 </div>
                 <div className="pt-4 border-t border-gray-100">
                   <p className="text-[10px] uppercase text-tally-teal font-bold">Global Combined Balance</p>
-                  <p className="text-2xl font-black text-tally-teal font-mono">₹ 1,24,50,000.00</p>
+                  <p className="text-2xl font-black text-tally-teal font-mono">
+                    ₹ {Math.abs(globalBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {globalBalance >= 0 ? 'Dr' : 'Cr'}
+                  </p>
                 </div>
                 <button 
                   onClick={() => alert('Consolidating data...')}

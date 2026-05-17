@@ -36,7 +36,9 @@ function init_tables($pdo) {
         id VARCHAR(50) PRIMARY KEY,
         code VARCHAR(20) NOT NULL,
         name VARCHAR(100) NOT NULL,
-        location VARCHAR(100)
+        location VARCHAR(100),
+        email VARCHAR(100),
+        password VARCHAR(100)
     )");
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS users (
@@ -53,7 +55,8 @@ function init_tables($pdo) {
         group_name VARCHAR(100) NOT NULL,
         openingBalance DECIMAL(15,2) DEFAULT 0,
         balanceType VARCHAR(5) NOT NULL,
-        branchId VARCHAR(50)
+        branchId VARCHAR(50),
+        methodAdjustment VARCHAR(50) DEFAULT 'On Account'
     )");
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS vouchers (
@@ -71,7 +74,9 @@ function init_tables($pdo) {
         voucherId VARCHAR(50),
         ledgerId VARCHAR(50),
         amount DECIMAL(15,2) NOT NULL,
-        type VARCHAR(5) NOT NULL
+        type VARCHAR(5) NOT NULL,
+        methodAdjustment VARCHAR(50) DEFAULT 'On Account',
+        refNo VARCHAR(100)
     )");
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS audit_logs (
@@ -122,6 +127,14 @@ switch ($path) {
             $user = $stmt->fetch();
             if ($user) {
                 unset($user['password']); // Safety
+                
+                // Add branch details if applicable
+                if ($user['branchId']) {
+                    $bStmt = $pdo->prepare("SELECT * FROM branches WHERE id = ?");
+                    $bStmt->execute([$user['branchId']]);
+                    $user['branch'] = $bStmt->fetch();
+                }
+
                 // Log audit
                 $stmt = $pdo->prepare("INSERT INTO audit_logs (id, userId, username, action, timestamp, branchId, details) VALUES (?,?,?,?,?,?,?)");
                 $stmt->execute([(string)time(), $user['id'], $user['username'], 'LOGIN', date('c'), $user['branchId'] ?? 'HQ', 'PHP LOGIN SUCCESS']);
@@ -165,8 +178,8 @@ switch ($path) {
             }
         } elseif ($method === 'POST') {
             $input['id'] = (string)time();
-            $stmt = $pdo->prepare("INSERT INTO ledgers (id, name, group_name, openingBalance, balanceType, branchId) VALUES (?,?,?,?,?,?)");
-            $stmt->execute([$input['id'], $input['name'], $input['group'], $input['openingBalance'], $input['balanceType'], $input['branchId']]);
+            $stmt = $pdo->prepare("INSERT INTO ledgers (id, name, group_name, openingBalance, balanceType, branchId, methodAdjustment) VALUES (?,?,?,?,?,?,?)");
+            $stmt->execute([$input['id'], $input['name'], $input['group'], $input['openingBalance'], $input['balanceType'], $input['branchId'], $input['methodAdjustment'] ?? 'On Account']);
             echo json_encode($input);
         }
         break;
@@ -187,15 +200,23 @@ switch ($path) {
         } elseif ($method === 'POST') {
             $vId = (string)time();
             $stmt = $pdo->prepare("INSERT INTO vouchers (id, number, date, type, narration, amount, branchId) VALUES (?,?,?,?,?,?,?)");
-            $stmt->execute([$vId, $input['number'], $input['date'], $input['type'], $input['narration'], $input['amount'], $input['branchId']]);
+            $stmt->execute([$vId, $input['number'] ?? null, $input['date'], $input['type'], $input['narration'], $input['amount'], $input['branchId']]);
             if (isset($input['entries'])) {
                 foreach ($input['entries'] as $e) {
-                    $stmt2 = $pdo->prepare("INSERT INTO voucher_entries (voucherId, ledgerId, amount, type) VALUES (?,?,?,?)");
-                    $stmt2->execute([$vId, $e['ledgerId'], $e['amount'], $e['type']]);
+                    $stmt2 = $pdo->prepare("INSERT INTO voucher_entries (voucherId, ledgerId, amount, type, methodAdjustment, refNo) VALUES (?,?,?,?,?,?)");
+                    $stmt2->execute([$vId, $e['ledgerId'], $e['amount'], $e['type'], $e['methodAdjustment'] ?? 'On Account', $e['refNo'] ?? null]);
                 }
             }
             $input['id'] = $vId;
             echo json_encode($input);
+        } elseif ($method === 'DELETE') {
+            $parts = explode('/', $_GET['request']);
+            $id = $parts[1] ?? null;
+            if ($id) {
+                $pdo->prepare("DELETE FROM voucher_entries WHERE voucherId = ?")->execute([$id]);
+                $pdo->prepare("DELETE FROM vouchers WHERE id = ?")->execute([$id]);
+                echo json_encode(['success' => true]);
+            }
         }
         break;
 
