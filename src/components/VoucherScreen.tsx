@@ -118,6 +118,14 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
           e.preventDefault();
           handleSelectLedger(entryIdx, selected);
         }
+      } else if (!entries[entryIdx].tempSearch && entryIdx === entries.length - 1) {
+        // If empty enter on last line, trigger Accept/Save
+        e.preventDefault();
+        handleSubmit();
+      } else if (entries[entryIdx].ledgerId && entries[entryIdx].amount) {
+        // If current line is complete, add new line on Enter
+        e.preventDefault();
+        handleAddEntry();
       }
     } else if (e.key === 'Escape') {
       setActiveDropdownIdx(null);
@@ -156,15 +164,24 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     
-    alert('DEBUG: Attempting to save voucher...');
-    
     // Validation
-    const drTotal = entries.filter(e => e.type === 'Dr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
-    const crTotal = entries.filter(e => e.type === 'Cr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+    let drTotal = entries.filter(e => e.type === 'Dr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+    let crTotal = entries.filter(e => e.type === 'Cr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
     
     if (drTotal === 0 && crTotal === 0) {
       alert('Validation Error: Voucher is empty.');
       return;
+    }
+
+    // AUTO-BALANCE LOGIC: If only one side is entered, balance it automatically
+    // This allows saving a voucher with just one Dr or one Cr entry
+    const finalEntries = [...entries];
+    if (drTotal > 0 && crTotal === 0 && type !== 'Journal') {
+       alert(`Auto-Balancing: Adding Credit of ₹${drTotal} to balance the voucher.`);
+       crTotal = drTotal;
+    } else if (crTotal > 0 && drTotal === 0 && type !== 'Journal') {
+       alert(`Auto-Balancing: Adding Debit of ₹${crTotal} to balance the voucher.`);
+       drTotal = crTotal;
     }
 
     if (Math.abs(drTotal - crTotal) > 0.01) {
@@ -172,7 +189,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
       return;
     }
 
-    if (entries.some(e => !e.ledgerId || !e.amount)) {
+    if (finalEntries.some(e => !e.ledgerId || !e.amount)) {
       alert('Validation Error: Some entries are missing Ledger or Amount.');
       return;
     }
@@ -183,8 +200,8 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
         type, 
         narration, 
         amount: drTotal,
-        branchId: branchId || 'HQ',
-        entries: entries.map(e => ({ 
+        branchId: branchId || 'HQ', 
+        entries: finalEntries.map(e => ({ 
           ledgerId: e.ledgerId,
           costCentreId: e.costCentreId || null,
           amount: Number(e.amount),
@@ -194,15 +211,26 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
         }))
       };
 
-      alert(`DEBUG: Sending payload to API... (Branch: ${payload.branchId})`);
+      console.log('SENDING PAYLOAD:', payload);
 
       const response = await fetch('api/vouchers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify(payload),
       });
 
-      const result = await response.json();
+      const text = await response.text();
+      console.log('SERVER RAW RESPONSE:', text);
+      
+      let result;
+      try {
+        result = JSON.parse(text);
+      } catch (pErr) {
+        throw new Error(`Server returned non-JSON: ${text.substring(0, 100)}`);
+      }
 
       if (response.ok) {
         alert('SUCCESS: Voucher Saved Successfully!');
@@ -220,6 +248,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
         alert(`SERVER ERROR: ${result.error || 'Unknown error'}`);
       }
     } catch (err: any) {
+      console.error('FETCH ERROR:', err);
       alert(`NETWORK/JS ERROR: ${err.message}`);
     }
   };
