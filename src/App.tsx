@@ -74,6 +74,7 @@ const GATEWAY_MENU = [
   ]},
   { section: 'Utilities', items: [
     { id: 'banking', label: 'Banking', key: 'N' },
+    { id: 'debug', label: 'Diagnostics', key: 'D' },
   ]},
   { section: 'Reports', items: [
     { id: 'balance_sheet', label: 'Balance Sheet', key: 'B' },
@@ -83,12 +84,14 @@ const GATEWAY_MENU = [
   ]}
 ];
 
+import DebugDiagnosticsScreen from './components/DebugDiagnosticsScreen';
+
 export default function App() {
   const [user, setUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('tally_user');
     return saved ? JSON.parse(saved) : null;
   });
-  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'HQ' | 'ANALYTICS' | 'AUDIT' | 'BANKING' | 'PAYROLL' | 'DAYBOOK' | 'COMPANY' | 'DATA' | 'EXCHANGE' | 'GOTO' | 'IMPORT' | 'EXPORT' | 'PRINT' | 'EMAIL' | 'SETTINGS' | 'ALTER' | 'BALANCE_SHEET' | 'PL_ACCOUNT' | 'RATIO' | 'CHART' | 'ADMIN' | 'TRIAL_BALANCE' | 'CASH_BANK_BOOK' | 'LEDGER_DETAIL'>('GATEWAY');
+  const [currentScreen, setCurrentScreen] = useState<'GATEWAY' | 'VOUCHER' | 'LEDGER' | 'REPORTS' | 'HQ' | 'ANALYTICS' | 'AUDIT' | 'BANKING' | 'PAYROLL' | 'DAYBOOK' | 'COMPANY' | 'DATA' | 'EXCHANGE' | 'GOTO' | 'IMPORT' | 'EXPORT' | 'PRINT' | 'EMAIL' | 'SETTINGS' | 'ALTER' | 'BALANCE_SHEET' | 'PL_ACCOUNT' | 'RATIO' | 'CHART' | 'ADMIN' | 'TRIAL_BALANCE' | 'CASH_BANK_BOOK' | 'LEDGER_DETAIL' | 'DEBUG'>('GATEWAY');
   const [voucherType, setVoucherType] = useState('Payment');
   const [selectedBranchId, setSelectedBranchId] = useState<string | undefined>(undefined);
   const [currentDate, setCurrentDate] = useState('2026-05-12');
@@ -255,6 +258,7 @@ export default function App() {
       if (selectedId === 'trial_balance') setCurrentScreen('TRIAL_BALANCE');
       if (selectedId === 'chart') setCurrentScreen('CHART');
       if (selectedId === 'audit') setCurrentScreen('AUDIT');
+      if (selectedId === 'debug') setCurrentScreen('DEBUG');
     } else if (currentScreen === 'GOTO') {
       e.preventDefault();
       const filtered = getFilteredGotoOptions();
@@ -308,6 +312,7 @@ export default function App() {
   useHotkeys('t', () => setCurrentScreen('TRIAL_BALANCE'));
   useHotkeys('h', () => setCurrentScreen('CHART'));
   useHotkeys('l', () => setCurrentScreen('AUDIT'));
+  useHotkeys('d', () => setCurrentScreen('DEBUG'));
   useHotkeys('ctrl+n', () => setShowCalculator(true));
   useHotkeys('alt+f1', () => setUser(null)); // Logout
   useHotkeys('alt+k', () => setCurrentScreen('COMPANY'), { enableOnFormTags: true });
@@ -323,6 +328,7 @@ export default function App() {
   useHotkeys('alt+e', () => setCurrentScreen('EXPORT'), { enableOnFormTags: true });
   useHotkeys('alt+p', () => setCurrentScreen('PRINT'), { enableOnFormTags: true });
   useHotkeys('alt+s', () => setCurrentScreen('SETTINGS'), { enableOnFormTags: true });
+  useHotkeys('alt+d', (e) => { e.preventDefault(); setCurrentScreen('DEBUG'); }, { enableOnFormTags: true });
 
   // Global Function Keys (Tally Style)
   useHotkeys('f2', (e) => {
@@ -736,6 +742,7 @@ export default function App() {
                     </div>
                   </div>
                 )}
+                {currentScreen === 'DEBUG' && <DebugDiagnosticsScreen />}
                 {['DATA', 'EXCHANGE', 'GOTO', 'IMPORT', 'EXPORT', 'PRINT', 'EMAIL'].includes(currentScreen) && (
                   <div className="p-20 text-center space-y-4">
                     <div className="text-4xl text-tally-teal/10 font-black uppercase">{currentScreen}</div>
