@@ -150,49 +150,66 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
     const drTotal = entries.filter(e => e.type === 'Dr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
     const crTotal = entries.filter(e => e.type === 'Cr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
     
-    if (drTotal === 0 && crTotal === 0) return; // Prevent empty save
+    if (drTotal === 0 && crTotal === 0) {
+      alert('Voucher is empty. Please add at least one debit and one credit entry.');
+      return;
+    }
 
     if (drTotal !== crTotal) {
-      alert(`Debit (₹${drTotal}) and Credit (₹${crTotal}) totals must match! Difference: ₹${Math.abs(drTotal - crTotal)}`);
+      alert(`Debit (₹${drTotal.toLocaleString()}) and Credit (₹${crTotal.toLocaleString()}) totals must match! Difference: ₹${Math.abs(drTotal - crTotal).toLocaleString()}`);
       return;
     }
 
     if (entries.some(e => !e.ledgerId || !e.amount)) {
-      alert('Please ensure all entries have a selected ledger and an amount.');
+      alert('Missing Information: Please ensure all lines have a selected ledger and an amount.');
       return;
     }
 
+    console.log('Submitting Voucher:', { date, type, narration, amount: drTotal, branchId, entries });
+
     try {
+      const payload = { 
+        date, 
+        type, 
+        narration, 
+        amount: drTotal,
+        branchId,
+        entries: entries.map(e => ({ 
+          ledgerId: e.ledgerId,
+          costCentreId: e.costCentreId || null,
+          amount: Number(e.amount),
+          type: e.type,
+          methodAdjustment: e.methodAdjustment,
+          refNo: e.refNo
+        }))
+      };
+
       const response = await fetch('api/vouchers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          date, 
-          type, 
-          narration, 
-          amount: drTotal,
-          branchId,
-          entries: entries.map(e => ({ 
-            ledgerId: e.ledgerId,
-            costCentreId: e.costCentreId || null,
-            amount: Number(e.amount),
-            type: e.type,
-            methodAdjustment: e.methodAdjustment,
-            refNo: e.refNo
-          }))
-        }),
+        body: JSON.stringify(payload),
       });
 
+      const result = await response.json();
+
       if (response.ok) {
-        alert('Voucher Saved Successfully');
-        setEntries([{ ledgerId: '', costCentreId: '', amount: '', type: (type === 'Receipt' ? 'Cr' : 'Dr'), tempSearch: '', methodAdjustment: 'On Account', refNo: '' }]);
+        alert('Voucher Saved Successfully!');
+        // Reset form
+        setEntries([{ 
+          ledgerId: '', 
+          costCentreId: '', 
+          amount: '', 
+          type: (type === 'Receipt' ? 'Cr' : 'Dr'), 
+          tempSearch: '', 
+          methodAdjustment: 'On Account', 
+          refNo: '' 
+        }]);
         setNarration('');
       } else {
-        const errorData = await response.json();
-        alert(`Failed to save voucher: ${errorData.error || 'Unknown error'}`);
+        alert(`Failed to save: ${result.error || 'Unknown server error'}`);
       }
     } catch (err: any) {
-      alert(`Connection error: ${err.message}`);
+      alert(`Connection error: ${err.message}. Please check if the server is reachable.`);
     }
   };
 

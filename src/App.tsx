@@ -626,117 +626,131 @@ export default function App() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 bg-white p-4 overflow-auto">
-            <div className="max-w-4xl mx-auto border-2 border-tally-teal rounded-sm p-4 shadow-lg bg-white">
-              <div className="flex justify-between items-center mb-6 border-b border-tally-teal/20 pb-2">
-                <h1 className="text-lg font-bold text-tally-teal uppercase flex items-center gap-2">
-                  <div className={`w-1 h-6 ${
-                    voucherType === 'Payment' ? 'bg-red-600' :
-                    voucherType === 'Receipt' ? 'bg-green-600' :
-                    voucherType === 'Contra' ? 'bg-blue-600' :
-                    voucherType === 'Journal' ? 'bg-purple-600' :
-                    voucherType === 'Sales' ? 'bg-cyan-600' :
-                    voucherType === 'Purchase' ? 'bg-orange-600' : 'bg-tally-teal'
-                  }`}></div>
-                  {currentScreen === 'VOUCHER' && `${voucherType} Voucher Creation`}
-                  {currentScreen === 'LEDGER' && 'Masters Management (Create)'}
-                  {currentScreen === 'ALTER' && 'Masters Management (Alter)'}
-                  {currentScreen === 'CHART' && 'Chart of Accounts'}
-                  {currentScreen === 'BALANCE_SHEET' && 'Balance Sheet'}
-                  {currentScreen === 'PL_ACCOUNT' && 'Profit & Loss A/c'}
-                  {currentScreen === 'TRIAL_BALANCE' && 'Trial Balance'}
-                  {currentScreen === 'CASH_BANK_BOOK' && 'Cash / Bank Book'}
-                  {currentScreen === 'RATIO' && 'Ratio Analysis'}
-                  {currentScreen === 'DAYBOOK' && 'Day Book'}
-                  {currentScreen === 'ANALYTICS' && 'Visual Data Analytics'}
-                  {currentScreen === 'AUDIT' && 'Security Audit Dashboard'}
-                  {currentScreen === 'BANKING' && 'Banking Utility'}
-                  {currentScreen === 'PAYROLL' && 'Payroll Management'}
-                  {currentScreen === 'COMPANY' && 'Company Information'}
-                  {currentScreen === 'DATA' && 'Data Management'}
-                  {currentScreen === 'EXCHANGE' && 'Data Exchange'}
-                  {currentScreen === 'GOTO' && 'Go To / Switch To'}
-                  {currentScreen === 'IMPORT' && 'Import Data'}
-                  {currentScreen === 'EXPORT' && 'Export Data'}
-                  {currentScreen === 'PRINT' && 'Print Reports'}
-                  {currentScreen === 'EMAIL' && 'E-mail Services'}
-                  {currentScreen === 'SETTINGS' && 'User Settings & Security'}
-                  {currentScreen === 'ADMIN' && 'System Administration (HQ Only)'}
-                </h1>
-                <button 
-                  onClick={handleBack}
-                  className="text-[11px] bg-tally-bg hover:bg-gray-200 px-3 py-1 border border-tally-teal/20 rounded font-bold uppercase transition-colors"
-                >
-                  ESC: Back
-                </button>
-              </div>
-
-              {currentScreen === 'VOUCHER' && <VoucherScreen branchId={selectedBranchId} onTypeChange={setVoucherType} initialType={voucherType} initialDate={currentDate} />}
-              {currentScreen === 'LEDGER' && <MastersDashboard branchId={selectedBranchId} />}
-              {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} onSelectLedger={(id) => { setSelectedLedgerId(id); setCurrentScreen('LEDGER_DETAIL'); }} />}
-              {currentScreen === 'CHART' && <ChartOfAccountsScreen branchId={selectedBranchId} />}
-              {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} />}
-              {currentScreen === 'TRIAL_BALANCE' && <TrialBalanceScreen branchId={selectedBranchId} />}
-              {currentScreen === 'CASH_BANK_BOOK' && <CashBankBookScreen branchId={selectedBranchId} />}
-              {currentScreen === 'RATIO' && <RatioAnalysisScreen onBack={handleBack} branchId={selectedBranchId} />}
-              {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} />}
-              {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} initialDate={currentDate} />}
-              {currentScreen === 'LEDGER_DETAIL' && <LedgerVouchersScreen branchId={selectedBranchId} ledgerId={selectedLedgerId} onBack={() => setCurrentScreen('GATEWAY')} />}
-              {currentScreen === 'HQ' && user?.role === 'HQ' && <HQDashboard onSelectBranch={(id) => { setSelectedBranchId(id); setCurrentScreen('GATEWAY'); }} />}
-              {currentScreen === 'ANALYTICS' && <AnalyticsScreen branches={branches} ledgers={allLedgers} vouchers={allVouchers} />}
-              {currentScreen === 'AUDIT' && <AuditLogScreen branchId={selectedBranchId} isAdmin={user.role === 'HQ'} />}
-              {currentScreen === 'ADMIN' && <AdminPanel />}
-              {currentScreen === 'BANKING' && <BankingScreen branchId={selectedBranchId} />}
-              {currentScreen === 'PAYROLL' && <div className="p-10 text-center font-bold text-tally-teal uppercase italic">Payroll Module - Coming Soon</div>}
-              {currentScreen === 'COMPANY' && <CompanyScreen branchId={selectedBranchId} />}
-              {currentScreen === 'DATA' && <DataScreen />}
-              {currentScreen === 'IMPORT' && (
-                <div className="p-10 space-y-6 max-w-xl mx-auto">
-                  <h3 className="text-lg font-bold uppercase text-tally-teal border-b-2 border-tally-teal mb-4">Import Data (Masters/Transactions)</h3>
-                  <div className="space-y-4 border p-6 bg-white shadow">
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Source File Path (Local/.xml)</label>
-                      <input type="text" className="w-full border p-2 text-xs focus:border-tally-teal outline-none" placeholder="C:\TallyPrime\Import\Masters.xml" />
-                    </div>
-                    <div className="space-y-2">
-                       <div className="text-[10px] font-bold text-gray-400 uppercase">Behavior for duplicates</div>
-                       <select className="w-full border p-2 text-xs outline-none">
-                         <option>Ignore Duplicates</option>
-                         <option>Modify with New Data</option>
-                         <option>Force Import (Overwrite)</option>
-                       </select>
-                    </div>
-                    <button className="w-full bg-tally-teal text-white py-2 text-xs font-bold uppercase mt-4">Import Now</button>
+          <div className={`flex-1 overflow-auto bg-tally-bg ${currentScreen === 'VOUCHER' ? 'p-0' : 'p-4'}`}>
+            <div className={currentScreen === 'VOUCHER' ? 'h-full w-full' : 'max-w-7xl mx-auto'}>
+              {currentScreen !== 'VOUCHER' && (
+                <div className="bg-white border-2 border-tally-teal rounded-sm p-4 shadow-lg mb-4">
+                  <div className="flex justify-between items-center mb-6 border-b border-tally-teal/20 pb-2">
+                    <h1 className="text-lg font-bold text-tally-teal uppercase flex items-center gap-2">
+                      <div className={`w-1 h-6 ${
+                        voucherType === 'Payment' ? 'bg-red-600' :
+                        voucherType === 'Receipt' ? 'bg-green-600' :
+                        voucherType === 'Contra' ? 'bg-blue-600' :
+                        voucherType === 'Journal' ? 'bg-purple-600' :
+                        voucherType === 'Sales' ? 'bg-cyan-600' :
+                        voucherType === 'Purchase' ? 'bg-orange-600' : 'bg-tally-teal'
+                      }`}></div>
+                      {currentScreen === 'LEDGER' && 'Masters Management (Create)'}
+                      {currentScreen === 'ALTER' && 'Masters Management (Alter)'}
+                      {currentScreen === 'CHART' && 'Chart of Accounts'}
+                      {currentScreen === 'BALANCE_SHEET' && 'Balance Sheet'}
+                      {currentScreen === 'PL_ACCOUNT' && 'Profit & Loss A/c'}
+                      {currentScreen === 'TRIAL_BALANCE' && 'Trial Balance'}
+                      {currentScreen === 'CASH_BANK_BOOK' && 'Cash / Bank Book'}
+                      {currentScreen === 'RATIO' && 'Ratio Analysis'}
+                      {currentScreen === 'DAYBOOK' && 'Day Book'}
+                      {currentScreen === 'ANALYTICS' && 'Visual Data Analytics'}
+                      {currentScreen === 'AUDIT' && 'Security Audit Dashboard'}
+                      {currentScreen === 'BANKING' && 'Banking Utility'}
+                      {currentScreen === 'PAYROLL' && 'Payroll Management'}
+                      {currentScreen === 'COMPANY' && 'Company Information'}
+                      {currentScreen === 'DATA' && 'Data Management'}
+                      {currentScreen === 'EXCHANGE' && 'Data Exchange'}
+                      {currentScreen === 'GOTO' && 'Go To / Switch To'}
+                      {currentScreen === 'IMPORT' && 'Import Data'}
+                      {currentScreen === 'EXPORT' && 'Export Data'}
+                      {currentScreen === 'PRINT' && 'Print Reports'}
+                      {currentScreen === 'EMAIL' && 'E-mail Services'}
+                      {currentScreen === 'SETTINGS' && 'User Settings & Security'}
+                      {currentScreen === 'ADMIN' && 'System Administration (HQ Only)'}
+                    </h1>
+                    <button 
+                      onClick={handleBack}
+                      className="text-[11px] bg-tally-bg hover:bg-gray-200 px-3 py-1 border border-tally-teal/20 rounded font-bold uppercase transition-colors"
+                    >
+                      ESC: Back
+                    </button>
                   </div>
                 </div>
               )}
-              {currentScreen === 'EXPORT' && <ExportScreen onBack={handleBack} />}
-              {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} />}
-              {currentScreen === 'SETTINGS' && <SettingsScreen onBack={handleBack} />}
-              {currentScreen === 'COMPANY' && (
-                <div className="p-10 space-y-4">
-                   <div className="grid grid-cols-2 gap-4 text-xs">
-                      <div className="bg-gray-100 p-4 border italic">Select Company (F3)</div>
-                      <div className="bg-gray-100 p-4 border italic">Alter Company (Alt+K)</div>
-                      <div className="bg-gray-100 p-4 border italic">Connect for Remote Access</div>
-                      <div className="bg-gray-100 p-4 border italic">Shut Company (Alt+F1)</div>
-                   </div>
+
+              {currentScreen === 'VOUCHER' && (
+                <div className="h-full bg-tally-bg">
+                  <VoucherScreen 
+                    branchId={selectedBranchId} 
+                    onTypeChange={(t) => console.log('Voucher type changed to:', t)} 
+                    initialType={voucherType}
+                    initialDate={currentDate}
+                  />
                 </div>
               )}
-              {['DATA', 'EXCHANGE', 'GOTO', 'IMPORT', 'EXPORT', 'PRINT', 'EMAIL'].includes(currentScreen) && (
-                <div className="p-20 text-center space-y-4">
-                   <div className="text-4xl text-tally-teal/10 font-black uppercase">{currentScreen}</div>
-                   <div className="text-xs font-bold text-gray-400 uppercase tracking-widest italic">
-                     This utility module is being synchronized with the cloud...
-                   </div>
-                   <button 
-                     onClick={() => setCurrentScreen('GATEWAY')}
-                     className="text-[10px] border border-tally-teal px-4 py-1 hover:bg-tally-teal hover:text-white transition-colors"
-                   >
-                     Back to Gateway
-                   </button>
-                </div>
-              )}
+              <div className={currentScreen !== 'VOUCHER' ? "bg-white border-2 border-tally-teal rounded-sm p-4 shadow-lg" : ""}>
+                {currentScreen === 'LEDGER' && <MastersDashboard branchId={selectedBranchId} />}
+                {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} onSelectLedger={(id) => { setSelectedLedgerId(id); setCurrentScreen('LEDGER_DETAIL'); }} />}
+                {currentScreen === 'CHART' && <ChartOfAccountsScreen branchId={selectedBranchId} />}
+                {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} />}
+                {currentScreen === 'TRIAL_BALANCE' && <TrialBalanceScreen branchId={selectedBranchId} />}
+                {currentScreen === 'CASH_BANK_BOOK' && <CashBankBookScreen branchId={selectedBranchId} />}
+                {currentScreen === 'RATIO' && <RatioAnalysisScreen onBack={handleBack} branchId={selectedBranchId} />}
+                {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} />}
+                {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} initialDate={currentDate} />}
+                {currentScreen === 'LEDGER_DETAIL' && <LedgerVouchersScreen branchId={selectedBranchId} ledgerId={selectedLedgerId} onBack={() => setCurrentScreen('GATEWAY')} />}
+                {currentScreen === 'HQ' && user?.role === 'HQ' && <HQDashboard onSelectBranch={(id) => { setSelectedBranchId(id); setCurrentScreen('GATEWAY'); }} />}
+                {currentScreen === 'ANALYTICS' && <AnalyticsScreen branches={branches} ledgers={allLedgers} vouchers={allVouchers} />}
+                {currentScreen === 'AUDIT' && <AuditLogScreen branchId={selectedBranchId} isAdmin={user.role === 'HQ'} />}
+                {currentScreen === 'ADMIN' && <AdminPanel />}
+                {currentScreen === 'BANKING' && <BankingScreen branchId={selectedBranchId} />}
+                {currentScreen === 'PAYROLL' && <div className="p-10 text-center font-bold text-tally-teal uppercase italic">Payroll Module - Coming Soon</div>}
+                {currentScreen === 'COMPANY' && <CompanyScreen branchId={selectedBranchId} />}
+                {currentScreen === 'DATA' && <DataScreen />}
+                {currentScreen === 'IMPORT' && (
+                  <div className="p-10 space-y-6 max-w-xl mx-auto">
+                    <h3 className="text-lg font-bold uppercase text-tally-teal border-b-2 border-tally-teal mb-4">Import Data (Masters/Transactions)</h3>
+                    <div className="space-y-4 border p-6 bg-white shadow">
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Source File Path (Local/.xml)</label>
+                        <input type="text" className="w-full border p-2 text-xs focus:border-tally-teal outline-none" placeholder="C:\TallyPrime\Import\Masters.xml" />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="text-[10px] font-bold text-gray-400 uppercase">Behavior for duplicates</div>
+                        <select className="w-full border p-2 text-xs outline-none">
+                          <option>Ignore Duplicates</option>
+                          <option>Modify with New Data</option>
+                          <option>Force Import (Overwrite)</option>
+                        </select>
+                      </div>
+                      <button className="w-full bg-tally-teal text-white py-2 text-xs font-bold uppercase mt-4">Import Now</button>
+                    </div>
+                  </div>
+                )}
+                {currentScreen === 'EXPORT' && <ExportScreen onBack={handleBack} />}
+                {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} />}
+                {currentScreen === 'SETTINGS' && <SettingsScreen onBack={handleBack} />}
+                {currentScreen === 'COMPANY' && (
+                  <div className="p-10 space-y-4">
+                    <div className="grid grid-cols-2 gap-4 text-xs">
+                        <div className="bg-gray-100 p-4 border italic">Select Company (F3)</div>
+                        <div className="bg-gray-100 p-4 border italic">Alter Company (Alt+K)</div>
+                        <div className="bg-gray-100 p-4 border italic">Connect for Remote Access</div>
+                        <div className="bg-gray-100 p-4 border italic">Shut Company (Alt+F1)</div>
+                    </div>
+                  </div>
+                )}
+                {['DATA', 'EXCHANGE', 'GOTO', 'IMPORT', 'EXPORT', 'PRINT', 'EMAIL'].includes(currentScreen) && (
+                  <div className="p-20 text-center space-y-4">
+                    <div className="text-4xl text-tally-teal/10 font-black uppercase">{currentScreen}</div>
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-widest italic">
+                      This utility module is being synchronized with the cloud...
+                    </div>
+                    <button 
+                      onClick={() => setCurrentScreen('GATEWAY')}
+                      className="text-[10px] border border-tally-teal px-4 py-1 hover:bg-tally-teal hover:text-white transition-colors"
+                    >
+                      Back to Gateway
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

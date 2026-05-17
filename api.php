@@ -224,9 +224,27 @@ switch ($path) {
         echo json_encode($pdo->query("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 100")->fetchAll());
         break;
 
-    case 'init': // Call this once to create tables
+    case 'init': // Call this once to create tablescase 'init':
         init_tables($pdo);
         echo json_encode(['status' => 'success', 'message' => 'Tables initialized']);
+        break;
+
+    case 'update-db':
+        // Migration: Add columns if they don't exist
+        $migrations = [
+            ['ledgers', 'methodAdjustment', "VARCHAR(50) DEFAULT 'On Account'"],
+            ['voucher_entries', 'methodAdjustment', "VARCHAR(50) DEFAULT 'On Account'"],
+            ['voucher_entries', 'refNo', "VARCHAR(100)"]
+        ];
+
+        foreach ($migrations as $m) {
+            list($table, $col, $def) = $m;
+            $check = $pdo->query("SHOW COLUMNS FROM `$table` LIKE '$col'")->fetch();
+            if (!$check) {
+                $pdo->exec("ALTER TABLE `$table` ADD COLUMN `$col` $def");
+            }
+        }
+        echo json_encode(['status' => 'success', 'message' => 'Database schema updated']);
         break;
 
     case 'health':
