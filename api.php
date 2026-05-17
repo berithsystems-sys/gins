@@ -224,7 +224,7 @@ switch ($path) {
         echo json_encode($pdo->query("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 100")->fetchAll());
         break;
 
-    case 'init': // Call this once to create tablescase 'init':
+    case 'init': 
         init_tables($pdo);
         echo json_encode(['status' => 'success', 'message' => 'Tables initialized']);
         break;

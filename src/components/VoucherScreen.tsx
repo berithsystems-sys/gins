@@ -143,29 +143,39 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
     }
   };
 
+  const [showConfig, setShowConfig] = useState(false);
+  const [config, setConfig] = useState({
+    useDrCr: false, // false = To/By, true = Dr/Cr
+    singleEntry: false,
+    showBillWise: false,
+  });
+
+  const getDrLabel = () => config.useDrCr ? 'Dr' : 'By';
+  const getCrLabel = () => config.useDrCr ? 'Cr' : 'To';
+
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    
+    alert('DEBUG: Attempting to save voucher...');
     
     // Validation
     const drTotal = entries.filter(e => e.type === 'Dr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
     const crTotal = entries.filter(e => e.type === 'Cr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
     
     if (drTotal === 0 && crTotal === 0) {
-      alert('Voucher is empty. Please add at least one debit and one credit entry.');
+      alert('Validation Error: Voucher is empty.');
       return;
     }
 
-    if (drTotal !== crTotal) {
-      alert(`Debit (₹${drTotal.toLocaleString()}) and Credit (₹${crTotal.toLocaleString()}) totals must match! Difference: ₹${Math.abs(drTotal - crTotal).toLocaleString()}`);
+    if (Math.abs(drTotal - crTotal) > 0.01) {
+      alert(`Validation Error: Debit (₹${drTotal}) and Credit (₹${crTotal}) do not match!`);
       return;
     }
 
     if (entries.some(e => !e.ledgerId || !e.amount)) {
-      alert('Missing Information: Please ensure all lines have a selected ledger and an amount.');
+      alert('Validation Error: Some entries are missing Ledger or Amount.');
       return;
     }
-
-    console.log('Submitting Voucher:', { date, type, narration, amount: drTotal, branchId, entries });
 
     try {
       const payload = { 
@@ -173,7 +183,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
         type, 
         narration, 
         amount: drTotal,
-        branchId,
+        branchId: branchId || 'HQ',
         entries: entries.map(e => ({ 
           ledgerId: e.ledgerId,
           costCentreId: e.costCentreId || null,
@@ -184,6 +194,8 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
         }))
       };
 
+      alert(`DEBUG: Sending payload to API... (Branch: ${payload.branchId})`);
+
       const response = await fetch('api/vouchers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -193,8 +205,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
       const result = await response.json();
 
       if (response.ok) {
-        alert('Voucher Saved Successfully!');
-        // Reset form
+        alert('SUCCESS: Voucher Saved Successfully!');
         setEntries([{ 
           ledgerId: '', 
           costCentreId: '', 
@@ -206,18 +217,24 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
         }]);
         setNarration('');
       } else {
-        alert(`Failed to save: ${result.error || 'Unknown server error'}`);
+        alert(`SERVER ERROR: ${result.error || 'Unknown error'}`);
       }
     } catch (err: any) {
-      alert(`Connection error: ${err.message}. Please check if the server is reachable.`);
+      alert(`NETWORK/JS ERROR: ${err.message}`);
     }
   };
 
   const handleGlobalKeyDown = (e: KeyboardEvent) => {
     if (e.ctrlKey && e.key === 'Enter') {
+      e.preventDefault();
       handleSubmit();
     }
+    if (e.key === 'F12') {
+      e.preventDefault();
+      setShowConfig(true);
+    }
     if (e.altKey && e.key === 'a') {
+      e.preventDefault();
       handleAddEntry();
     }
   };
@@ -252,16 +269,22 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
           <table className="w-full text-xs">
             <thead className="bg-tally-sidebar text-white sticky top-0 z-20">
               <tr>
-                <th className="px-4 py-1 text-left w-16">To/By</th>
+                <th className="px-4 py-1 text-left w-20">{config.useDrCr ? 'Dr/Cr' : 'To/By'}</th>
                 <th className="px-4 py-1 text-left">Particulars</th>
-                <th className="px-4 py-1 text-right w-40">Debit (₹)</th>
-                <th className="px-4 py-1 text-right w-40">Credit (₹)</th>
+                {type === 'Journal' || !config.singleEntry ? (
+                  <>
+                    <th className="px-4 py-1 text-right w-40">Debit (₹)</th>
+                    <th className="px-4 py-1 text-right w-40">Credit (₹)</th>
+                  </>
+                ) : (
+                  <th className="px-4 py-1 text-right w-40">Amount (₹)</th>
+                )}
               </tr>
             </thead>
             <tbody>
               {entries.map((entry, idx) => (
                 <React.Fragment key={idx}>
-                  <tr className="border-b border-gray-100 hover:bg-tally-accent">
+                  <tr className="border-b border-gray-100 hover:bg-tally-accent group">
                     <td className="px-4 py-0.5 font-bold text-tally-teal">
                       <select 
                         value={entry.type}
@@ -270,10 +293,10 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                           newEntries[idx].type = e.target.value as 'Dr' | 'Cr';
                           setEntries(newEntries);
                         }}
-                        className="w-full bg-transparent focus:outline-none cursor-pointer"
+                        className="w-full bg-transparent focus:outline-none cursor-pointer appearance-none"
                       >
-                        <option value="Dr">By (Dr)</option>
-                        <option value="Cr">To (Cr)</option>
+                        <option value="Dr">{getDrLabel()}</option>
+                        <option value="Cr">{getCrLabel()}</option>
                       </select>
                     </td>
                     <td className="px-4 py-0.5 relative">
@@ -296,13 +319,13 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                           }}
                           onKeyDown={(e) => handleKeyDown(e, idx)}
                           className="w-full bg-transparent focus:outline-none font-bold uppercase"
-                          placeholder="Particulars..."
+                          placeholder="Select Ledger..."
                         />
                         {entries.length > 1 && (
                           <button 
                             type="button" 
                             onClick={() => handleRemoveEntry(idx)}
-                            className="text-gray-300 hover:text-red-500 text-[10px]"
+                            className="text-gray-300 hover:text-red-500 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             ×
                           </button>
@@ -310,7 +333,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                       </div>
                       
                       {activeDropdownIdx === idx && (
-                        <div className="absolute z-[100] left-0 mt-1 w-[400px] bg-white border-2 border-tally-teal shadow-2xl max-h-80 overflow-y-auto">
+                        <div className="absolute z-[100] left-0 mt-1 w-[450px] bg-white border-2 border-tally-teal shadow-2xl max-h-80 overflow-y-auto">
                           <div className="bg-tally-teal text-white text-[10px] px-2 py-0.5 font-bold flex justify-between sticky top-0 z-10">
                             <span>List of Ledger Accounts</span>
                             <span>Balance</span>
@@ -330,8 +353,40 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-0.5">
-                      {entry.type === 'Dr' && (
+
+                    {type === 'Journal' || !config.singleEntry ? (
+                      <>
+                        <td className="px-4 py-0.5">
+                          {entry.type === 'Dr' && (
+                            <input 
+                              type="number" 
+                              value={entry.amount}
+                              onChange={(e) => {
+                                const newEntries = [...entries];
+                                newEntries[idx].amount = e.target.value;
+                                setEntries(newEntries);
+                              }}
+                              className="w-full text-right bg-transparent focus:outline-none font-bold font-mono"
+                            />
+                          )}
+                        </td>
+                        <td className="px-4 py-0.5">
+                          {entry.type === 'Cr' && (
+                            <input 
+                              type="number" 
+                              value={entry.amount}
+                              onChange={(e) => {
+                                const newEntries = [...entries];
+                                newEntries[idx].amount = e.target.value;
+                                setEntries(newEntries);
+                              }}
+                              className="w-full text-right bg-transparent focus:outline-none font-bold font-mono"
+                            />
+                          )}
+                        </td>
+                      </>
+                    ) : (
+                      <td className="px-4 py-0.5">
                         <input 
                           type="number" 
                           value={entry.amount}
@@ -342,30 +397,17 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                           }}
                           className="w-full text-right bg-transparent focus:outline-none font-bold font-mono"
                         />
-                      )}
-                    </td>
-                    <td className="px-4 py-0.5">
-                      {entry.type === 'Cr' && (
-                        <input 
-                          type="number" 
-                          value={entry.amount}
-                          onChange={(e) => {
-                            const newEntries = [...entries];
-                            newEntries[idx].amount = e.target.value;
-                            setEntries(newEntries);
-                          }}
-                          className="w-full text-right bg-transparent focus:outline-none font-bold font-mono"
-                        />
-                      )}
-                    </td>
+                      </td>
+                    )}
                   </tr>
-                  {/* Bill-wise Details Row */}
-                  {entry.ledgerId && (
+                  
+                  {/* Bill-wise Details (only if enabled and ledger selected) */}
+                  {config.showBillWise && entry.ledgerId && (
                     <tr className="bg-blue-50/30 text-[10px]">
                       <td></td>
                       <td className="px-4 py-1 flex gap-4">
                         <div className="flex items-center gap-1">
-                          <span className="text-gray-400 font-bold uppercase">Method:</span>
+                          <span className="text-gray-400 font-bold uppercase tracking-tighter">Method:</span>
                           <select 
                             value={entry.methodAdjustment}
                             onChange={(e) => {
@@ -383,7 +425,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                         </div>
                         {(entry.methodAdjustment === 'New Ref' || entry.methodAdjustment === 'Against Ref') && (
                           <div className="flex items-center gap-1">
-                            <span className="text-gray-400 font-bold uppercase">Ref No:</span>
+                            <span className="text-gray-400 font-bold uppercase tracking-tighter">Ref No:</span>
                             <input 
                               type="text" 
                               value={entry.refNo}
@@ -398,7 +440,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                           </div>
                         )}
                       </td>
-                      <td colSpan={2}></td>
+                      <td colSpan={type === 'Journal' || !config.singleEntry ? 2 : 1}></td>
                     </tr>
                   )}
                 </React.Fragment>
@@ -407,13 +449,61 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
           </table>
         </div>
 
+        {/* Configuration Modal (F12) */}
+        {showConfig && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+            <div className="w-[350px] bg-white border-4 border-tally-teal shadow-2xl p-4">
+              <h3 className="text-sm font-bold text-tally-teal border-b-2 border-tally-teal mb-4 uppercase">Configuration</h3>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold uppercase">Use Dr/Cr instead of To/By</span>
+                  <button 
+                    onClick={() => setConfig(prev => ({ ...prev, useDrCr: !prev.useDrCr }))}
+                    className={`px-4 py-1 text-[10px] font-bold uppercase border-2 ${config.useDrCr ? 'bg-tally-teal text-white border-tally-teal' : 'bg-white text-gray-400 border-gray-200'}`}
+                  >
+                    {config.useDrCr ? 'Yes' : 'No'}
+                  </button>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold uppercase">Use Single Entry Mode</span>
+                  <button 
+                    onClick={() => setConfig(prev => ({ ...prev, singleEntry: !prev.singleEntry }))}
+                    className={`px-4 py-1 text-[10px] font-bold uppercase border-2 ${config.singleEntry ? 'bg-tally-teal text-white border-tally-teal' : 'bg-white text-gray-400 border-gray-200'}`}
+                  >
+                    {config.singleEntry ? 'Yes' : 'No'}
+                  </button>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold uppercase">Show Bill-wise Details</span>
+                  <button 
+                    onClick={() => setConfig(prev => ({ ...prev, showBillWise: !prev.showBillWise }))}
+                    className={`px-4 py-1 text-[10px] font-bold uppercase border-2 ${config.showBillWise ? 'bg-tally-teal text-white border-tally-teal' : 'bg-white text-gray-400 border-gray-200'}`}
+                  >
+                    {config.showBillWise ? 'Yes' : 'No'}
+                  </button>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowConfig(false)}
+                className="w-full mt-6 bg-tally-teal text-white py-2 text-xs font-bold uppercase hover:bg-tally-header"
+              >
+                Save & Close
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Totals Bar */}
         <div className="bg-tally-sidebar text-white flex justify-between px-4 py-1 font-bold text-xs uppercase z-10">
           <span>Total</span>
-          <div className="flex gap-20">
+          {type === 'Journal' || !config.singleEntry ? (
+            <div className="flex gap-20">
+              <span className="w-40 text-right font-mono">₹ {calculateTotal('Dr').toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              <span className="w-40 text-right font-mono">₹ {calculateTotal('Cr').toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+          ) : (
             <span className="w-40 text-right font-mono">₹ {calculateTotal('Dr').toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-            <span className="w-40 text-right font-mono">₹ {calculateTotal('Cr').toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-          </div>
+          )}
         </div>
       </div>
 
