@@ -79,53 +79,69 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
   const [ledgerBalances, setLedgerBalances] = useState<Record<string, number>>({});
   const [activeDropdownIdx, setActiveDropdownIdx] = useState<number | null>(null);
   const [highlightedIdx, setHighlightedIdx] = useState(0);
+  const [focusedField, setFocusedField] = useState<{ idx: number, field: 'ledger' | 'amount' } | null>(null);
 
-  useEffect(() => {
-    if (initialDate) setDate(initialDate);
-  }, [initialDate]);
-
-  useEffect(() => {
-    const query = branchId ? `?branchId=${branchId}` : '';
-    fetch(`api/ledgers${query}`).then(res => res.json()).then(data => {
-      setLedgers(data);
-      const balances: Record<string, number> = {};
-      data.forEach((l: any) => {
-        balances[l.id] = l.openingBalance * (l.balanceType === 'Cr' ? -1 : 1);
-      });
-      setLedgerBalances(balances);
-    });
-    fetch(`api/cost-centres${query}`).then(res => res.json()).then(setCostCentres);
-  }, [branchId]);
-
-  const getFilteredLedgers = (searchTerm: string) => {
-    const search = searchTerm?.toLowerCase() || '';
-    return ledgers.filter(l => l.name.toLowerCase().includes(search));
+  const handleSelectLedger = (idx: number, ledger: Ledger) => {
+    const newEntries = [...entries];
+    newEntries[idx].ledgerId = ledger.id;
+    newEntries[idx].tempSearch = ledger.name;
+    
+    // Set default Dr/Cr for subsequent entries based on balance
+    if (idx > 0) {
+      const drTotal = newEntries.slice(0, idx).filter(e => e.type === 'Dr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+      const crTotal = newEntries.slice(0, idx).filter(e => e.type === 'Cr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+      const diff = drTotal - crTotal;
+      if (diff > 0) newEntries[idx].type = 'Cr';
+      else if (diff < 0) newEntries[idx].type = 'Dr';
+    }
+    
+    setEntries(newEntries);
+    setActiveDropdownIdx(null);
+    
+    // Move focus to amount field after selecting ledger
+    setTimeout(() => {
+      const amountInput = document.getElementById(`amount-${idx}`);
+      amountInput?.focus();
+    }, 10);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent, entryIdx: number) => {
+  const handleKeyDown = (e: React.KeyboardEvent, entryIdx: number, field: 'ledger' | 'amount') => {
     const filtered = getFilteredLedgers(entries[entryIdx].tempSearch || '');
     
     if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setHighlightedIdx(prev => Math.min(filtered.length - 1, prev + 1));
+      if (field === 'ledger' && activeDropdownIdx !== null) {
+        e.preventDefault();
+        setHighlightedIdx(prev => Math.min(filtered.length - 1, prev + 1));
+      }
     } else if (e.key === 'ArrowUp') {
+      if (field === 'ledger' && activeDropdownIdx !== null) {
+        e.preventDefault();
+        setHighlightedIdx(prev => Math.max(0, prev - 1));
+      }
+    } else if (e.key === 'Enter') {
       e.preventDefault();
-      setHighlightedIdx(prev => Math.max(0, prev - 1));
-    } else if (e.key === 'Enter' || e.key === 'Tab') {
-      if (filtered.length > 0 && activeDropdownIdx !== null) {
-        const selected = filtered[highlightedIdx];
-        if (selected) {
-          e.preventDefault();
-          handleSelectLedger(entryIdx, selected);
+      if (field === 'ledger') {
+        if (activeDropdownIdx !== null && filtered.length > 0) {
+          const selected = filtered[highlightedIdx];
+          if (selected) handleSelectLedger(entryIdx, selected);
+        } else if (entries[entryIdx].ledgerId) {
+          // Already have a ledger, move to amount
+          document.getElementById(`amount-${entryIdx}`)?.focus();
+        } else if (!entries[entryIdx].tempSearch && entryIdx === entries.length - 1) {
+          // Empty enter on last line particulars -> Accept/Save
+          handleSubmit();
         }
-      } else if (!entries[entryIdx].tempSearch && entryIdx === entries.length - 1) {
-        // If empty enter on last line, trigger Accept/Save
-        e.preventDefault();
-        handleSubmit();
-      } else if (entries[entryIdx].ledgerId && entries[entryIdx].amount) {
-        // If current line is complete, add new line on Enter
-        e.preventDefault();
-        handleAddEntry();
+      } else if (field === 'amount') {
+        if (entryIdx === entries.length - 1) {
+          // Last line amount enter -> Add new line
+          handleAddEntry();
+          setTimeout(() => {
+            document.getElementById(`ledger-${entryIdx + 1}`)?.focus();
+          }, 10);
+        } else {
+          // Move to next line ledger
+          document.getElementById(`ledger-${entryIdx + 1}`)?.focus();
+        }
       }
     } else if (e.key === 'Escape') {
       setActiveDropdownIdx(null);
@@ -149,6 +165,28 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
       setEntries([{ ledgerId: '', costCentreId: '', amount: '', type: (type === 'Receipt' ? 'Cr' : 'Dr'), tempSearch: '', methodAdjustment: 'On Account', refNo: '' }]);
       setNarration('');
     }
+  };
+
+  useEffect(() => {
+    if (initialDate) setDate(initialDate);
+  }, [initialDate]);
+
+  useEffect(() => {
+    const query = branchId ? `?branchId=${branchId}` : '';
+    fetch(`api/ledgers${query}`).then(res => res.json()).then(data => {
+      setLedgers(data);
+      const balances: Record<string, number> = {};
+      data.forEach((l: any) => {
+        balances[l.id] = l.openingBalance * (l.balanceType === 'Cr' ? -1 : 1);
+      });
+      setLedgerBalances(balances);
+    });
+    fetch(`api/cost-centres${query}`).then(res => res.json()).then(setCostCentres);
+  }, [branchId]);
+
+  const getFilteredLedgers = (searchTerm: string) => {
+    const search = searchTerm?.toLowerCase() || '';
+    return ledgers.filter(l => l.name.toLowerCase().includes(search));
   };
 
   const [showConfig, setShowConfig] = useState(false);
@@ -189,8 +227,11 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
       return;
     }
 
-    if (finalEntries.some(e => !e.ledgerId || !e.amount)) {
-      alert('Validation Error: Some entries are missing Ledger or Amount.');
+    // Clean up empty lines before submission
+    const submitEntries = finalEntries.filter(e => e.ledgerId && e.amount);
+
+    if (submitEntries.length === 0) {
+      alert('Validation Error: No valid entries to save.');
       return;
     }
 
@@ -201,7 +242,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
         narration, 
         amount: drTotal,
         branchId: branchId || 'HQ', 
-        entries: finalEntries.map(e => ({ 
+        entries: submitEntries.map(e => ({ 
           ledgerId: e.ledgerId,
           costCentreId: e.costCentreId || null,
           amount: Number(e.amount),
@@ -329,35 +370,43 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                       </select>
                     </td>
                     <td className="px-4 py-0.5 relative">
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="text"
-                          value={entry.tempSearch || ledgers.find(l => l.id === entry.ledgerId)?.name || ''}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            const match = ledgers.find(l => l.name.toLowerCase() === val.toLowerCase());
-                            const newEntries = [...entries];
-                            newEntries[idx].tempSearch = val;
-                            newEntries[idx].ledgerId = match ? match.id : '';
-                            setEntries(newEntries);
-                            setHighlightedIdx(0);
-                          }}
-                          onFocus={() => {
-                            setActiveDropdownIdx(idx);
-                            setHighlightedIdx(0);
-                          }}
-                          onKeyDown={(e) => handleKeyDown(e, idx)}
-                          className="w-full bg-transparent focus:outline-none font-bold uppercase"
-                          placeholder="Select Ledger..."
-                        />
-                        {entries.length > 1 && (
-                          <button 
-                            type="button" 
-                            onClick={() => handleRemoveEntry(idx)}
-                            className="text-gray-300 hover:text-red-500 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            ×
-                          </button>
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          <input 
+                            id={`ledger-${idx}`}
+                            type="text"
+                            value={entry.tempSearch || ledgers.find(l => l.id === entry.ledgerId)?.name || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const match = ledgers.find(l => l.name.toLowerCase() === val.toLowerCase());
+                              const newEntries = [...entries];
+                              newEntries[idx].tempSearch = val;
+                              newEntries[idx].ledgerId = match ? match.id : '';
+                              setEntries(newEntries);
+                              setHighlightedIdx(0);
+                            }}
+                            onFocus={() => {
+                              setActiveDropdownIdx(idx);
+                              setHighlightedIdx(0);
+                            }}
+                            onKeyDown={(e) => handleKeyDown(e, idx, 'ledger')}
+                            className="w-full bg-transparent focus:outline-none font-bold uppercase"
+                            placeholder="Select Ledger..."
+                          />
+                          {entries.length > 1 && (
+                            <button 
+                              type="button" 
+                              onClick={() => handleRemoveEntry(idx)}
+                              className="text-gray-300 hover:text-red-500 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                        {entry.ledgerId && (
+                          <div className="text-[10px] italic text-gray-500 ml-4">
+                            Cur Bal: {Math.abs(ledgerBalances[entry.ledgerId] || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {ledgerBalances[entry.ledgerId] >= 0 ? 'Dr' : 'Cr'}
+                          </div>
                         )}
                       </div>
                       
@@ -388,6 +437,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                         <td className="px-4 py-0.5">
                           {entry.type === 'Dr' && (
                             <input 
+                              id={`amount-${idx}`}
                               type="number" 
                               value={entry.amount}
                               onChange={(e) => {
@@ -395,6 +445,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                                 newEntries[idx].amount = e.target.value;
                                 setEntries(newEntries);
                               }}
+                              onKeyDown={(e) => handleKeyDown(e, idx, 'amount')}
                               className="w-full text-right bg-transparent focus:outline-none font-bold font-mono"
                             />
                           )}
@@ -402,6 +453,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                         <td className="px-4 py-0.5">
                           {entry.type === 'Cr' && (
                             <input 
+                              id={`amount-${idx}`}
                               type="number" 
                               value={entry.amount}
                               onChange={(e) => {
@@ -409,6 +461,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                                 newEntries[idx].amount = e.target.value;
                                 setEntries(newEntries);
                               }}
+                              onKeyDown={(e) => handleKeyDown(e, idx, 'amount')}
                               className="w-full text-right bg-transparent focus:outline-none font-bold font-mono"
                             />
                           )}
@@ -417,6 +470,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                     ) : (
                       <td className="px-4 py-0.5">
                         <input 
+                          id={`amount-${idx}`}
                           type="number" 
                           value={entry.amount}
                           onChange={(e) => {
@@ -424,6 +478,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
                             newEntries[idx].amount = e.target.value;
                             setEntries(newEntries);
                           }}
+                          onKeyDown={(e) => handleKeyDown(e, idx, 'amount')}
                           className="w-full text-right bg-transparent focus:outline-none font-bold font-mono"
                         />
                       </td>
