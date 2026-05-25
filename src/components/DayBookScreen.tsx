@@ -26,7 +26,8 @@ export default function DayBookScreen({ branchId, initialDate }: { branchId?: st
 
   const fetchData = () => {
     setLoading(true);
-    fetch(`/api/vouchers${branchId ? `?branchId=${branchId}` : ''}`)
+    const query = branchId ? `?branchId=${branchId}` : '';
+    fetch(`/api/vouchers${query}`)
       .then(res => res.json())
       .then(data => {
         let filtered = data;
@@ -45,7 +46,7 @@ export default function DayBookScreen({ branchId, initialDate }: { branchId?: st
   const handleDelete = async (id: string) => {
     if (!confirm('VOID VOUCHER: Are you sure you want to delete this transaction? This cannot be undone.')) return;
     try {
-      const res = await fetch(`api/vouchers/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/vouchers/${id}`, { method: 'DELETE' });
       if (res.ok) {
         alert('Voucher Voided Successfully');
         fetchData();
