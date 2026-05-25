@@ -8,7 +8,7 @@ export default function EmployeeScreen({ branchId }: { branchId?: string }) {
 
   const fetchEmployees = async () => {
     const query = branchId ? `?branchId=${branchId}` : '';
-    const res = await fetch(`api/employees${query}`);
+    const res = await fetch(`/api/employees${query}`);
     const data = await res.json();
     setEmployees(data);
   };
@@ -19,7 +19,7 @@ export default function EmployeeScreen({ branchId }: { branchId?: string }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const response = await fetch('api/employees', {
+    const response = await fetch('/api/employees', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, code, designation, salaryStructure: '{}', branchId }),
