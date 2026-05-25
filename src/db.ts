@@ -215,6 +215,8 @@ export async function initDB() {
       table.string('costCentreId').references('id').inTable('cost_centres');
       table.float('amount').notNullable();
       table.string('type').notNullable(); // Dr or Cr
+      table.string('methodAdjustment').defaultTo('On Account');
+      table.string('refNo');
     });
   }
 
@@ -296,6 +298,15 @@ export async function initDB() {
         table.string('pan');
       });
       console.log("Migrated ledgers table with new columns.");
+    }
+
+    const entryColumns = await db('voucher_entries').columnInfo();
+    if (!entryColumns.methodAdjustment) {
+      await db.schema.table('voucher_entries', (table) => {
+        table.string('methodAdjustment').defaultTo('On Account');
+        table.string('refNo');
+      });
+      console.log("Migrated voucher_entries table with new columns.");
     }
   } catch (e) {
     console.error("Migration failed:", e);
