@@ -19,8 +19,8 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
   const [globalBalance, setGlobalBalance] = useState(0);
 
   useEffect(() => {
-    fetch('api/branches').then(res => res.json()).then(data => setBranches(data));
-    fetch('api/ledgers').then(res => res.json()).then(ledgers => {
+    fetch('/api/branches').then(res => res.json()).then(data => setBranches(data));
+    fetch('/api/ledgers').then(res => res.json()).then(ledgers => {
       const total = ledgers.reduce((acc: number, l: any) => {
         const bal = Number(l.openingBalance || 0);
         return l.balanceType === 'Dr' ? acc + bal : acc - bal;
