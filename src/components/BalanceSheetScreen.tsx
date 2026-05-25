@@ -12,20 +12,28 @@ export default function BalanceSheetScreen({ branchId }: { branchId?: string }) 
 
   useEffect(() => {
     const fetchData = async () => {
-      const query = branchId ? `?branchId=${branchId}` : '';
-      const [l, v, g, b] = await Promise.all([
-        fetch(`/api/ledgers${query}`).then(res => res.json()),
-        fetch(`/api/vouchers${query}`).then(res => res.json()),
-        fetch(`/api/account-groups${query}`).then(res => res.json()),
-        fetch(`/api/branches`).then(res => res.json())
-      ]);
-      setLedgers(l);
-      setVouchers(v);
-      setGroups(g);
-      
-      if (branchId) {
-        const currentBranch = b.find((curr: any) => curr.id === branchId);
-        if (currentBranch) setCompanyName(currentBranch.name);
+      try {
+        console.log('Fetching Balance Sheet data for branch:', branchId);
+        const query = branchId ? `?branchId=${branchId}` : '';
+        const [l, v, g, b] = await Promise.all([
+          fetch(`/api/ledgers${query}`).then(res => res.json()),
+          fetch(`/api/vouchers${query}`).then(res => res.json()),
+          fetch(`/api/account-groups${query}`).then(res => res.json()),
+          fetch(`/api/branches`).then(res => res.json())
+        ]);
+        
+        console.log('Data received:', { ledgers: l.length, vouchers: v.length, groups: g.length });
+        
+        setLedgers(Array.isArray(l) ? l : []);
+        setVouchers(Array.isArray(v) ? v : []);
+        setGroups(Array.isArray(g) ? g : []);
+        
+        if (branchId && Array.isArray(b)) {
+          const currentBranch = b.find((curr: any) => curr.id === branchId);
+          if (currentBranch) setCompanyName(currentBranch.name);
+        }
+      } catch (err) {
+        console.error('Balance Sheet Fetch Error:', err);
       }
     };
     fetchData();
@@ -36,36 +44,30 @@ export default function BalanceSheetScreen({ branchId }: { branchId?: string }) 
     if (!ledger) return 0;
     
     let balance = Number(ledger.openingBalance || 0);
-    const type = ledger.balanceType || 'Dr'; // Default to Dr if not specified
-
-    vouchers.forEach(v => {
-      v.entries?.forEach((e: any) => {
-        if (e.ledgerId === ledgerId) {
-          const amt = Number(e.amount || 0);
-          if (e.type === 'Dr') {
-            balance += amt;
-          } else {
-            balance -= amt;
-          }
-        }
-      });
-    });
     
-    // In Tally, Assets/Expenses are usually Dr (+ve), Liabilities/Income are usually Cr (-ve)
-    // For the Balance Sheet, we want to show the magnitude and handle the signs based on the category
+    vouchers.forEach(v => {
+      if (v.entries && Array.isArray(v.entries)) {
+        v.entries.forEach((e: any) => {
+          if (e.ledgerId === ledgerId) {
+            const amt = Number(e.amount || 0);
+            if (e.type === 'Dr') balance += amt;
+            else balance -= amt;
+          }
+        });
+      }
+    });
     return balance;
   };
 
   const getGroupTotal = (groupName: string) => {
-    // Find all ledgers belonging to this group
+    // Find ledgers in this group
     const relevantLedgers = ledgers.filter(l => 
-      l.group_name === groupName || 
-      l.group === groupName
+      l.group_name === groupName || l.group === groupName
     );
     
     let total = relevantLedgers.reduce((acc, l) => acc + calculateBalance(l.id), 0);
 
-    // Also include sub-groups (recursive calculation)
+    // Add sub-groups
     const subGroups = groups.filter(g => g.parent_group === groupName);
     subGroups.forEach(sg => {
       total += getGroupTotal(sg.name);
@@ -83,65 +85,62 @@ export default function BalanceSheetScreen({ branchId }: { branchId?: string }) 
   };
 
   const renderSection = (title: string, groupNames: string[]) => {
-    const sections = groupNames.map(name => {
-      const balance = getGroupTotal(name);
-      // For Liabilities, Cr is positive, Dr is negative.
-      // For Assets, Dr is positive, Cr is negative.
-      const displayBalance = title === 'Liabilities' ? -balance : balance;
-      return { name, balance: displayBalance };
-    });
-    const total = sections.reduce((acc, s) => acc + s.balance, 0);
+    const sections = groupNames.map(name => ({
+      name,
+      balance: getGroupTotal(name)
+    }));
+
+    // For Liabilities, Cr (-ve) is positive display
+    // For Assets, Dr (+ve) is positive display
+    const normalizedSections = sections.map(s => ({
+      ...s,
+      displayBalance: title === 'Liabilities' ? -s.balance : s.balance
+    }));
+
+    const total = normalizedSections.reduce((acc, s) => acc + s.displayBalance, 0);
 
     return (
-      <div className="flex flex-col h-full min-h-[200px]">
-        <div className="flex-1 space-y-1">
-          {sections.map(s => {
-             const isExpanded = expandedGroups.includes(s.name);
-             // Always show the main groups even if balance is 0, to show the report structure
-             return (
-               <div key={s.name} className="flex flex-col">
-                  <div 
-                    onClick={() => toggleGroup(s.name)}
-                    className="flex justify-between items-center text-[11px] md:text-[12px] py-1 px-1 hover:bg-tally-accent/10 cursor-pointer transition-colors group"
-                  >
-                    <div className="flex items-center gap-2">
-                       <span className={`w-3 h-3 flex items-center justify-center font-mono text-[8px] border ${isExpanded ? 'bg-tally-teal text-white' : 'bg-gray-100'}`}>
-                         {isExpanded ? '-' : '+'}
-                       </span>
-                       <span className="font-bold text-gray-700 uppercase tracking-tight">{s.name}</span>
-                    </div>
-                    <span className="font-mono font-bold">
-                      {Math.abs(s.balance) > 0 ? Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : "0.00"} 
+      <div className="flex flex-col w-full h-full">
+        <div className="flex-1 min-h-[300px] border-b border-tally-teal/30">
+          {normalizedSections.map(s => {
+            const isExpanded = expandedGroups.includes(s.name);
+            return (
+              <div key={s.name} className="flex flex-col border-b border-gray-50 last:border-0">
+                <div 
+                  onClick={() => toggleGroup(s.name)}
+                  className="flex justify-between items-center py-1.5 px-2 hover:bg-tally-accent/10 cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 text-[10px] font-bold text-gray-400">
+                      {isExpanded ? '[-]' : '[+]'}
                     </span>
+                    <span className="text-[11px] font-bold uppercase text-gray-700">{s.name}</span>
                   </div>
-                  {isExpanded && (
-                    <div className="pl-6 mb-1 space-y-0.5 border-l border-gray-100 ml-2">
-                       {ledgers.filter(l => l.group === s.name || l.group_name === s.name).map(l => {
-                          const bal = calculateBalance(l.id);
-                          const displayBal = title === 'Liabilities' ? -bal : bal;
-                          return (
-                            <div key={l.id} className="flex justify-between text-[10px] text-gray-500 italic px-1">
-                               <span>{l.name}</span>
-                               <span className="font-mono">{Math.abs(displayBal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                          );
-                       })}
-                       {/* Also show sub-groups if any */}
-                       {groups.filter(g => g.parent_group === s.name).map(sg => (
-                         <div key={sg.id} className="pl-2">
-                            <div className="flex justify-between text-[10px] font-bold text-gray-600 uppercase">
-                               <span>{sg.name}</span>
-                               <span className="font-mono">{Math.abs(getGroupTotal(sg.name)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                         </div>
-                       ))}
-                    </div>
-                  )}
-               </div>
-             );
+                  <span className="text-[11px] font-mono font-bold">
+                    {Math.abs(s.displayBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                {isExpanded && (
+                  <div className="bg-gray-50/50 py-1">
+                    {ledgers.filter(l => l.group_name === s.name || l.group === s.name).map(l => {
+                      const bal = calculateBalance(l.id);
+                      const displayBal = title === 'Liabilities' ? -bal : bal;
+                      if (Math.abs(displayBal) < 0.01) return null;
+                      return (
+                        <div key={l.id} className="flex justify-between px-8 py-0.5 text-[10px] italic text-gray-500">
+                          <span>{l.name}</span>
+                          <span className="font-mono">{Math.abs(displayBal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
           })}
         </div>
-        <div className="flex justify-between text-[11px] md:text-sm font-black border-t-2 border-tally-teal pt-1 mt-2 px-1 text-tally-teal bg-teal-50/30">
+        <div className="bg-tally-light p-2 flex justify-between font-black text-xs text-tally-teal border-t-2 border-tally-teal">
           <span>TOTAL</span>
           <span className="font-mono">₹ {Math.abs(total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
         </div>
