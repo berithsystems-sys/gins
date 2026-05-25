@@ -44,7 +44,9 @@ import LedgerVouchersScreen from './components/LedgerVouchersScreen';
 import SettingsScreen from './components/SettingsScreen';
 import PrintScreen from './components/PrintScreen';
 import ExportScreen from './components/ExportScreen';
+import ImportScreen from './components/ImportScreen';
 import RatioAnalysisScreen from './components/RatioAnalysisScreen';
+import PayrollScreen from './components/PayrollScreen';
 import { exportToExcel } from './lib/ReportUtils';
 
 type User = {
@@ -74,6 +76,7 @@ const GATEWAY_MENU = [
   ]},
   { section: 'Utilities', items: [
     { id: 'banking', label: 'Banking', key: 'N' },
+    { id: 'payroll', label: 'Payroll', key: 'Y' },
     { id: 'debug', label: 'Diagnostics', key: 'D' },
   ]},
   { section: 'Reports', items: [
@@ -151,6 +154,7 @@ export default function App() {
       { label: 'Alter Master', id: 'ALTER' },
       { label: 'Create Voucher', id: 'VOUCHER' },
       { label: 'Banking', id: 'BANKING' },
+      { label: 'Payroll Management', id: 'PAYROLL' },
       { label: 'Audit Logs', id: 'AUDIT' },
       { label: 'Admin Panel', id: 'ADMIN' },
     ];
@@ -252,6 +256,7 @@ export default function App() {
       if (selectedId === 'alter') setCurrentScreen('ALTER');
       if (selectedId === 'daybook') setCurrentScreen('DAYBOOK');
       if (selectedId === 'banking') setCurrentScreen('BANKING');
+      if (selectedId === 'payroll') setCurrentScreen('PAYROLL');
       if (selectedId === 'balance_sheet') setCurrentScreen('BALANCE_SHEET');
       if (selectedId === 'pl_account') setCurrentScreen('PL_ACCOUNT');
       if (selectedId === 'ratio_analysis') setCurrentScreen('RATIO');
@@ -687,6 +692,7 @@ export default function App() {
                     onTypeChange={(t) => console.log('Voucher type changed to:', t)} 
                     initialType={voucherType}
                     initialDate={currentDate}
+                    user={user}
                   />
                 </div>
               )}
@@ -706,44 +712,16 @@ export default function App() {
                 {currentScreen === 'AUDIT' && <AuditLogScreen branchId={selectedBranchId} isAdmin={user.role === 'HQ'} />}
                 {currentScreen === 'ADMIN' && <AdminPanel />}
                 {currentScreen === 'BANKING' && <BankingScreen branchId={selectedBranchId} />}
-                {currentScreen === 'PAYROLL' && <div className="p-10 text-center font-bold text-tally-teal uppercase italic">Payroll Module - Coming Soon</div>}
+                {currentScreen === 'PAYROLL' && <PayrollScreen branchId={selectedBranchId} onBack={handleBack} />}
                 {currentScreen === 'COMPANY' && <CompanyScreen branchId={selectedBranchId} />}
-                {currentScreen === 'DATA' && <DataScreen />}
-                {currentScreen === 'IMPORT' && (
-                  <div className="p-10 space-y-6 max-w-xl mx-auto">
-                    <h3 className="text-lg font-bold uppercase text-tally-teal border-b-2 border-tally-teal mb-4">Import Data (Masters/Transactions)</h3>
-                    <div className="space-y-4 border p-6 bg-white shadow">
-                      <div>
-                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Source File Path (Local/.xml)</label>
-                        <input type="text" className="w-full border p-2 text-xs focus:border-tally-teal outline-none" placeholder="C:\TallyPrime\Import\Masters.xml" />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="text-[10px] font-bold text-gray-400 uppercase">Behavior for duplicates</div>
-                        <select className="w-full border p-2 text-xs outline-none">
-                          <option>Ignore Duplicates</option>
-                          <option>Modify with New Data</option>
-                          <option>Force Import (Overwrite)</option>
-                        </select>
-                      </div>
-                      <button className="w-full bg-tally-teal text-white py-2 text-xs font-bold uppercase mt-4">Import Now</button>
-                    </div>
-                  </div>
-                )}
+                {currentScreen === 'DATA' && <DataScreen onNavigate={setCurrentScreen} />}
+                {currentScreen === 'EXCHANGE' && <div className="p-10 text-center font-bold text-tally-teal uppercase italic">Exchange Module - Coming Soon</div>}
                 {currentScreen === 'EXPORT' && <ExportScreen onBack={handleBack} />}
                 {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} />}
+                {currentScreen === 'IMPORT' && <ImportScreen onBack={handleBack} />}
                 {currentScreen === 'SETTINGS' && <SettingsScreen onBack={handleBack} />}
-                {currentScreen === 'COMPANY' && (
-                  <div className="p-10 space-y-4">
-                    <div className="grid grid-cols-2 gap-4 text-xs">
-                        <div className="bg-gray-100 p-4 border italic">Select Company (F3)</div>
-                        <div className="bg-gray-100 p-4 border italic">Alter Company (Alt+K)</div>
-                        <div className="bg-gray-100 p-4 border italic">Connect for Remote Access</div>
-                        <div className="bg-gray-100 p-4 border italic">Shut Company (Alt+F1)</div>
-                    </div>
-                  </div>
-                )}
                 {currentScreen === 'DEBUG' && <DebugDiagnosticsScreen />}
-                {['DATA', 'EXCHANGE', 'GOTO', 'IMPORT', 'EXPORT', 'PRINT', 'EMAIL'].includes(currentScreen) && (
+                {['GOTO', 'EMAIL'].includes(currentScreen) && (
                   <div className="p-20 text-center space-y-4">
                     <div className="text-4xl text-tally-teal/10 font-black uppercase">{currentScreen}</div>
                     <div className="text-xs font-bold text-gray-400 uppercase tracking-widest italic">
