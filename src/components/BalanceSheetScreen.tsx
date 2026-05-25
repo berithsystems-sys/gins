@@ -11,16 +11,24 @@ export default function BalanceSheetScreen({ branchId }: { branchId?: string }) 
   const [reportDate, setReportDate] = useState(new Date().toLocaleDateString('en-IN'));
 
   useEffect(() => {
-    const query = branchId ? `?branchId=${branchId}` : '';
-    Promise.all([
-      fetch(`/api/ledgers${query}`).then(res => res.json()),
-      fetch(`/api/vouchers${query}`).then(res => res.json()),
-      fetch(`/api/account-groups${query}`).then(res => res.json())
-    ]).then(([l, v, g]) => {
+    const fetchData = async () => {
+      const query = branchId ? `?branchId=${branchId}` : '';
+      const [l, v, g, b] = await Promise.all([
+        fetch(`/api/ledgers${query}`).then(res => res.json()),
+        fetch(`/api/vouchers${query}`).then(res => res.json()),
+        fetch(`/api/account-groups${query}`).then(res => res.json()),
+        fetch(`/api/branches`).then(res => res.json())
+      ]);
       setLedgers(l);
       setVouchers(v);
       setGroups(g);
-    });
+      
+      if (branchId) {
+        const currentBranch = b.find((curr: any) => curr.id === branchId);
+        if (currentBranch) setCompanyName(currentBranch.name);
+      }
+    };
+    fetchData();
   }, [branchId]);
 
   const calculateBalance = (ledgerId: string) => {
