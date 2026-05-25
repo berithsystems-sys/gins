@@ -63,16 +63,16 @@ export default function BankingScreen({ branchId }: { branchId?: string }) {
 
    useEffect(() => {
       // Load reconciliations from server for branch
-      const bid = branchId || '101';
-      fetch(`/api/bank/reconciliations?branchId=${encodeURIComponent(bid)}`)
+      if (!branchId) return;
+      fetch(`/api/bank/reconciliations?branchId=${encodeURIComponent(branchId)}`)
         .then(r => r.json())
         .then((rows: any[]) => {
-          if (Array.isArray(rows) && rows.length > 0) {
+          if (Array.isArray(rows)) {
             const mapped = rows.map(r => ({ id: r.id, date: r.date || '', particulars: r.particulars || '', amount: Number(r.amount) || 0, type: (r.txnType === 'DR' || r.type === 'Dr') ? 'Dr' : 'Cr', bankDate: r.bankDate || undefined } as ReconciliationItem));
             setReconItems(mapped);
           }
         }).catch(() => {
-          // fallback: keep existing seeded items
+          setReconItems([]);
         });
    }, [branchId]);
 
@@ -135,11 +135,15 @@ export default function BankingScreen({ branchId }: { branchId?: string }) {
                <tfoot className="border-t-2 border-tally-teal bg-tally-light font-bold text-[10px] uppercase">
                   <tr>
                      <td colSpan={2} className="px-4 py-1">Balance as per Company Books</td>
-                     <td colSpan={3} className="px-4 py-1 text-right font-mono text-tally-teal">₹ 15,40,250.00 Dr</td>
+                     <td colSpan={3} className="px-4 py-1 text-right font-mono text-tally-teal">
+                        ₹ {reconItems.reduce((acc, it) => acc + (it.type === 'Dr' ? it.amount : -it.amount), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                     </td>
                   </tr>
                   <tr className="text-gray-400">
                      <td colSpan={2} className="px-4 py-1">Balance as per Bank</td>
-                     <td colSpan={3} className="px-4 py-1 text-right font-mono">₹ 14,80,000.00 Dr</td>
+                     <td colSpan={3} className="px-4 py-1 text-right font-mono">
+                        ₹ {reconItems.filter(it => it.bankDate).reduce((acc, it) => acc + (it.type === 'Dr' ? it.amount : -it.amount), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                     </td>
                   </tr>
                </tfoot>
             </table>
