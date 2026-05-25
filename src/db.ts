@@ -341,7 +341,6 @@ export async function initDB() {
   } catch (err) {
     console.error("Migration failed:", err);
   }
-}
 
   // Auto-seed default data if empty
   try {
