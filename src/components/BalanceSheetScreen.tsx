@@ -87,19 +87,17 @@ export default function BalanceSheetScreen({ branchId }: { branchId?: string }) 
       const balance = getGroupTotal(name);
       // For Liabilities, Cr is positive, Dr is negative.
       // For Assets, Dr is positive, Cr is negative.
-      // We'll normalize this so the balance displayed is the absolute value if it matches the column type.
       const displayBalance = title === 'Liabilities' ? -balance : balance;
       return { name, balance: displayBalance };
     });
     const total = sections.reduce((acc, s) => acc + s.balance, 0);
 
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full min-h-[200px]">
         <div className="flex-1 space-y-1">
           {sections.map(s => {
              const isExpanded = expandedGroups.includes(s.name);
-             if (s.balance === 0 && !isExpanded) return null;
-
+             // Always show the main groups even if balance is 0, to show the report structure
              return (
                <div key={s.name} className="flex flex-col">
                   <div 
@@ -107,18 +105,20 @@ export default function BalanceSheetScreen({ branchId }: { branchId?: string }) 
                     className="flex justify-between items-center text-[11px] md:text-[12px] py-1 px-1 hover:bg-tally-accent/10 cursor-pointer transition-colors group"
                   >
                     <div className="flex items-center gap-2">
+                       <span className={`w-3 h-3 flex items-center justify-center font-mono text-[8px] border ${isExpanded ? 'bg-tally-teal text-white' : 'bg-gray-100'}`}>
+                         {isExpanded ? '-' : '+'}
+                       </span>
                        <span className="font-bold text-gray-700 uppercase tracking-tight">{s.name}</span>
                     </div>
                     <span className="font-mono font-bold">
-                      {Math.abs(s.balance) > 0 ? Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ""} 
+                      {Math.abs(s.balance) > 0 ? Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : "0.00"} 
                     </span>
                   </div>
                   {isExpanded && (
-                    <div className="pl-4 mb-1 space-y-0.5 border-l border-gray-100 ml-1">
+                    <div className="pl-6 mb-1 space-y-0.5 border-l border-gray-100 ml-2">
                        {ledgers.filter(l => l.group === s.name || l.group_name === s.name).map(l => {
                           const bal = calculateBalance(l.id);
                           const displayBal = title === 'Liabilities' ? -bal : bal;
-                          if (Math.abs(displayBal) < 0.01) return null;
                           return (
                             <div key={l.id} className="flex justify-between text-[10px] text-gray-500 italic px-1">
                                <span>{l.name}</span>
@@ -126,13 +126,22 @@ export default function BalanceSheetScreen({ branchId }: { branchId?: string }) 
                             </div>
                           );
                        })}
+                       {/* Also show sub-groups if any */}
+                       {groups.filter(g => g.parent_group === s.name).map(sg => (
+                         <div key={sg.id} className="pl-2">
+                            <div className="flex justify-between text-[10px] font-bold text-gray-600 uppercase">
+                               <span>{sg.name}</span>
+                               <span className="font-mono">{Math.abs(getGroupTotal(sg.name)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                         </div>
+                       ))}
                     </div>
                   )}
                </div>
              );
           })}
         </div>
-        <div className="flex justify-between text-[11px] md:text-sm font-black border-t-2 border-tally-teal pt-1 mt-2 px-1 text-tally-teal">
+        <div className="flex justify-between text-[11px] md:text-sm font-black border-t-2 border-tally-teal pt-1 mt-2 px-1 text-tally-teal bg-teal-50/30">
           <span>TOTAL</span>
           <span className="font-mono">₹ {Math.abs(total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
         </div>
