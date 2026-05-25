@@ -33,21 +33,45 @@ export default function BalanceSheetScreen({ branchId }: { branchId?: string }) 
 
   const calculateBalance = (ledgerId: string) => {
     const ledger = ledgers.find(l => l.id === ledgerId);
-    let balance = ledger?.openingBalance || 0;
+    if (!ledger) return 0;
+    
+    let balance = Number(ledger.openingBalance || 0);
+    const type = ledger.balanceType || 'Dr'; // Default to Dr if not specified
+
     vouchers.forEach(v => {
       v.entries?.forEach((e: any) => {
         if (e.ledgerId === ledgerId) {
-          if (e.type === 'Dr') balance += e.amount;
-          else balance -= e.amount;
+          const amt = Number(e.amount || 0);
+          if (e.type === 'Dr') {
+            balance += amt;
+          } else {
+            balance -= amt;
+          }
         }
       });
     });
+    
+    // In Tally, Assets/Expenses are usually Dr (+ve), Liabilities/Income are usually Cr (-ve)
+    // For the Balance Sheet, we want to show the magnitude and handle the signs based on the category
     return balance;
   };
 
   const getGroupTotal = (groupName: string) => {
-    const relevantLedgers = ledgers.filter(l => l.group === groupName || l.group_name === groupName);
-    return relevantLedgers.reduce((acc, l) => acc + calculateBalance(l.id), 0);
+    // Find all ledgers belonging to this group
+    const relevantLedgers = ledgers.filter(l => 
+      l.group_name === groupName || 
+      l.group === groupName
+    );
+    
+    let total = relevantLedgers.reduce((acc, l) => acc + calculateBalance(l.id), 0);
+
+    // Also include sub-groups (recursive calculation)
+    const subGroups = groups.filter(g => g.parent_group === groupName);
+    subGroups.forEach(sg => {
+      total += getGroupTotal(sg.name);
+    });
+
+    return total;
   };
 
   const toggleGroup = (groupName: string) => {
@@ -59,39 +83,46 @@ export default function BalanceSheetScreen({ branchId }: { branchId?: string }) 
   };
 
   const renderSection = (title: string, groupNames: string[]) => {
-    const sections = groupNames.map(name => ({ name, balance: getGroupTotal(name) }));
+    const sections = groupNames.map(name => {
+      const balance = getGroupTotal(name);
+      // For Liabilities, Cr is positive, Dr is negative.
+      // For Assets, Dr is positive, Cr is negative.
+      // We'll normalize this so the balance displayed is the absolute value if it matches the column type.
+      const displayBalance = title === 'Liabilities' ? -balance : balance;
+      return { name, balance: displayBalance };
+    });
     const total = sections.reduce((acc, s) => acc + s.balance, 0);
 
     return (
       <div className="flex flex-col h-full">
-        <div className="flex-1 space-y-2">
+        <div className="flex-1 space-y-1">
           {sections.map(s => {
              const isExpanded = expandedGroups.includes(s.name);
+             if (s.balance === 0 && !isExpanded) return null;
+
              return (
-               <div key={s.name} className="flex flex-col border-b border-gray-100 last:border-0">
+               <div key={s.name} className="flex flex-col">
                   <div 
                     onClick={() => toggleGroup(s.name)}
-                    className="flex justify-between items-center text-[11px] md:text-[13px] py-1.5 px-1 hover:bg-tally-accent/10 cursor-pointer transition-colors group"
+                    className="flex justify-between items-center text-[11px] md:text-[12px] py-1 px-1 hover:bg-tally-accent/10 cursor-pointer transition-colors group"
                   >
                     <div className="flex items-center gap-2">
-                       <span className={`w-3 h-3 flex items-center justify-center font-mono text-[8px] border ${isExpanded ? 'bg-tally-teal text-white' : 'bg-gray-100'}`}>
-                         {isExpanded ? '-' : '+'}
-                       </span>
                        <span className="font-bold text-gray-700 uppercase tracking-tight">{s.name}</span>
                     </div>
-                    <span className="font-mono font-bold text-tally-teal">
-                      {Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} 
+                    <span className="font-mono font-bold">
+                      {Math.abs(s.balance) > 0 ? Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ""} 
                     </span>
                   </div>
                   {isExpanded && (
-                    <div className="pl-6 mb-2 space-y-1 animate-in slide-in-from-top-2 duration-200">
+                    <div className="pl-4 mb-1 space-y-0.5 border-l border-gray-100 ml-1">
                        {ledgers.filter(l => l.group === s.name || l.group_name === s.name).map(l => {
                           const bal = calculateBalance(l.id);
-                          if (bal === 0) return null;
+                          const displayBal = title === 'Liabilities' ? -bal : bal;
+                          if (Math.abs(displayBal) < 0.01) return null;
                           return (
-                            <div key={l.id} className="flex justify-between text-[11px] text-gray-500 italic">
+                            <div key={l.id} className="flex justify-between text-[10px] text-gray-500 italic px-1">
                                <span>{l.name}</span>
-                               <span className="font-mono">{Math.abs(bal).toLocaleString()}</span>
+                               <span className="font-mono">{Math.abs(displayBal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             </div>
                           );
                        })}
@@ -101,7 +132,7 @@ export default function BalanceSheetScreen({ branchId }: { branchId?: string }) 
              );
           })}
         </div>
-        <div className="flex justify-between text-[11px] md:text-sm font-black border-t-4 border-double border-tally-teal pt-2 mt-4 px-1 text-tally-teal bg-teal-50/50">
+        <div className="flex justify-between text-[11px] md:text-sm font-black border-t-2 border-tally-teal pt-1 mt-2 px-1 text-tally-teal">
           <span>TOTAL</span>
           <span className="font-mono">₹ {Math.abs(total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
         </div>
