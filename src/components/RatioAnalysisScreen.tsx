@@ -20,17 +20,26 @@ export default function RatioAnalysisScreen({ onBack, branchId }: { onBack: () =
   const [ledgers, setLedgers] = useState<any[]>([]);
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [companyName, setCompanyName] = useState('BERITHSYSTEMS');
 
   useEffect(() => {
-    const query = branchId ? `?branchId=${branchId}` : '';
-    Promise.all([
-      fetch(`/api/ledgers${query}`).then(res => res.json()),
-      fetch(`/api/vouchers${query}`).then(res => res.json())
-    ]).then(([l, v]) => {
+    const fetchData = async () => {
+      const query = branchId ? `?branchId=${branchId}` : '';
+      const [l, v, b] = await Promise.all([
+        fetch(`/api/ledgers${query}`).then(res => res.json()),
+        fetch(`/api/vouchers${query}`).then(res => res.json()),
+        fetch(`/api/branches`).then(res => res.json())
+      ]);
       setLedgers(l);
       setVouchers(v);
+      
+      if (branchId) {
+        const currentBranch = b.find((curr: any) => curr.id === branchId);
+        if (currentBranch) setCompanyName(currentBranch.name);
+      }
       setLoading(false);
-    });
+    };
+    fetchData();
   }, [branchId]);
 
   const calculateBalance = (ledgerId: string) => {
@@ -151,8 +160,8 @@ export default function RatioAnalysisScreen({ onBack, branchId }: { onBack: () =
     >
       {/* Header */}
       <div className="bg-tally-header text-white h-[35px] flex items-center justify-between px-3 border-b border-tally-hotkey">
-        <span className="text-[12px] font-bold">Ratio Analysis & Financial Metrics</span>
-        <span className="text-[10px] text-tally-accent">Press ESC to go back</span>
+        <span className="text-[12px] font-bold">Ratio Analysis & Financial Metrics - {companyName}</span>
+        <button onClick={onBack} className="text-[10px] bg-white/10 px-2 py-0.5 rounded hover:bg-white/20 uppercase font-bold">Esc: Back</button>
       </div>
 
       {/* Tabs */}
