@@ -331,7 +331,9 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
         setAccountSearch('');
         setNarration('');
       } else {
-        alert(`SERVER ERROR: ${result.error || result.message || 'Unknown error'}`);
+        const errorMsg = result.error || 'Unknown error';
+        const errorDetails = result.details ? `\n\nDetails: ${result.details}` : '';
+        alert(`SERVER ERROR: ${errorMsg}${errorDetails}`);
       }
     } catch (err: any) {
       console.error('SUBMIT ERROR:', err);
