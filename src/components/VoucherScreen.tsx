@@ -15,7 +15,7 @@ interface CostCentre {
   name: string;
 }
 
-export default function VoucherScreen({ branchId, onTypeChange, initialType, initialDate }: { branchId?: string; onTypeChange?: (type: string) => void; initialType?: string; initialDate?: string }) {
+export default function VoucherScreen({ branchId, onTypeChange, initialType, initialDate, user }: { branchId?: string; onTypeChange?: (type: string) => void; initialType?: string; initialDate?: string; user?: any }) {
   const [ledgers, setLedgers] = useState<Ledger[]>([]);
   const [costCentres, setCostCentres] = useState<CostCentre[]>([]);
   const [type, setType] = useState<'Contra' | 'Payment' | 'Receipt' | 'Journal' | 'Sales' | 'Purchase'>((initialType as any) || 'Payment');
@@ -242,17 +242,9 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
       drTotal = (type === 'Receipt' ? crTotal : drTotal);
       crTotal = drTotal;
     } else {
-      // AUTO-BALANCE LOGIC (Multi-entry)
-      if (drTotal > 0 && crTotal === 0 && type !== 'Journal') {
-         alert(`Auto-Balancing: Adding Credit of ₹${drTotal} to balance the voucher.`);
-         crTotal = drTotal;
-      } else if (crTotal > 0 && drTotal === 0 && type !== 'Journal') {
-         alert(`Auto-Balancing: Adding Debit of ₹${crTotal} to balance the voucher.`);
-         drTotal = crTotal;
-      }
-
+      // DOUBLE-ENTRY VALIDATION
       if (Math.abs(drTotal - crTotal) > 0.01) {
-        alert(`Validation Error: Debit (₹${drTotal}) and Credit (₹${crTotal}) do not match!`);
+        alert(`Validation Error: Debit (₹${drTotal}) and Credit (₹${crTotal}) do not match! Please balance the voucher.`);
         return;
       }
 
@@ -271,13 +263,24 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
       return;
     }
 
+    // Secondary validation: ensure at least one Dr and one Cr
+    const hasDr = finalSubmitEntries.some(e => e.type === 'Dr');
+    const hasCr = finalSubmitEntries.some(e => e.type === 'Cr');
+    if (!hasDr || !hasCr) {
+      alert('Validation Error: Voucher must have at least one Debit and one Credit entry.');
+      return;
+    }
+
     try {
       const payload = { 
         date, 
         type, 
+        number: `VCH-${Date.now().toString().slice(-6)}`, // Generate a simple voucher number
         narration, 
         amount: drTotal,
         branchId: branchId || 'HQ', 
+        userId: user?.id,
+        username: user?.username,
         entries: finalSubmitEntries
       };
 
