@@ -661,11 +661,14 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    console.log("Initializing Vite development server...");
+    const startTime = Date.now();
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
+    console.log(`Vite server initialized in ${Date.now() - startTime}ms`);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
