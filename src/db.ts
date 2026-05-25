@@ -308,9 +308,40 @@ export async function initDB() {
       });
       console.log("Migrated voucher_entries table with new columns.");
     }
-  } catch (e) {
-    console.error("Migration failed:", e);
+
+    // Fix incorrect foreign key in vouchers table if it exists
+    try {
+      // This is a specific fix for a known schema error where branchId referenced vouchers instead of branches
+      const constraints = await db.raw("SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_NAME = 'vouchers' AND COLUMN_NAME = 'branchId' AND REFERENCED_TABLE_NAME = 'vouchers'");
+      
+      if (constraints[0] && constraints[0].length > 0) {
+        const constraintName = constraints[0][0].CONSTRAINT_NAME;
+        console.log(`Detected incorrect foreign key ${constraintName} on vouchers(branchId) referencing vouchers(id). Fixing...`);
+        
+        await db.raw(`ALTER TABLE vouchers DROP FOREIGN KEY ${constraintName}`);
+        await db.raw("ALTER TABLE vouchers ADD CONSTRAINT vouchers_branchid_foreign FOREIGN KEY (branchId) REFERENCES branches(id) ON DELETE CASCADE");
+        console.log("Foreign key constraint on vouchers(branchId) fixed successfully.");
+      }
+    } catch (fkErr) {
+      console.warn("Could not check/fix foreign key constraints:", fkErr.message);
+    }
+
+    // Ensure HQ branch exists for vouchers without a specific branchId
+    const hqExists = await db('branches').where({ id: 'HQ' }).first();
+    if (!hqExists) {
+      await db('branches').insert({
+        id: 'HQ',
+        code: 'HQ',
+        name: 'BERITHSYSTEMS HQ',
+        location: 'HEADQUARTERS',
+        registrationType: 'Regular'
+      });
+      console.log("Default HQ branch created.");
+    }
+  } catch (err) {
+    console.error("Migration failed:", err);
   }
+}
 
   // Auto-seed default data if empty
   try {
