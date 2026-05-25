@@ -5,22 +5,26 @@ import { exportToExcel, printReport } from '../lib/ReportUtils';
 export default function PLScreen({ branchId }: { branchId?: string }) {
   const [ledgers, setLedgers] = useState<any[]>([]);
   const [vouchers, setVouchers] = useState<any[]>([]);
-  const [groups, setGroups] = useState<any[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   const [companyName, setCompanyName] = useState('BERITHSYSTEMS');
-  const [reportDate, setReportDate] = useState(new Date().toLocaleDateString('en-IN'));
 
   useEffect(() => {
-    const query = branchId ? `?branchId=${branchId}` : '';
-    Promise.all([
-      fetch(`/api/ledgers${query}`).then(res => res.json()),
-      fetch(`/api/vouchers${query}`).then(res => res.json()),
-      fetch(`/api/account-groups${query}`).then(res => res.json())
-    ]).then(([l, v, g]) => {
+    const fetchData = async () => {
+      const query = branchId ? `?branchId=${branchId}` : '';
+      const [l, v, b] = await Promise.all([
+        fetch(`/api/ledgers${query}`).then(res => res.json()),
+        fetch(`/api/vouchers${query}`).then(res => res.json()),
+        fetch(`/api/branches`).then(res => res.json())
+      ]);
       setLedgers(l);
       setVouchers(v);
-      setGroups(g);
-    });
+      
+      if (branchId) {
+        const currentBranch = b.find((curr: any) => curr.id === branchId);
+        if (currentBranch) setCompanyName(currentBranch.name);
+      }
+    };
+    fetchData();
   }, [branchId]);
 
   const calculateBalance = (ledgerId: string) => {
@@ -120,7 +124,7 @@ export default function PLScreen({ branchId }: { branchId?: string }) {
     <div id="pl-report" className="flex flex-col h-full bg-tally-bg">
       {/* Report Header */}
       <div className="bg-tally-sidebar text-white px-4 py-1 font-bold text-xs uppercase flex justify-between sticky top-0 z-10">
-        <span>Profit & Loss Account</span>
+        <span>Profit & Loss A/c</span>
         <span className="text-tally-accent">{companyName}</span>
       </div>
 
@@ -160,7 +164,7 @@ export default function PLScreen({ branchId }: { branchId?: string }) {
 
           <div className="bg-tally-bg p-4 flex justify-between items-center text-sm font-black uppercase text-tally-teal border-t border-tally-teal">
              <span>Net Profit for the Period</span>
-             <span className="text-xl">₹ {(incomeTotal - expenseTotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+             <span className="text-xl">₹ {Math.abs(incomeTotal - expenseTotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
           </div>
         </div>
       </div>
