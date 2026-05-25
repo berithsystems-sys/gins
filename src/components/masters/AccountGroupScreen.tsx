@@ -6,14 +6,14 @@ export default function AccountGroupScreen({ branchId }: { branchId?: string }) 
   const [groups, setGroups] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch(`api/account-groups${branchId ? `?branchId=${branchId}` : ''}`)
+    fetch(`/api/account-groups${branchId ? `?branchId=${branchId}` : ''}`)
       .then(res => res.json())
       .then(data => setGroups(data));
   }, [branchId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const response = await fetch('api/account-groups', {
+    const response = await fetch('/api/account-groups', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, under, branchId }),
