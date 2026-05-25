@@ -197,6 +197,68 @@ async function startServer() {
     res.send(JSON.stringify({ branches, users, ledgers, vouchers, entries, logs, timestamp: new Date().toISOString() }, null, 2));
   });
 
+  // Import API (Bulk restore)
+  app.post("/api/import", async (req, res) => {
+    const data = req.body;
+    
+    try {
+      await db.transaction(async (trx) => {
+        // Simple strategy: Clear and re-insert or use upsert if available
+        // For simplicity and safety in this ERP context, we'll use a transaction
+        
+        if (data.branches?.length) {
+          for (const b of data.branches) {
+            await trx('branches').insert(b).onConflict('id').merge();
+          }
+        }
+        
+        if (data.users?.length) {
+          for (const u of data.users) {
+            await trx('users').insert(u).onConflict('id').merge();
+          }
+        }
+        
+        if (data.ledgers?.length) {
+          for (const l of data.ledgers) {
+            await trx('ledgers').insert(l).onConflict('id').merge();
+          }
+        }
+        
+        if (data.vouchers?.length) {
+          for (const v of data.vouchers) {
+            const { entries, ...vData } = v;
+            await trx('vouchers').insert(vData).onConflict('id').merge();
+          }
+        }
+
+        if (data.entries?.length) {
+           // Clear existing entries for imported vouchers to avoid duplicates if merging
+           const voucherIds = [...new Set(data.entries.map((e: any) => e.voucherId))];
+           if (voucherIds.length > 0) {
+             await trx('voucher_entries').whereIn('voucherId', voucherIds as string[]).delete();
+           }
+           await trx('voucher_entries').insert(data.entries);
+        }
+
+        if (data.logs?.length) {
+          for (const log of data.logs) {
+            await trx('audit_logs').insert(log).onConflict('id').merge();
+          }
+        }
+      });
+
+      res.json({ 
+        success: true, 
+        branches: data.branches?.length || 0,
+        ledgers: data.ledgers?.length || 0,
+        vouchers: data.vouchers?.length || 0
+      });
+    } catch (err: any) {
+      console.error("Import Error:", err);
+      res.status(500).json({ error: "Failed to import data", details: err.message });
+    }
+  });
+
   // Branches (HQ Only)
   app.get("/api/branches", async (req, res) => {
     const branches = await db('branches').select('*');
@@ -385,7 +447,10 @@ async function startServer() {
     
     // Fetch entries for each voucher
     const vouchersWithEntries = await Promise.all(vouchers.map(async (v) => {
-      const entries = await db('voucher_entries').where({ voucherId: v.id });
+      const entries = await db('voucher_entries')
+        .join('ledgers', 'voucher_entries.ledgerId', '=', 'ledgers.id')
+        .where({ voucherId: v.id })
+        .select('voucher_entries.*', 'ledgers.name as ledger_name');
       return { ...v, entries };
     }));
     
@@ -393,7 +458,7 @@ async function startServer() {
   });
 
   app.post("/api/vouchers", async (req, res) => {
-    const { entries, ...voucherData } = req.body;
+    const { entries, userId, username, ...voucherData } = req.body;
     const voucherId = Date.now().toString();
     const newVoucher = { id: voucherId, ...voucherData };
     
@@ -403,6 +468,17 @@ async function startServer() {
         const entriesWithId = entries.map((e: any) => ({ ...e, voucherId }));
         await trx('voucher_entries').insert(entriesWithId);
       }
+
+      // Log the voucher creation
+      await trx('audit_logs').insert({
+        id: Date.now().toString() + "_vch",
+        userId: userId || 'system',
+        username: username || 'system',
+        action: 'VOUCHER_CREATE',
+        timestamp: new Date().toISOString(),
+        branchId: voucherData.branchId,
+        details: `Created ${voucherData.type} Voucher: ${voucherData.number || voucherId} for ₹${voucherData.amount}`
+      });
     });
 
     res.json({ ...newVoucher, entries });
