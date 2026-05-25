@@ -460,6 +460,7 @@ async function startServer() {
   app.post("/api/vouchers", async (req, res) => {
     try {
       const { entries, userId, username, ...voucherData } = req.body;
+      console.log(`[Voucher POST] Payload received: type=${voucherData.type}, entries=${entries?.length}`);
       
       // Basic validation
       if (!entries || entries.length === 0) {
@@ -470,6 +471,7 @@ async function startServer() {
       const newVoucher = { id: voucherId, ...voucherData };
       
       await db.transaction(async (trx) => {
+        console.log(`[Voucher POST] Starting transaction for ID: ${voucherId}`);
         // 1. Insert Voucher Header
         await trx('vouchers').insert(newVoucher);
 
@@ -495,14 +497,15 @@ async function startServer() {
           branchId: voucherData.branchId,
           details: `Created ${voucherData.type} Voucher: ${voucherData.number || voucherId} for ₹${voucherData.amount}`
         });
+        console.log(`[Voucher POST] Transaction committed for ID: ${voucherId}`);
       });
 
       res.json({ success: true, id: voucherId });
     } catch (err: any) {
-      console.error('Voucher Save Error:', err);
+      console.error('[Voucher POST Error]:', err);
       res.status(500).json({ 
         error: 'Internal Server Error during voucher save', 
-        details: err.message 
+        details: err.sqlMessage || err.message || 'Check server console for details'
       });
     }
   });
