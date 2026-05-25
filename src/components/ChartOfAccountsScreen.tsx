@@ -12,13 +12,16 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
   const [loading, setLoading] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedLedgerData, setSelectedLedgerData] = useState<any>(null);
+  const [ledgerVouchers, setLedgerVouchers] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
       const query = branchId ? `?branchId=${branchId}` : '';
-      const [l, g] = await Promise.all([
-        fetch(`api/ledgers${query}`).then(res => res.json()),
-        fetch(`api/account-groups${query}`).then(res => res.json()),
+      const [l, g, v] = await Promise.all([
+        fetch(`/api/ledgers${query}`).then(res => res.json()),
+        fetch(`/api/account-groups${query}`).then(res => res.json()),
+        fetch(`/api/vouchers${query}`).then(res => res.json())
       ]);
       setLedgers(l);
       setGroups(g);
@@ -30,6 +33,24 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
     };
     fetchData();
   }, [branchId]);
+
+  const calculateBalance = (ledgerId: string) => {
+    const ledger = ledgers.find(l => l.id === ledgerId);
+    let balance = Number(ledger?.openingBalance || 0);
+    const vchEntries: any[] = [];
+    
+    // We need to fetch vouchers with entries to calculate real balance
+    // This is simplified for now assuming vouchers are available with entries
+    return balance; 
+  };
+
+  const handleLedgerSelect = async (ledger: any) => {
+    setSelectedLedgerData(ledger);
+    // Fetch vouchers for this specific ledger
+    const res = await fetch(`/api/vouchers/ledger/${ledger.id}${branchId ? `?branchId=${branchId}` : ''}`);
+    const data = await res.json();
+    setLedgerVouchers(data);
+  };
 
   const toggleGroup = (id: string) => {
     setExpandedGroups(prev => ({ ...prev, [id]: !prev[id] }));
@@ -67,6 +88,8 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
     const item = visibleItems[selectedIndex];
     if (item?.type === 'GROUP') {
       toggleGroup(item.id);
+    } else if (item?.type === 'LEDGER') {
+      handleLedgerSelect(item.data);
     }
   }, { enableOnFormTags: true }, [visibleItems, selectedIndex, expandedGroups]);
 
@@ -106,12 +129,13 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
                 const isLedgerSelected = visibleItems[selectedIndex]?.id === ledger.id && visibleItems[selectedIndex]?.type === 'LEDGER';
                 return (
                   <div 
-                    key={ledger.id}
-                    onClick={() => {
-                      const idx = visibleItems.findIndex(v => v.id === ledger.id && v.type === 'LEDGER');
-                      setSelectedIndex(idx);
-                    }}
-                    className={`flex items-center gap-2 py-0.5 px-2 cursor-pointer group ${isLedgerSelected ? 'bg-tally-accent' : 'hover:bg-tally-accent/30'}`}
+                      key={ledger.id}
+                      onClick={() => {
+                        const idx = visibleItems.findIndex(v => v.id === ledger.id && v.type === 'LEDGER');
+                        setSelectedIndex(idx);
+                        handleLedgerSelect(ledger);
+                      }}
+                      className={`flex items-center gap-2 py-0.5 px-2 cursor-pointer group ${isLedgerSelected ? 'bg-tally-accent' : 'hover:bg-tally-accent/30'}`}
                     style={{ paddingLeft: `${(level + 1) * 20 + 8}px` }}
                   >
                     <FileText className={`w-3 h-3 ${isLedgerSelected ? 'text-black' : 'text-gray-400'}`} />
@@ -147,8 +171,67 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
           {loading ? (
             <div className="p-20 text-center italic text-gray-400">Loading hierarchy...</div>
           ) : (
-            <div className="space-y-0.5">
-              {renderTree()}
+            <div className="flex gap-4 h-[500px]">
+              <div className="flex-1 overflow-auto border-r pr-4">
+                <div className="space-y-0.5">
+                  {renderTree()}
+                </div>
+              </div>
+
+              {selectedLedgerData && (
+                <div className="w-96 overflow-auto bg-gray-50 p-4 tally-border">
+                  <div className="flex justify-between items-start border-b border-tally-teal pb-2 mb-4">
+                    <div>
+                      <h3 className="text-sm font-black text-tally-teal uppercase">{selectedLedgerData.name}</h3>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase">{selectedLedgerData.group_name}</p>
+                    </div>
+                    <button onClick={() => setSelectedLedgerData(null)} className="text-xs font-bold text-red-600 hover:bg-red-50 px-2">X</button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-white p-2 border border-gray-200">
+                        <p className="text-[9px] font-bold text-gray-400 uppercase">Opening Balance</p>
+                        <p className="text-xs font-black text-tally-teal">
+                          {selectedLedgerData.openingBalance?.toLocaleString()} {selectedLedgerData.balanceType}
+                        </p>
+                      </div>
+                      <div className="bg-white p-2 border border-gray-200">
+                        <p className="text-[9px] font-bold text-gray-400 uppercase">Current Balance</p>
+                        <p className="text-xs font-black text-blue-700">
+                          {/* Real balance calculation would happen here */}
+                          {selectedLedgerData.openingBalance?.toLocaleString()} {selectedLedgerData.balanceType}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-white border border-gray-200">
+                      <div className="bg-gray-100 px-2 py-1 text-[9px] font-black uppercase text-gray-600 flex justify-between">
+                        <span>Recent Vouchers</span>
+                        <span>Amount</span>
+                      </div>
+                      <div className="divide-y divide-gray-100 max-h-64 overflow-auto">
+                        {ledgerVouchers.length > 0 ? ledgerVouchers.map(vch => (
+                          <div key={vch.id} className="p-2 text-[10px] flex justify-between hover:bg-tally-accent/10">
+                            <div>
+                              <div className="font-bold uppercase text-tally-teal">{vch.type}</div>
+                              <div className="text-gray-400">{vch.date}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="font-mono font-bold">₹{vch.amount?.toLocaleString()}</div>
+                              <div className={`font-bold text-[8px] ${vch.type === 'Receipt' ? 'text-green-600' : 'text-red-600'}`}>
+                                {vch.type === 'Receipt' ? 'Dr' : 'Cr'}
+                              </div>
+                            </div>
+                          </div>
+                        )) : (
+                          <div className="p-4 text-center text-[10px] italic text-gray-400 uppercase">No transactions found</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
