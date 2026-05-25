@@ -6,7 +6,7 @@ export default function CostCentreScreen({ branchId }: { branchId?: string }) {
 
   const fetchCCs = async () => {
     const query = branchId ? `?branchId=${branchId}` : '';
-    const res = await fetch(`api/cost-centres${query}`);
+    const res = await fetch(`/api/cost-centres${query}`);
     const data = await res.json();
     setCostCentres(data);
   };
@@ -17,7 +17,7 @@ export default function CostCentreScreen({ branchId }: { branchId?: string }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const response = await fetch('api/cost-centres', {
+    const response = await fetch('/api/cost-centres', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, branchId }),
