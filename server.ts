@@ -655,6 +655,29 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // Get vouchers for a specific ledger
+  app.get('/api/vouchers/ledger/:ledgerId', async (req, res) => {
+    const { ledgerId } = req.params;
+    const { branchId } = req.query as any;
+
+    try {
+      let query = db('vouchers')
+        .join('voucher_entries', 'vouchers.id', '=', 'voucher_entries.voucherId')
+        .where('voucher_entries.ledgerId', ledgerId)
+        .select('vouchers.*', 'voucher_entries.amount as entry_amount', 'voucher_entries.type as entry_type')
+        .orderBy('vouchers.date', 'desc');
+
+      if (branchId) {
+        query = query.where('vouchers.branchId', branchId);
+      }
+
+      const rows = await query;
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Failed to fetch ledger vouchers', details: err.message });
+    }
+  });
+
   // Cheque templates
   app.get('/api/cheque/templates', async (req, res) => {
     const { branchId } = req.query as any;
