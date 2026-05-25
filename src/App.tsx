@@ -115,9 +115,9 @@ export default function App() {
       setCurrentScreen('HQ');
       // Fetch global data for analytics
       Promise.all([
-        fetch('api/branches').then(res => res.json()),
-        fetch('api/ledgers').then(res => res.json()),
-        fetch('api/vouchers').then(res => res.json())
+        fetch('/api/branches').then(res => res.json()),
+        fetch('/api/ledgers').then(res => res.json()),
+        fetch('/api/vouchers').then(res => res.json())
       ]).then(([b, l, v]) => {
         setBranches(b);
         setAllLedgers(l);
@@ -127,7 +127,7 @@ export default function App() {
     else if (user?.role === 'BRANCH') {
       setCurrentScreen('GATEWAY');
       setSelectedBranchId(user.branchId);
-      fetch(`api/branches`).then(res => res.json()).then(b => setBranches(b));
+      fetch(`/api/branches`).then(res => res.json()).then(b => setBranches(b));
     }
   }, [user]);
 
@@ -319,7 +319,15 @@ export default function App() {
   useHotkeys('l', () => setCurrentScreen('AUDIT'));
   useHotkeys('d', () => setCurrentScreen('DEBUG'));
   useHotkeys('ctrl+n', () => setShowCalculator(true));
-  useHotkeys('alt+f1', () => setUser(null)); // Logout
+  const handleLogout = () => {
+    localStorage.removeItem('tally_user');
+    setUser(null);
+  };
+
+  useHotkeys('alt+f1', (e) => {
+    e.preventDefault();
+    handleLogout();
+  }, { enableOnFormTags: true });
   useHotkeys('alt+k', () => setCurrentScreen('COMPANY'), { enableOnFormTags: true });
   useHotkeys('alt+y', () => setCurrentScreen('DATA'), { enableOnFormTags: true });
   useHotkeys('alt+z', () => setCurrentScreen('EXCHANGE'), { enableOnFormTags: true });
@@ -463,7 +471,10 @@ export default function App() {
             <span className="opacity-70 cursor-pointer hover:underline" onClick={() => setCurrentScreen('SETTINGS')}>User: {user.username}</span>
             <span className="bg-red-500/20 px-2 rounded text-[10px] font-bold">{user.role}</span>
           </div>
-          <button className="opacity-80 hover:opacity-100" onClick={() => setUser(null)}>Alt+F1: Logout</button>
+          <button className="opacity-80 hover:opacity-100 flex items-center gap-1" onClick={handleLogout}>
+            <LogOut className="w-3 h-3" />
+            Alt+F1: Logout
+          </button>
         </div>
       </header>
 
