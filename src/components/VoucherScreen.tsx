@@ -197,50 +197,59 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
   const getCrLabel = () => config.useDrCr ? 'Cr' : 'To';
 
   const handleSubmit = async (e?: React.FormEvent) => {
+    console.log('--- handleSubmit triggered ---');
     if (e) e.preventDefault();
     
     // Validation
+    const validEntries = entries.filter(e => e.ledgerId && e.amount);
+    console.log('Number of valid entries in table:', validEntries.length);
+
     let drTotal = entries.filter(e => e.type === 'Dr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
     let crTotal = entries.filter(e => e.type === 'Cr').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
     
+    console.log('Totals - Dr:', drTotal, 'Cr:', crTotal);
+
     if (drTotal === 0 && crTotal === 0) {
-      alert('Validation Error: Voucher is empty.');
+      alert('Validation Error: Voucher is empty. Please enter at least one amount.');
       return;
     }
 
     // Account field validation for Single Entry
-    if (config.singleEntry && !accountLedgerId) {
-      alert('Validation Error: Please select an Account (Cash/Bank).');
+    if (config.singleEntry && !accountLedgerId && type !== 'Journal') {
+      alert('Validation Error: Please select an Account (Cash/Bank) for Single Entry mode.');
       return;
     }
 
     let finalSubmitEntries: any[] = [];
 
-    if (config.singleEntry) {
+    if (config.singleEntry && type !== 'Journal') {
       // In single entry mode, the 'Account' is one side and 'Particulars' are the other
       const side = (type === 'Receipt' ? 'Dr' : 'Cr');
+      const otherSide = (type === 'Receipt' ? 'Cr' : 'Dr');
       
       finalSubmitEntries = entries.filter(e => e.ledgerId && e.amount).map(e => ({
         ledgerId: e.ledgerId,
         costCentreId: e.costCentreId || null,
         amount: Number(e.amount),
-        type: e.type,
+        type: otherSide, // Particulars are opposite of the Account
         methodAdjustment: e.methodAdjustment,
         refNo: e.refNo
       }));
+
+      const totalAmt = finalSubmitEntries.reduce((acc, curr) => acc + curr.amount, 0);
 
       // Add the balancing account entry
       finalSubmitEntries.push({
         ledgerId: accountLedgerId,
         costCentreId: null,
-        amount: (type === 'Receipt' ? crTotal : drTotal),
+        amount: totalAmt,
         type: side,
         methodAdjustment: 'On Account',
         refNo: ''
       });
 
-      drTotal = (type === 'Receipt' ? crTotal : drTotal);
-      crTotal = drTotal;
+      drTotal = totalAmt;
+      crTotal = totalAmt;
     } else {
       // DOUBLE-ENTRY VALIDATION
       if (Math.abs(drTotal - crTotal) > 0.01) {
@@ -257,6 +266,8 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
         refNo: e.refNo
       }));
     }
+
+    console.log('Final entries to submit:', finalSubmitEntries);
 
     if (finalSubmitEntries.length === 0) {
       alert('Validation Error: No valid entries to save.');
@@ -275,7 +286,7 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
       const payload = { 
         date, 
         type, 
-        number: `VCH-${Date.now().toString().slice(-6)}`, // Generate a simple voucher number
+        number: `VCH-${Date.now().toString().slice(-6)}`,
         narration, 
         amount: drTotal,
         branchId: branchId || 'HQ', 
@@ -284,9 +295,9 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
         entries: finalSubmitEntries
       };
 
-      console.log('SENDING PAYLOAD:', payload);
+      console.log('POSTing Payload:', payload);
 
-      const response = await fetch('api/vouchers', {
+      const response = await fetch('/api/vouchers', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -296,13 +307,13 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
       });
 
       const text = await response.text();
-      console.log('SERVER RAW RESPONSE:', text);
+      console.log('Server Response:', text);
       
       let result;
       try {
         result = JSON.parse(text);
       } catch (pErr) {
-        throw new Error(`Server returned non-JSON: ${text.substring(0, 100)}`);
+        throw new Error(`Server returned non-JSON response. Please check server logs.`);
       }
 
       if (response.ok) {
@@ -320,11 +331,11 @@ export default function VoucherScreen({ branchId, onTypeChange, initialType, ini
         setAccountSearch('');
         setNarration('');
       } else {
-        alert(`SERVER ERROR: ${result.error || 'Unknown error'}`);
+        alert(`SERVER ERROR: ${result.error || result.message || 'Unknown error'}`);
       }
     } catch (err: any) {
-      console.error('FETCH ERROR:', err);
-      alert(`NETWORK/JS ERROR: ${err.message}`);
+      console.error('SUBMIT ERROR:', err);
+      alert(`CRITICAL ERROR: ${err.message}`);
     }
   };
 
