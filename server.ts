@@ -458,30 +458,53 @@ async function startServer() {
   });
 
   app.post("/api/vouchers", async (req, res) => {
-    const { entries, userId, username, ...voucherData } = req.body;
-    const voucherId = Date.now().toString();
-    const newVoucher = { id: voucherId, ...voucherData };
-    
-    await db.transaction(async (trx) => {
-      await trx('vouchers').insert(newVoucher);
-      if (entries && entries.length > 0) {
-        const entriesWithId = entries.map((e: any) => ({ ...e, voucherId }));
-        await trx('voucher_entries').insert(entriesWithId);
+    try {
+      const { entries, userId, username, ...voucherData } = req.body;
+      
+      // Basic validation
+      if (!entries || entries.length === 0) {
+        return res.status(400).json({ error: "Voucher must have at least one entry." });
       }
 
-      // Log the voucher creation
-      await trx('audit_logs').insert({
-        id: Date.now().toString() + "_vch",
-        userId: userId || 'system',
-        username: username || 'system',
-        action: 'VOUCHER_CREATE',
-        timestamp: new Date().toISOString(),
-        branchId: voucherData.branchId,
-        details: `Created ${voucherData.type} Voucher: ${voucherData.number || voucherId} for ₹${voucherData.amount}`
-      });
-    });
+      const voucherId = Date.now().toString();
+      const newVoucher = { id: voucherId, ...voucherData };
+      
+      await db.transaction(async (trx) => {
+        // 1. Insert Voucher Header
+        await trx('vouchers').insert(newVoucher);
 
-    res.json({ ...newVoucher, entries });
+        // 2. Insert Voucher Entries
+        const entriesWithId = entries.map((e: any) => ({
+          voucherId,
+          ledgerId: e.ledgerId,
+          amount: Number(e.amount),
+          type: e.type,
+          costCentreId: e.costCentreId || null,
+          methodAdjustment: e.methodAdjustment || 'On Account',
+          refNo: e.refNo || ''
+        }));
+        await trx('voucher_entries').insert(entriesWithId);
+
+        // 3. Log the voucher creation
+        await trx('audit_logs').insert({
+          id: Date.now().toString() + "_" + Math.floor(Math.random() * 1000),
+          userId: userId || 'system',
+          username: username || 'system',
+          action: 'VOUCHER_CREATE',
+          timestamp: new Date().toISOString(),
+          branchId: voucherData.branchId,
+          details: `Created ${voucherData.type} Voucher: ${voucherData.number || voucherId} for ₹${voucherData.amount}`
+        });
+      });
+
+      res.json({ success: true, id: voucherId });
+    } catch (err: any) {
+      console.error('Voucher Save Error:', err);
+      res.status(500).json({ 
+        error: 'Internal Server Error during voucher save', 
+        details: err.message 
+      });
+    }
   });
 
   // Banking: Reconciliations
