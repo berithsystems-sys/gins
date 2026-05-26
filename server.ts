@@ -388,33 +388,36 @@ async function startServer() {
 
   // GET all ledgers (list)
   app.get("/api/ledgers", async (req, res) => {
-    const { branchId } = req.query;
-    let query = db('ledgers').select('*');
-    if (branchId) {
-      query = query.where({ branchId });
+    try {
+      const { branchId } = req.query;
+      let query = db('ledgers').select('*');
+      if (branchId) {
+        query = query.where({ branchId });
+      }
+      const ledgers = await query;
+      // FIX: normalise group field — ensure both `group` and `group_name` are always present
+      res.json(ledgers.map(l => ({
+        ...l,
+        group: l.group_name || l.group || '',
+        group_name: l.group_name || l.group || '',
+      })));
+    } catch (err: any) {
+      console.error('[GET /api/ledgers]', err.message);
+      res.status(500).json({ error: 'Failed to fetch ledgers', details: err.message });
     }
-    const ledgers = await query;
-    res.json(ledgers.map(l => ({ ...l, group: l.group_name }))); // Compatibility
   });
 
-  // ── NEW: GET current balance for a single ledger ───────────────────────────
-  // IMPORTANT: This MUST be declared before any "/api/ledgers/:id" route so
-  // Express does not treat "balance" as a ledger ID.
+  // GET current balance for a single ledger
   app.get("/api/ledgers/:id/balance", async (req, res) => {
     const { id } = req.params;
     const { branchId } = req.query as { branchId?: string };
     try {
-      // 1. Fetch the ledger's opening balance
       const ledger = await db('ledgers').where({ id }).first();
       if (!ledger) return res.status(404).json({ error: 'Ledger not found' });
 
       const openingBalance = Number(ledger.openingBalance || 0);
-      // Dr = positive, Cr = negative
       let running = ledger.balanceType === 'Cr' ? -openingBalance : openingBalance;
 
-      // 2. Sum all posted voucher entries for this ledger.
-      //    Use a builder callback for the optional branchId filter so the
-      //    Knex query chain is never broken by a conditional reassignment.
       const entries = await db('voucher_entries')
         .join('vouchers', 'voucher_entries.voucherId', '=', 'vouchers.id')
         .where('voucher_entries.ledgerId', id)
@@ -428,7 +431,6 @@ async function startServer() {
         running += e.type === 'Dr' ? amt : -amt;
       }
 
-      // 3. Return normalised result
       res.json({
         ledgerId: id,
         name: ledger.name,
@@ -440,7 +442,6 @@ async function startServer() {
       res.status(500).json({ error: 'Failed to compute balance', details: err.message });
     }
   });
-  // ──────────────────────────────────────────────────────────────────────────
 
   app.post("/api/ledgers", async (req, res) => {
     const { group, ...rest } = req.body;
@@ -472,23 +473,42 @@ async function startServer() {
 
   // ── VOUCHERS ───────────────────────────────────────────────────────────────
 
+  // FIX: Replaced N+1 query loop with a single JOIN query.
+  // Previously each voucher fired a separate DB query → timeout → empty response → blank Balance Sheet.
   app.get("/api/vouchers", async (req, res) => {
-    const { branchId } = req.query;
-    let query = db('vouchers').select('*');
-    if (branchId) {
-      query = query.where({ branchId });
-    }
-    const vouchers = await query;
-    
-    const vouchersWithEntries = await Promise.all(vouchers.map(async (v) => {
-      const entries = await db('voucher_entries')
+    try {
+      const { branchId } = req.query;
+
+      // Step 1: fetch vouchers
+      let vQuery = db('vouchers').select('*').orderBy('date', 'asc');
+      if (branchId) vQuery = vQuery.where({ branchId });
+      const vouchers = await vQuery;
+
+      if (!vouchers.length) return res.json([]);
+
+      // Step 2: fetch ALL entries in ONE query (was N separate queries before)
+      const voucherIds = vouchers.map(v => v.id);
+      const allEntries = await db('voucher_entries')
         .join('ledgers', 'voucher_entries.ledgerId', '=', 'ledgers.id')
-        .where({ voucherId: v.id })
-        .select('voucher_entries.*', 'ledgers.name as ledger_name');
-      return { ...v, entries };
-    }));
-    
-    res.json(vouchersWithEntries);
+        .whereIn('voucher_entries.voucherId', voucherIds)
+        .select(
+          'voucher_entries.*',
+          'ledgers.name as ledger_name'
+        );
+
+      // Step 3: group entries by voucherId
+      const entryMap: Record<string, any[]> = {};
+      for (const e of allEntries) {
+        if (!entryMap[e.voucherId]) entryMap[e.voucherId] = [];
+        entryMap[e.voucherId].push(e);
+      }
+
+      // Step 4: attach entries to vouchers
+      res.json(vouchers.map(v => ({ ...v, entries: entryMap[v.id] || [] })));
+    } catch (err: any) {
+      console.error('[GET /api/vouchers]', err.message);
+      res.status(500).json({ error: 'Failed to fetch vouchers', details: err.message });
+    }
   });
 
   app.post("/api/vouchers", async (req, res) => {
@@ -681,7 +701,7 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  // Get vouchers for a specific ledger
+  // Get vouchers for a specific ledger (drill-down)
   app.get('/api/vouchers/ledger/:ledgerId', async (req, res) => {
     const { ledgerId } = req.params;
     const { branchId } = req.query as any;
@@ -691,7 +711,7 @@ async function startServer() {
         .join('voucher_entries', 'vouchers.id', '=', 'voucher_entries.voucherId')
         .where('voucher_entries.ledgerId', ledgerId)
         .select('vouchers.*', 'voucher_entries.amount as entry_amount', 'voucher_entries.type as entry_type')
-        .orderBy('vouchers.date', 'desc');
+        .orderBy('vouchers.date', 'asc');
 
       if (branchId) {
         query = query.where('vouchers.branchId', branchId);
@@ -700,6 +720,7 @@ async function startServer() {
       const rows = await query;
       res.json(rows);
     } catch (err: any) {
+      console.error('[Ledger drill-down]', err.message);
       res.status(500).json({ error: 'Failed to fetch ledger vouchers', details: err.message });
     }
   });
