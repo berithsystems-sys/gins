@@ -550,45 +550,7 @@ export default function App({ branchId }: ChartOfAccountsScreenProps) {
         <div style={s.colDrCr}>&nbsp;</div>
       </div>
 
-      {/* ── Right Function Button Panel ── */}
-      <div style={s.rightPanel} className="no-print">
-        {[
-          { k: 'F2',    l: 'Period',           a: () => setShowPeriod(true) },
-          { k: 'F3',    l: 'Company',           a: () => {} },
-          { k: 'F4',    l: 'Group',             a: () => {} },
-          { k: 'F5',    l: '',                  a: () => {} },
-          { k: 'F6',    l: '',                  a: () => {} },
-          { k: 'F7',    l: '',                  a: () => {} },
-          { k: 'F8',    l: '',                  a: () => {} },
-          { k: 'F9',    l: '',                  a: () => {} },
-          { k: 'F10',   l: '',                  a: () => {} },
-          { k: 'F11',   l: 'Alter Balance',     a: () => {
-            const l = filteredLedgers[selectedIdx];
-            if (l) setEditLedger(l);
-          }},
-          { k: 'B',     l: 'Zero Opening\nBalance', a: () => {
-            const l = filteredLedgers[selectedIdx];
-            if (l) handleSaveOB(l.id, 0, 'Dr');
-          }},
-          { k: 'H',     l: 'Change Parent\nGroup', a: () => {} },
-          { k: 'F12',   l: 'Configure',         a: () => {} },
-        ].map(b => (
-          <button
-            key={b.k}
-            onClick={b.a}
-            className="side-btn"
-            style={{
-              ...s.sideBtn,
-              opacity: b.l ? 1 : 0.25,
-              background: b.k === 'B' ? 'rgba(255,80,80,0.18)' : b.k === 'F11' ? 'rgba(100,180,255,0.15)' : 'none',
-              border: b.k === 'B' ? '1px solid rgba(255,80,80,0.4)' : 'none',
-            }}
-          >
-            <span style={s.sBtnKey}>{b.k}:</span>
-            <span style={s.sBtnLabel}>{b.l}</span>
-          </button>
-        ))}
-      </div>
+
 
       {/* ── Bottom Status Bar ── */}
       <div style={s.statusBar} className="no-print">
@@ -637,7 +599,6 @@ const s: Record<string, React.CSSProperties> = {
     background: LIGHT,
     borderBottom: `1px solid ${BORDER}`,
     flexShrink: 0,
-    paddingRight: 98,
   },
   subLabel:  { fontSize: 12, color: '#333', fontStyle: 'italic' },
   subColon:  { fontSize: 12, color: '#333', margin: '0 4px' },
@@ -675,7 +636,6 @@ const s: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     fontSize: 12,
     flexShrink: 0,
-    paddingRight: 90,
   },
   colSno:   { width: 48, padding: '5px 8px', borderRight: `1px solid ${ROW_BDR}`, textAlign: 'center', flexShrink: 0 },
   colName:  { flex: 1, padding: '5px 8px', borderRight: `1px solid ${ROW_BDR}` },
@@ -687,7 +647,6 @@ const s: Record<string, React.CSSProperties> = {
   tableWrap: { 
     flex: 1, 
     overflowY: 'auto', 
-    paddingRight: 90, 
     background: '#fff' 
   },
   table: { 
@@ -722,7 +681,6 @@ const s: Record<string, React.CSSProperties> = {
     borderBottom: `1px solid ${BORDER}`,
     fontSize: 11,
     flexShrink: 0,
-    paddingRight: 90,
     zIndex: 10,
   },
 
@@ -762,7 +720,7 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '3px 100px 3px 8px',
+    padding: '3px 12px 3px 8px',
     background: DARK_PANEL,
     borderTop: `1px solid #0d1a2a`,
     flexShrink: 0,
