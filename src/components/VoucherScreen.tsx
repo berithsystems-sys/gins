@@ -55,7 +55,7 @@ export default function VoucherScreen({
   initialType,
   initialDate,
   user,
-  companyName = 'National Enterprises',
+  companyName = ' ',
 }: {
   branchId?: string;
   onTypeChange?: (type: string) => void;
