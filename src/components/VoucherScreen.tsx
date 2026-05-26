@@ -109,7 +109,8 @@ export default function VoucherScreen({ ledgers, onBack, onRefreshLedgers }: Vou
   const cashBankLedgers = useMemo(() => {
     return ledgers.filter(l => {
       const g = l.group_name?.toLowerCase() || '';
-      return g.includes('cash') || g.includes('bank') || l.name.toLowerCase().includes('cash') || l.name.toLowerCase().includes('bank');
+      const nameLower = (l.name || '').toLowerCase();
+      return g.includes('cash') || g.includes('bank') || nameLower.includes('cash') || nameLower.includes('bank');
     });
   }, [ledgers]);
 
@@ -141,14 +142,14 @@ export default function VoucherScreen({ ledgers, onBack, onRefreshLedgers }: Vou
   const filteredAccounts = useMemo(() => {
     const q = accountSearch.toLowerCase().trim();
     if (!q) return cashBankLedgers;
-    return cashBankLedgers.filter(l => l.name.toLowerCase().includes(q));
+    return cashBankLedgers.filter(l => (l.name || '').toLowerCase().includes(q));
   }, [cashBankLedgers, accountSearch]);
 
   // Auto-fill account upon change when typing exact match
   useEffect(() => {
     const q = accountSearch.toLowerCase().trim();
     if (q) {
-      const match = cashBankLedgers.find(l => l.name.toLowerCase() === q);
+      const match = cashBankLedgers.find(l => (l.name || '').toLowerCase() === q);
       if (match && match.id !== accountId) {
         setAccountId(match.id);
       }
@@ -229,7 +230,7 @@ export default function VoucherScreen({ ledgers, onBack, onRefreshLedgers }: Vou
   // Main navigation action handler for ledger row field
   const handleRowLedgerKeyDown = (e: React.KeyboardEvent, idx: number) => {
     const query = entries[idx].tempSearch || '';
-    const filteredRows = rowLedgers.filter(l => l.name.toLowerCase().includes(query.toLowerCase()));
+    const filteredRows = rowLedgers.filter(l => (l.name || '').toLowerCase().includes(query.toLowerCase()));
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -515,7 +516,7 @@ export default function VoucherScreen({ ledgers, onBack, onRefreshLedgers }: Vou
           <div style={s.tableContentBody}>
             {entries.map((item, idx) => {
               const query = item.tempSearch || '';
-              const filteredRows = rowLedgers.filter(l => l.name.toLowerCase().includes(query.toLowerCase()));
+              const filteredRows = rowLedgers.filter(l => (l.name || '').toLowerCase().includes(query.toLowerCase()));
               const isDdActive = activeRowDdIdx === idx;
 
               return (
@@ -531,7 +532,7 @@ export default function VoucherScreen({ ledgers, onBack, onRefreshLedgers }: Vou
                           const val = e.target.value;
                           setEntries(prev => {
                             const n = [...prev];
-                            const match = ledgers.find(l => l.name.toLowerCase() === val.toLowerCase());
+                            const match = ledgers.find(l => (l.name || '').toLowerCase() === val.toLowerCase());
                             n[idx] = { ...n[idx], tempSearch: val, ledgerId: match ? match.id : '' };
                             return n;
                           });
