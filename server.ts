@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// ADD THIS ENDPOINT to your server.ts — place it near the other /api/ledgers routes
+// ADD THIS ENDPOINT ok thank you - to your server.ts — place it near the other /api/ledgers routes
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // GET /api/ledgers/:id/balance?branchId=xxx
