@@ -647,6 +647,7 @@ const s: Record<string, React.CSSProperties> = {
   tableWrap: { 
     flex: 1, 
     overflowY: 'auto', 
+    minHeight: 0,
     background: '#fff' 
   },
   table: { 
