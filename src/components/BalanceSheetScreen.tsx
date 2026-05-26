@@ -173,42 +173,73 @@ export default function BalanceSheetScreen({ branchId, onBack }: {
   const [loading,        setLoading]        = useState(true);
   const [error,          setError]          = useState<string | null>(null);
   const [debugInfo,      setDebugInfo]      = useState<string>('');
+  const [fetchDetails,   setFetchDetails]   = useState<string>('');
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // ── Fetch data ─────────────────────────────────────────────────────────────
+  // ── Fetch data with enhanced error handling ────────────────────────────────
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       setError(null);
+      setFetchDetails('');
+      
       try {
-        // Build query string — only append if branchId is actually set
+        // Build query string
         const q = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
+        const endpoints = {
+          ledgers: `/api/ledgers${q}`,
+          vouchers: `/api/vouchers${q}`,
+          groups: `/api/account-groups${q}`,
+          branches: `/api/branches`,
+        };
+
+        const fetchLog: string[] = [];
+
+        const fetchWithLog = async (name: string, url: string) => {
+          try {
+            fetchLog.push(`📡 Fetching ${name}: ${url}`);
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+              fetchLog.push(`❌ ${name}: HTTP ${response.status}`);
+              const text = await response.text();
+              fetchLog.push(`   Response: ${text.substring(0, 100)}`);
+              return [];
+            }
+            
+            const data = await response.json();
+            const isArray = Array.isArray(data);
+            fetchLog.push(`✅ ${name}: ${isArray ? data.length + ' items' : 'received object'}`);
+            return isArray ? data : [];
+          } catch (err: any) {
+            fetchLog.push(`⚠️ ${name}: ${err.message}`);
+            return [];
+          }
+        };
 
         const [l, v, g, b] = await Promise.all([
-          fetch(`/api/ledgers${q}`).then(r => { if (!r.ok) throw new Error(`/api/ledgers${q} → HTTP ${r.status}`); return r.json(); }),
-          fetch(`/api/vouchers${q}`).then(r => { if (!r.ok) throw new Error(`/api/vouchers${q} → HTTP ${r.status}`); return r.json(); }),
-          fetch(`/api/account-groups${q}`).then(r => { if (!r.ok) throw new Error(`/api/account-groups${q} → HTTP ${r.status}`); return r.json(); }),
-          fetch(`/api/branches`).then(r => r.ok ? r.json() : []),
+          fetchWithLog('Ledgers', endpoints.ledgers),
+          fetchWithLog('Vouchers', endpoints.vouchers),
+          fetchWithLog('Groups', endpoints.groups),
+          fetchWithLog('Branches', endpoints.branches),
         ]);
 
-        const ledgerArr  = Array.isArray(l) ? l : [];
-        const voucherArr = Array.isArray(v) ? v : [];
-        const groupArr   = Array.isArray(g) ? g : [];
+        setFetchDetails(fetchLog.join('\n'));
 
-        setLedgers(ledgerArr);
-        setVouchers(voucherArr);
-        setGroups(groupArr);
+        setLedgers(l);
+        setVouchers(v);
+        setGroups(g);
 
         // Debug info
         const knownGroups = [...LIABILITY_GROUPS, ...ASSET_GROUPS];
-        const ledgerGroups = [...new Set(ledgerArr.map((ld: Ledger) => ld.group_name || ld.group || 'NONE'))];
+        const ledgerGroups = [...new Set(l.map((ld: Ledger) => ld.group_name || ld.group || 'NONE'))];
         const matchedGroups = ledgerGroups.filter(g => knownGroups.includes(g as string));
-        setDebugInfo(`${ledgerArr.length} ledgers | ${voucherArr.length} vouchers | BS groups found: ${matchedGroups.join(', ') || 'NONE'}`);
+        setDebugInfo(`${l.length} ledgers | ${v.length} vouchers | BS groups found: ${matchedGroups.join(', ') || 'NONE'}`);
 
         // Auto-expand groups that have ledgers
         const allBSGroups = [...LIABILITY_GROUPS, ...ASSET_GROUPS];
         const groupsWithData = allBSGroups.filter(gName =>
-          ledgerArr.some((ld: Ledger) => ld.group_name === gName || ld.group === gName)
+          l.some((ld: Ledger) => ld.group_name === gName || ld.group === gName)
         );
         setExpandedGroups(groupsWithData);
 
@@ -216,6 +247,11 @@ export default function BalanceSheetScreen({ branchId, onBack }: {
           const br = b.find((c: any) => c.id === branchId);
           if (br) setCompanyName(br.name);
           else if (b.length > 0 && !branchId) setCompanyName(b[0]?.name || '');
+        }
+
+        // ⚠️ If no data at all, show error
+        if (l.length === 0 && v.length === 0 && g.length === 0) {
+          setError('⚠️ No data fetched from any endpoint. Check your API endpoints.');
         }
       } catch (err: any) {
         console.error('[BS] fetch error:', err);
@@ -317,13 +353,12 @@ export default function BalanceSheetScreen({ branchId, onBack }: {
   const renderSection = (title: string, groupNames: string[]) => {
     const isLiab = title === 'Liabilities';
 
-    // FIX: Show ALL groups that have ledgers, including zero-balance ones
     const sections = groupNames.map(name => {
       const raw     = getGroupTotal(name);
       const display = isLiab ? -raw : raw;
       const ledgerCount = ledgers.filter(l => l.group_name === name || l.group === name).length;
       return { name, raw, display, ledgerCount };
-    }).filter(s => s.ledgerCount > 0); // only filter if no ledgers AT ALL in this group
+    }).filter(s => s.ledgerCount > 0);
 
     const total = sections.reduce((acc, s) => acc + s.display, 0);
 
@@ -449,17 +484,34 @@ export default function BalanceSheetScreen({ branchId, onBack }: {
         {/* Error */}
         {error && !loading && (
           <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', padding:32 }}>
-            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, padding:24, maxWidth:480, textAlign:'center' }}>
-              <div style={{ color:'#dc2626', fontWeight:'bold', fontSize:14, marginBottom:8 }}>⚠ Failed to load data</div>
-              <div style={{ color:'#ef4444', fontSize:11, fontFamily:'monospace', marginBottom:12 }}>{error}</div>
-              <div style={{ color:'#6b7280', fontSize:10 }}>
-                Check that <code>/api/ledgers{branchId ? `?branchId=${branchId}` : ''}</code> returns data.
+            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, padding:24, maxWidth:600, textAlign:'left', fontFamily:'monospace', fontSize:11 }}>
+              <div style={{ color:'#dc2626', fontWeight:'bold', fontSize:14, marginBottom:8 }}>⚠️ Failed to load Balance Sheet</div>
+              <div style={{ color:'#ef4444', marginBottom:12, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{error}</div>
+              
+              {fetchDetails && (
+                <>
+                  <div style={{ color:'#6b7280', fontWeight:'bold', marginTop:16, marginBottom:8 }}>📡 Fetch Details:</div>
+                  <div style={{ background:'#fef2f2', border:'1px solid #fde68a', padding:8, borderRadius:4, whiteSpace:'pre-wrap', wordBreak:'break-word', fontSize:10, color:'#92400e' }}>
+                    {fetchDetails}
+                  </div>
+                </>
+              )}
+
+              <div style={{ color:'#6b7280', fontSize:10, marginTop:16 }}>
+                <b>Troubleshooting:</b>
+                <ul style={{ marginTop:6, paddingLeft:20 }}>
+                  <li>✓ Check Network tab in DevTools (F12)</li>
+                  <li>✓ Verify API endpoints exist: /api/ledgers, /api/vouchers, /api/account-groups</li>
+                  <li>✓ Check CORS headers if APIs are on different domain</li>
+                  <li>✓ Ensure database has data with matching group_name/group</li>
+                </ul>
               </div>
+
               <button
                 onClick={() => window.location.reload()}
                 style={{ marginTop:16, padding:'6px 16px', background:colors.teal, color:'#fff', border:'none', borderRadius:4, cursor:'pointer', fontSize:11 }}
               >
-                Retry
+                🔄 Retry
               </button>
             </div>
           </div>
