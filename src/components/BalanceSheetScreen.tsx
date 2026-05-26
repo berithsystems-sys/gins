@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { exportToExcel, printReport } from '../lib/ReportUtils';
 
 // ─── Types matching exact DB schema ───────────────────────────────────────────
 interface Ledger {
@@ -39,7 +38,6 @@ interface DrillEntry {
 }
 
 // ─── ALL groups that belong to each Balance Sheet side ───────────────────────
-// Extend this list to match whatever group_names exist in your DB
 const LIABILITY_GROUPS = [
   'Capital Account',
   'Loans (Liability)',
@@ -65,68 +63,15 @@ const ASSET_GROUPS = [
   'Miscellaneous Expenses (Asset)',
 ];
 
-// ─── Debug Panel ──────────────────────────────────────────────────────────────
-function DebugPanel({
-  ledgers, vouchers, groups, branchId
-}: { ledgers: Ledger[]; vouchers: Voucher[]; groups: Group[]; branchId?: string }) {
-  const [open, setOpen] = useState(true); // open by default so you see it immediately
-
-  const uniqueGroupNames = [...new Set(ledgers.map(l => l.group_name || l.group || 'NONE'))];
-  const knownBS = [...LIABILITY_GROUPS, ...ASSET_GROUPS];
-  const unknownGroups = uniqueGroupNames.filter(g => !knownBS.includes(g));
-
-  if (!open) return (
-    <div className="fixed bottom-2 left-2 z-50">
-      <button onClick={() => setOpen(true)}
-        className="bg-red-600 text-white text-[9px] px-2 py-1 rounded shadow font-bold">
-        DEBUG ({ledgers.length}L / {vouchers.length}V)
-      </button>
-    </div>
-  );
-
-  return (
-    <div className="fixed bottom-2 left-2 z-50 bg-white border-2 border-red-500 p-3 text-[9px] w-72 max-h-80 overflow-auto shadow-xl rounded">
-      <div className="flex justify-between mb-2 items-center">
-        <span className="font-bold text-red-500 text-[10px]">⚙ DEBUG PANEL</span>
-        <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
-      </div>
-      <div className="space-y-0.5">
-        <div><b>branchId:</b> <span className="text-blue-600">{branchId || 'none'}</span></div>
-        <div><b>Ledgers loaded:</b> <span className={ledgers.length > 0 ? 'text-green-600' : 'text-red-600'}>{ledgers.length}</span></div>
-        <div><b>Vouchers loaded:</b> {vouchers.length}</div>
-        <div><b>Groups loaded:</b> {groups.length}</div>
-      </div>
-
-      {unknownGroups.length > 0 && (
-        <div className="mt-2 p-1.5 bg-yellow-50 border border-yellow-300 rounded">
-          <div className="font-bold text-yellow-700">⚠ Groups NOT in Balance Sheet:</div>
-          {unknownGroups.map(g => (
-            <div key={g} className="text-yellow-600 pl-1">"{g}"
-              ({ledgers.filter(l => (l.group_name || l.group) === g).length} ledgers)
-            </div>
-          ))}
-          <div className="text-yellow-500 mt-1 italic">These are P&L groups — normal to exclude from BS</div>
-        </div>
-      )}
-
-      <div className="mt-2"><b>Ledger group_names in BS:</b></div>
-      {uniqueGroupNames.filter(g => knownBS.includes(g)).map(g => (
-        <div key={g} className="text-green-700 pl-1">
-          ✓ "{g}" → {ledgers.filter(l => (l.group_name || l.group) === g).length} ledgers
-        </div>
-      ))}
-
-      {ledgers.length > 0 && (
-        <div className="mt-2">
-          <b>Sample ledger:</b>
-          <pre className="text-[8px] text-gray-600 bg-gray-50 p-1 rounded overflow-x-auto mt-0.5">
-            {JSON.stringify(ledgers[0], null, 2)}
-          </pre>
-        </div>
-      )}
-    </div>
-  );
-}
+// ─── Inline styles using CSS variables with fallbacks ─────────────────────────
+const colors = {
+  sidebar:  'var(--tally-sidebar, #1a3a4a)',
+  teal:     'var(--tally-teal, #0d6e6e)',
+  accent:   'var(--tally-accent, #e8b84b)',
+  light:    'var(--tally-light, #e8f4f4)',
+  bg:       'var(--tally-bg, #f0f4f4)',
+  hotkey:   'var(--tally-hotkey, #253f50)',
+};
 
 // ─── Ledger Drill-Down Modal ──────────────────────────────────────────────────
 function LedgerDrillDown({ ledger, entries, onClose }: {
@@ -151,86 +96,64 @@ function LedgerDrillDown({ ledger, entries, onClose }: {
   const finalBal = runBal + totalDebit - totalCredit;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div ref={ref} tabIndex={-1}
-        className="bg-white w-[860px] max-h-[88vh] flex flex-col shadow-2xl border-2 border-tally-teal outline-none"
+    <div
+      style={{ position:'fixed', inset:0, zIndex:50, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.6)' }}
+      onClick={onClose}
+    >
+      <div
+        ref={ref} tabIndex={-1}
+        style={{ background:'#fff', width:860, maxHeight:'88vh', display:'flex', flexDirection:'column', boxShadow:'0 8px 40px rgba(0,0,0,0.3)', border:`2px solid ${colors.teal}`, outline:'none' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-tally-sidebar text-white px-4 py-2 flex justify-between items-center">
-          <span className="text-xs font-bold uppercase">Ledger Transactions — {ledger.name}</span>
-          <span className="text-tally-accent text-[10px]">ESC to close</span>
+        <div style={{ background:colors.sidebar, color:'#fff', padding:'8px 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <span style={{ fontSize:11, fontWeight:'bold', textTransform:'uppercase' }}>Ledger Transactions — {ledger.name}</span>
+          <span style={{ color:colors.accent, fontSize:10 }}>ESC to close</span>
         </div>
-
-        {/* Sub-header: ledger info */}
-        <div className="bg-tally-light px-4 py-1 flex gap-6 text-[10px] border-b border-tally-teal">
+        {/* Sub-header */}
+        <div style={{ background:colors.light, padding:'4px 16px', display:'flex', gap:24, fontSize:10, borderBottom:`1px solid ${colors.teal}` }}>
           <span><b>Group:</b> {ledger.group_name || ledger.group || '—'}</span>
           <span><b>Opening Balance:</b> ₹{ob.toLocaleString('en-IN', { minimumFractionDigits: 2 })} {ledger.balanceType}</span>
-          <span><b>Branch ID:</b> {ledger.branchId || '—'}</span>
         </div>
-
         {/* Column headers */}
-        <div className="grid grid-cols-[100px_110px_1fr_95px_95px_115px] bg-tally-light px-3 py-1 text-[10px] font-bold uppercase border-b border-tally-teal text-tally-teal">
+        <div style={{ display:'grid', gridTemplateColumns:'100px 110px 1fr 95px 95px 115px', background:colors.light, padding:'4px 12px', fontSize:10, fontWeight:'bold', textTransform:'uppercase', borderBottom:`1px solid ${colors.teal}`, color:colors.teal }}>
           <span>Date</span><span>Type</span><span>Narration</span>
-          <span className="text-right">Debit (Dr)</span>
-          <span className="text-right">Credit (Cr)</span>
-          <span className="text-right">Balance</span>
+          <span style={{ textAlign:'right' }}>Debit</span>
+          <span style={{ textAlign:'right' }}>Credit</span>
+          <span style={{ textAlign:'right' }}>Balance</span>
         </div>
-
         {/* Rows */}
-        <div className="flex-1 overflow-y-auto">
-          {/* Opening balance row */}
-          <div className="grid grid-cols-[100px_110px_1fr_95px_95px_115px] px-3 py-1 text-[10px] bg-yellow-50 border-b border-yellow-200 font-semibold">
-            <span className="text-gray-400">—</span>
-            <span className="text-gray-700">Opening Balance</span>
-            <span className="italic text-gray-400">—</span>
-            <span className="text-right font-mono text-green-700">
-              {runBal > 0 ? runBal.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ''}
-            </span>
-            <span className="text-right font-mono text-red-600">
-              {runBal < 0 ? Math.abs(runBal).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ''}
-            </span>
-            <span className="text-right font-mono text-tally-teal">
-              {Math.abs(runBal).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {runBal >= 0 ? 'Dr' : 'Cr'}
-            </span>
+        <div style={{ flex:1, overflowY:'auto' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'100px 110px 1fr 95px 95px 115px', padding:'4px 12px', fontSize:10, background:'#fefce8', borderBottom:'1px solid #fef08a', fontWeight:600 }}>
+            <span style={{ color:'#9ca3af' }}>—</span>
+            <span style={{ color:'#374151' }}>Opening Balance</span>
+            <span style={{ color:'#9ca3af', fontStyle:'italic' }}>—</span>
+            <span style={{ textAlign:'right', fontFamily:'monospace', color:'#16a34a' }}>{runBal > 0 ? runBal.toLocaleString('en-IN', { minimumFractionDigits:2 }) : ''}</span>
+            <span style={{ textAlign:'right', fontFamily:'monospace', color:'#dc2626' }}>{runBal < 0 ? Math.abs(runBal).toLocaleString('en-IN', { minimumFractionDigits:2 }) : ''}</span>
+            <span style={{ textAlign:'right', fontFamily:'monospace', color:colors.teal }}>{Math.abs(runBal).toLocaleString('en-IN', { minimumFractionDigits:2 })} {runBal >= 0 ? 'Dr' : 'Cr'}</span>
           </div>
-
           {entries.length === 0 ? (
-            <div className="text-center py-12 text-[11px] text-gray-400 italic">
-              No transactions recorded for this ledger.
-              <div className="text-[10px] mt-1 text-gray-300">Only opening balance applies.</div>
-            </div>
+            <div style={{ textAlign:'center', padding:'48px 0', fontSize:11, color:'#9ca3af', fontStyle:'italic' }}>No transactions recorded for this ledger.</div>
           ) : entries.map((e, i) => {
             runBal += e.debit - e.credit;
             return (
-              <div key={i}
-                className={`grid grid-cols-[100px_110px_1fr_95px_95px_115px] px-3 py-0.5 text-[10px] border-b border-gray-50 hover:bg-tally-accent/10 ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}
-              >
-                <span className="text-gray-500">{e.date}</span>
-                <span className="text-gray-700 font-medium">{e.voucherType}</span>
-                <span className="text-gray-400 truncate">{e.narration || '—'}</span>
-                <span className="text-right font-mono text-green-700">
-                  {e.debit > 0 ? e.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ''}
-                </span>
-                <span className="text-right font-mono text-red-600">
-                  {e.credit > 0 ? e.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ''}
-                </span>
-                <span className="text-right font-mono text-tally-teal font-semibold">
-                  {Math.abs(runBal).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {runBal >= 0 ? 'Dr' : 'Cr'}
-                </span>
+              <div key={i} style={{ display:'grid', gridTemplateColumns:'100px 110px 1fr 95px 95px 115px', padding:'2px 12px', fontSize:10, borderBottom:'1px solid #f9fafb', background: i%2===1 ? '#f9fafb' : '#fff' }}>
+                <span style={{ color:'#6b7280' }}>{e.date}</span>
+                <span style={{ color:'#374151', fontWeight:500 }}>{e.voucherType}</span>
+                <span style={{ color:'#9ca3af', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{e.narration||'—'}</span>
+                <span style={{ textAlign:'right', fontFamily:'monospace', color:'#16a34a' }}>{e.debit>0?e.debit.toLocaleString('en-IN',{minimumFractionDigits:2}):''}</span>
+                <span style={{ textAlign:'right', fontFamily:'monospace', color:'#dc2626' }}>{e.credit>0?e.credit.toLocaleString('en-IN',{minimumFractionDigits:2}):''}</span>
+                <span style={{ textAlign:'right', fontFamily:'monospace', color:colors.teal, fontWeight:600 }}>{Math.abs(runBal).toLocaleString('en-IN',{minimumFractionDigits:2})} {runBal>=0?'Dr':'Cr'}</span>
               </div>
             );
           })}
         </div>
-
         {/* Footer */}
-        <div className="grid grid-cols-[100px_110px_1fr_95px_95px_115px] px-3 py-2 text-[10px] font-black bg-tally-light border-t-2 border-tally-teal text-tally-teal">
-          <span className="col-span-3 uppercase">Closing Balance</span>
-          <span className="text-right font-mono">{totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-          <span className="text-right font-mono">{totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-          <span className="text-right font-mono">
-            {Math.abs(finalBal).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {finalBal >= 0 ? 'Dr' : 'Cr'}
-          </span>
+        <div style={{ display:'grid', gridTemplateColumns:'100px 110px 1fr 95px 95px 115px', padding:'8px 12px', fontSize:10, fontWeight:900, background:colors.light, borderTop:`2px solid ${colors.teal}`, color:colors.teal }}>
+          <span style={{ gridColumn:'1/4', textTransform:'uppercase' }}>Closing Balance</span>
+          <span style={{ textAlign:'right', fontFamily:'monospace' }}>{totalDebit.toLocaleString('en-IN',{minimumFractionDigits:2})}</span>
+          <span style={{ textAlign:'right', fontFamily:'monospace' }}>{totalCredit.toLocaleString('en-IN',{minimumFractionDigits:2})}</span>
+          <span style={{ textAlign:'right', fontFamily:'monospace' }}>{Math.abs(finalBal).toLocaleString('en-IN',{minimumFractionDigits:2})} {finalBal>=0?'Dr':'Cr'}</span>
         </div>
       </div>
     </div>
@@ -241,33 +164,32 @@ function LedgerDrillDown({ ledger, entries, onClose }: {
 export default function BalanceSheetScreen({ branchId, onBack }: {
   branchId?: string; onBack?: () => void;
 }) {
-  const [ledgers,   setLedgers]   = useState<Ledger[]>([]);
-  const [vouchers,  setVouchers]  = useState<Voucher[]>([]);
-  const [groups,    setGroups]    = useState<Group[]>([]);
+  const [ledgers,        setLedgers]        = useState<Ledger[]>([]);
+  const [vouchers,       setVouchers]       = useState<Voucher[]>([]);
+  const [groups,         setGroups]         = useState<Group[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
-  const [companyName, setCompanyName] = useState('');
-  const [drillLedger, setDrillLedger] = useState<Ledger | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
-  const [showDebug, setShowDebug] = useState(true);
+  const [companyName,    setCompanyName]    = useState('');
+  const [drillLedger,    setDrillLedger]    = useState<Ledger | null>(null);
+  const [loading,        setLoading]        = useState(true);
+  const [error,          setError]          = useState<string | null>(null);
+  const [debugInfo,      setDebugInfo]      = useState<string>('');
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // ── Fetch data ─────────────────────────────────────────────────────────
+  // ── Fetch data ─────────────────────────────────────────────────────────────
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       setError(null);
       try {
-        const q = branchId ? `?branchId=${branchId}` : '';
-        const [l, v, g, b] = await Promise.all([
-          fetch(`/api/ledgers${q}`).then(r => { if (!r.ok) throw new Error(`ledgers: ${r.status}`); return r.json(); }),
-          fetch(`/api/vouchers${q}`).then(r => { if (!r.ok) throw new Error(`vouchers: ${r.status}`); return r.json(); }),
-          fetch(`/api/account-groups${q}`).then(r => { if (!r.ok) throw new Error(`groups: ${r.status}`); return r.json(); }),
-          fetch(`/api/branches`).then(r => r.json()),
-        ]);
+        // Build query string — only append if branchId is actually set
+        const q = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
 
-        console.log('[BS] ledgers sample:', Array.isArray(l) ? l[0] : l);
-        console.log('[BS] counts — ledgers:', l?.length, 'vouchers:', v?.length, 'groups:', g?.length);
+        const [l, v, g, b] = await Promise.all([
+          fetch(`/api/ledgers${q}`).then(r => { if (!r.ok) throw new Error(`/api/ledgers${q} → HTTP ${r.status}`); return r.json(); }),
+          fetch(`/api/vouchers${q}`).then(r => { if (!r.ok) throw new Error(`/api/vouchers${q} → HTTP ${r.status}`); return r.json(); }),
+          fetch(`/api/account-groups${q}`).then(r => { if (!r.ok) throw new Error(`/api/account-groups${q} → HTTP ${r.status}`); return r.json(); }),
+          fetch(`/api/branches`).then(r => r.ok ? r.json() : []),
+        ]);
 
         const ledgerArr  = Array.isArray(l) ? l : [];
         const voucherArr = Array.isArray(v) ? v : [];
@@ -277,20 +199,27 @@ export default function BalanceSheetScreen({ branchId, onBack }: {
         setVouchers(voucherArr);
         setGroups(groupArr);
 
-        // Auto-expand all BS groups that have data
+        // Debug info
+        const knownGroups = [...LIABILITY_GROUPS, ...ASSET_GROUPS];
+        const ledgerGroups = [...new Set(ledgerArr.map((ld: Ledger) => ld.group_name || ld.group || 'NONE'))];
+        const matchedGroups = ledgerGroups.filter(g => knownGroups.includes(g as string));
+        setDebugInfo(`${ledgerArr.length} ledgers | ${voucherArr.length} vouchers | BS groups found: ${matchedGroups.join(', ') || 'NONE'}`);
+
+        // Auto-expand groups that have ledgers
         const allBSGroups = [...LIABILITY_GROUPS, ...ASSET_GROUPS];
         const groupsWithData = allBSGroups.filter(gName =>
-          ledgerArr.some(l => (l.group_name === gName || l.group === gName))
+          ledgerArr.some((ld: Ledger) => ld.group_name === gName || ld.group === gName)
         );
         setExpandedGroups(groupsWithData);
 
         if (Array.isArray(b)) {
           const br = b.find((c: any) => c.id === branchId);
           if (br) setCompanyName(br.name);
+          else if (b.length > 0 && !branchId) setCompanyName(b[0]?.name || '');
         }
       } catch (err: any) {
         console.error('[BS] fetch error:', err);
-        setError(err.message);
+        setError(err.message || 'Unknown error');
       } finally {
         setLoading(false);
       }
@@ -300,12 +229,11 @@ export default function BalanceSheetScreen({ branchId, onBack }: {
 
   useEffect(() => { containerRef.current?.focus(); }, [loading]);
 
-  // ── Balance for one ledger (opening + all voucher entries) ─────────────
+  // ── Balance calculation ────────────────────────────────────────────────────
   const calculateBalance = useCallback((ledgerId: string): number => {
     const ledger = ledgers.find(l => l.id === ledgerId);
     if (!ledger) return 0;
     const ob = Number(ledger.openingBalance || 0);
-    // Dr opening = positive, Cr opening = negative
     let bal = ledger.balanceType === 'Cr' ? -ob : ob;
     for (const v of vouchers) {
       if (!Array.isArray(v.entries)) continue;
@@ -315,24 +243,17 @@ export default function BalanceSheetScreen({ branchId, onBack }: {
         bal += e.type === 'Dr' ? amt : -amt;
       }
     }
-    return bal; // positive = Dr, negative = Cr
+    return bal;
   }, [ledgers, vouchers]);
 
-  // ── Total for a group (including sub-groups via 'under' field) ─────────
   const getGroupTotal = useCallback((groupName: string): number => {
-    const groupLedgers = ledgers.filter(l =>
-      l.group_name === groupName || l.group === groupName
-    );
+    const groupLedgers = ledgers.filter(l => l.group_name === groupName || l.group === groupName);
     let total = groupLedgers.reduce((acc, l) => acc + calculateBalance(l.id), 0);
-    // Sub-groups use 'under' field (your DB schema) OR 'parent_group'
-    const subGroups = groups.filter(g =>
-      g.parent_group === groupName || g.under === groupName
-    );
+    const subGroups = groups.filter(g => g.parent_group === groupName || g.under === groupName);
     for (const sg of subGroups) total += getGroupTotal(sg.name);
     return total;
   }, [ledgers, groups, calculateBalance]);
 
-  // ── Drill-down: all voucher entries for a ledger ───────────────────────
   const getDrillEntries = useCallback((ledger: Ledger): DrillEntry[] => {
     const result: DrillEntry[] = [];
     const relevant = vouchers
@@ -356,21 +277,35 @@ export default function BalanceSheetScreen({ branchId, onBack }: {
   }, [vouchers]);
 
   const handleExport = useCallback(() => {
-    const rows = [
-      ...LIABILITY_GROUPS.map(g => ({ Side: 'Liabilities', Group: g, Amount: -getGroupTotal(g) })),
-      ...ASSET_GROUPS.map(g => ({ Side: 'Assets', Group: g, Amount: getGroupTotal(g) })),
-    ].filter(r => Math.abs(r.Amount) >= 0.01);
-    exportToExcel(rows, 'Balance_Sheet');
+    try {
+      const rows = [
+        ...LIABILITY_GROUPS.map(g => ({ Side: 'Liabilities', Group: g, Amount: -getGroupTotal(g) })),
+        ...ASSET_GROUPS.map(g => ({ Side: 'Assets', Group: g, Amount: getGroupTotal(g) })),
+      ];
+      const csv = ['Side,Group,Amount', ...rows.map(r => `${r.Side},${r.Group},${r.Amount.toFixed(2)}`)].join('\n');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+      a.download = 'Balance_Sheet.csv';
+      a.click();
+    } catch(e) { console.error('Export failed', e); }
   }, [getGroupTotal]);
 
-  // ── Keyboard shortcuts — scoped, won't reach parent ───────────────────
+  const printReport = () => {
+    const el = document.getElementById('balance-sheet-report');
+    if (!el) return;
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(`<html><head><title>Balance Sheet</title><style>body{font-family:monospace;font-size:11px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px}</style></head><body>${el.innerHTML}</body></html>`);
+    w.document.close();
+    w.print();
+  };
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Escape') { onBack?.(); return; }
     e.stopPropagation();
-    e.preventDefault();
-    if (e.altKey && e.key.toUpperCase() === 'P') printReport('balance-sheet-report');
-    if (e.altKey && e.key.toUpperCase() === 'E') handleExport();
-    if (e.key === 'F1') setExpandedGroups([]);
+    if (e.altKey && e.key.toUpperCase() === 'P') { e.preventDefault(); printReport(); }
+    if (e.altKey && e.key.toUpperCase() === 'E') { e.preventDefault(); handleExport(); }
+    if (e.key === 'F1') { e.preventDefault(); setExpandedGroups([]); }
   }, [onBack, handleExport]);
 
   const toggleGroup = (name: string) =>
@@ -378,64 +313,63 @@ export default function BalanceSheetScreen({ branchId, onBack }: {
       prev.includes(name) ? prev.filter(g => g !== name) : [...prev, name]
     );
 
-  // ── Render one BS side ─────────────────────────────────────────────────
+  // ── Render one BS side ─────────────────────────────────────────────────────
   const renderSection = (title: string, groupNames: string[]) => {
     const isLiab = title === 'Liabilities';
 
+    // FIX: Show ALL groups that have ledgers, including zero-balance ones
     const sections = groupNames.map(name => {
       const raw     = getGroupTotal(name);
-      // Liabilities: Cr balances are positive. Assets: Dr balances are positive.
       const display = isLiab ? -raw : raw;
-      return { name, raw, display };
-    }).filter(s => Math.abs(s.display) >= 0.01);
+      const ledgerCount = ledgers.filter(l => l.group_name === name || l.group === name).length;
+      return { name, raw, display, ledgerCount };
+    }).filter(s => s.ledgerCount > 0); // only filter if no ledgers AT ALL in this group
 
     const total = sections.reduce((acc, s) => acc + s.display, 0);
 
     return (
-      <div className="flex flex-col h-full">
-        <div className="flex-1">
+      <div style={{ display:'flex', flexDirection:'column', height:'100%' }}>
+        <div style={{ flex:1 }}>
           {sections.length === 0 ? (
-            <div className="flex items-center justify-center py-12">
-              <span className="text-[10px] text-gray-400 italic">No balances to display</span>
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'48px 16px', gap:8 }}>
+              <span style={{ fontSize:10, color:'#9ca3af', fontStyle:'italic' }}>No ledgers assigned to {title} groups</span>
+              <span style={{ fontSize:9, color:'#d1d5db' }}>
+                {isLiab ? LIABILITY_GROUPS.join(', ') : ASSET_GROUPS.join(', ')}
+              </span>
             </div>
           ) : sections.map(s => {
             const isExpanded = expandedGroups.includes(s.name);
-
-            const groupLedgers = ledgers.filter(l => {
-              if (l.group_name !== s.name && l.group !== s.name) return false;
-              const bal     = calculateBalance(l.id);
-              const display = isLiab ? -bal : bal;
-              return Math.abs(display) >= 0.01;
-            });
+            const groupLedgers = ledgers.filter(l =>
+              (l.group_name === s.name || l.group === s.name)
+            );
 
             return (
-              <div key={s.name} className="border-b border-gray-100 last:border-0">
-                {/* Group header row */}
+              <div key={s.name} style={{ borderBottom:'1px solid #f3f4f6' }}>
+                {/* Group header */}
                 <div
                   onClick={() => toggleGroup(s.name)}
-                  className="flex justify-between items-center py-1.5 px-3 hover:bg-tally-accent/10 cursor-pointer select-none"
+                  style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 12px', cursor:'pointer', userSelect:'none', background: isExpanded ? `${colors.light}` : 'transparent' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = colors.light)}
+                  onMouseLeave={e => (e.currentTarget.style.background = isExpanded ? colors.light : 'transparent')}
                 >
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[9px] text-tally-teal w-3 font-bold">
+                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    <span style={{ fontSize:9, color:colors.teal, width:12, fontWeight:'bold' }}>
                       {isExpanded ? '▾' : '▸'}
                     </span>
-                    <span className="text-[11px] font-bold uppercase tracking-wide text-gray-700">
+                    <span style={{ fontSize:11, fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.05em', color:'#374151' }}>
                       {s.name}
                     </span>
+                    <span style={{ fontSize:9, color:'#9ca3af' }}>({s.ledgerCount})</span>
                   </div>
-                  <span className="text-[11px] font-mono font-bold text-gray-800">
+                  <span style={{ fontSize:11, fontFamily:'monospace', fontWeight:'bold', color: s.display >= 0 ? '#1f2937' : '#dc2626' }}>
                     {s.display.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
 
                 {/* Expanded: ledger rows */}
                 {isExpanded && (
-                  <div className="bg-gray-50/50 border-t border-gray-100 pb-1">
-                    {groupLedgers.length === 0 ? (
-                      <div className="px-10 py-1 text-[10px] italic text-gray-400">
-                        No ledgers with balance
-                      </div>
-                    ) : groupLedgers.map(l => {
+                  <div style={{ background:'#fafafa', borderTop:'1px solid #f3f4f6', paddingBottom:4 }}>
+                    {groupLedgers.map(l => {
                       const bal     = calculateBalance(l.id);
                       const display = isLiab ? -bal : bal;
                       return (
@@ -443,12 +377,12 @@ export default function BalanceSheetScreen({ branchId, onBack }: {
                           key={l.id}
                           onClick={() => setDrillLedger(l)}
                           title="Click to view transactions"
-                          className="flex justify-between px-10 py-0.5 text-[10px] text-tally-teal cursor-pointer hover:bg-tally-accent/20 group"
+                          style={{ display:'flex', justifyContent:'space-between', padding:'2px 40px', fontSize:10, color:colors.teal, cursor:'pointer' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#e8f4f4'; e.currentTarget.style.fontWeight = '600'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.fontWeight = 'normal'; }}
                         >
-                          <span className="italic group-hover:underline group-hover:font-semibold transition-all">
-                            {l.name}
-                          </span>
-                          <span className="font-mono">
+                          <span style={{ fontStyle:'italic' }}>{l.name}</span>
+                          <span style={{ fontFamily:'monospace' }}>
                             {display.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
@@ -462,9 +396,9 @@ export default function BalanceSheetScreen({ branchId, onBack }: {
         </div>
 
         {/* Total row */}
-        <div className="bg-tally-light px-3 py-2 flex justify-between font-black text-xs text-tally-teal border-t-2 border-tally-teal mt-auto">
+        <div style={{ background:colors.light, padding:'8px 12px', display:'flex', justifyContent:'space-between', fontWeight:900, fontSize:12, color:colors.teal, borderTop:`2px solid ${colors.teal}`, marginTop:'auto' }}>
           <span>TOTAL</span>
-          <span className="font-mono">
+          <span style={{ fontFamily:'monospace' }}>
             ₹ {total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
           </span>
         </div>
@@ -472,10 +406,7 @@ export default function BalanceSheetScreen({ branchId, onBack }: {
     );
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  const reportDate = new Date().toLocaleDateString('en-IN', {
-    day: '2-digit', month: 'short', year: 'numeric'
-  });
+  const reportDate = new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
 
   return (
     <>
@@ -491,109 +422,126 @@ export default function BalanceSheetScreen({ branchId, onBack }: {
         ref={containerRef}
         tabIndex={0}
         onKeyDown={handleKeyDown}
-        onKeyDownCapture={e => { if (e.key !== 'Escape') e.stopPropagation(); }}
-        className="flex flex-col h-full bg-tally-bg outline-none"
+        style={{ display:'flex', flexDirection:'column', height:'100%', background:colors.bg, outline:'none', fontFamily:'monospace, "Courier New"', minHeight:'100vh' }}
       >
         {/* Top bar */}
-        <div className="bg-tally-sidebar text-white px-4 py-1 font-bold text-xs uppercase flex justify-between items-center sticky top-0 z-10">
+        <div style={{ background:colors.sidebar, color:'#fff', padding:'4px 16px', fontWeight:'bold', fontSize:12, textTransform:'uppercase', display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:10 }}>
           <span>Balance Sheet</span>
-          <span className="text-tally-accent text-[10px] font-normal">
-            {companyName || `Branch: ${branchId}`}
+          <span style={{ color:colors.accent, fontSize:10, fontWeight:'normal' }}>
+            {companyName || (branchId ? `Branch: ${branchId}` : 'All Branches')}
           </span>
         </div>
 
-        {/* ── Loading ── */}
+        {/* Loading */}
         {loading && (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center space-y-2">
-              <div className="text-tally-teal font-bold animate-pulse">Loading Balance Sheet…</div>
-              <div className="text-[10px] text-gray-400">branchId: {branchId || 'none'}</div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Error ── */}
-        {error && !loading && (
-          <div className="flex-1 flex items-center justify-center p-8">
-            <div className="bg-red-50 border border-red-200 rounded p-6 max-w-md text-center">
-              <div className="text-red-600 font-bold text-sm mb-2">⚠ Failed to load</div>
-              <div className="text-red-400 text-xs font-mono">{error}</div>
-              <div className="text-gray-400 text-[10px] mt-3">
-                Check that /api/ledgers?branchId={branchId} returns data.
+          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <div style={{ textAlign:'center' }}>
+              <div style={{ color:colors.teal, fontWeight:'bold', animation:'pulse 1s infinite' }}>
+                ⏳ Loading Balance Sheet…
+              </div>
+              <div style={{ fontSize:10, color:'#9ca3af', marginTop:4 }}>
+                {branchId ? `branchId: ${branchId}` : 'Fetching all branches…'}
               </div>
             </div>
           </div>
         )}
 
-        {/* ── Main content ── */}
-        {!loading && !error && (
-          <div className="flex-grow overflow-auto p-4 pr-28">
-            <div id="balance-sheet-report" className="max-w-5xl mx-auto bg-white tally-border tally-shadow">
+        {/* Error */}
+        {error && !loading && (
+          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', padding:32 }}>
+            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, padding:24, maxWidth:480, textAlign:'center' }}>
+              <div style={{ color:'#dc2626', fontWeight:'bold', fontSize:14, marginBottom:8 }}>⚠ Failed to load data</div>
+              <div style={{ color:'#ef4444', fontSize:11, fontFamily:'monospace', marginBottom:12 }}>{error}</div>
+              <div style={{ color:'#6b7280', fontSize:10 }}>
+                Check that <code>/api/ledgers{branchId ? `?branchId=${branchId}` : ''}</code> returns data.
+              </div>
+              <button
+                onClick={() => window.location.reload()}
+                style={{ marginTop:16, padding:'6px 16px', background:colors.teal, color:'#fff', border:'none', borderRadius:4, cursor:'pointer', fontSize:11 }}
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
 
+        {/* Main content */}
+        {!loading && !error && (
+          <div style={{ flex:1, overflow:'auto', padding:16, paddingRight: 112 }}>
+            {/* Debug bar — shows data status */}
+            {debugInfo && (
+              <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:4, padding:'4px 12px', marginBottom:8, fontSize:9, color:'#92400e', fontFamily:'monospace' }}>
+                📊 {debugInfo}
+              </div>
+            )}
+
+            <div
+              id="balance-sheet-report"
+              style={{ maxWidth:900, margin:'0 auto', background:'#fff', border:`1px solid ${colors.teal}`, boxShadow:'0 2px 8px rgba(0,0,0,0.1)' }}
+            >
               {/* Company header */}
-              <div className="text-center py-3 border-b border-gray-200">
-                <h1 className="text-base font-black uppercase tracking-widest text-gray-800">
+              <div style={{ textAlign:'center', padding:'12px 0', borderBottom:'1px solid #e5e7eb' }}>
+                <h1 style={{ margin:0, fontSize:15, fontWeight:900, textTransform:'uppercase', letterSpacing:'0.1em', color:'#1f2937' }}>
                   {companyName || 'Balance Sheet'}
                 </h1>
-                <p className="text-[10px] font-bold text-gray-600 mt-0.5">Balance Sheet</p>
-                <p className="text-[9px] text-gray-400">As at {reportDate}</p>
+                <p style={{ margin:'2px 0 0', fontSize:10, fontWeight:'bold', color:'#4b5563' }}>Balance Sheet</p>
+                <p style={{ margin:'2px 0 0', fontSize:9, color:'#9ca3af' }}>As at {reportDate}</p>
               </div>
 
               {/* Two-column table */}
-              <div className="flex divide-x divide-tally-teal min-h-[400px]">
-
+              <div style={{ display:'flex', borderTop:'none', minHeight:400 }}>
                 {/* Liabilities */}
-                <div className="w-1/2 flex flex-col">
-                  <div className="bg-tally-light px-3 py-1 border-b border-tally-teal flex justify-between text-[10px] font-bold uppercase text-tally-teal">
+                <div style={{ width:'50%', display:'flex', flexDirection:'column', borderRight:`1px solid ${colors.teal}` }}>
+                  <div style={{ background:colors.light, padding:'4px 12px', borderBottom:`1px solid ${colors.teal}`, display:'flex', justifyContent:'space-between', fontSize:10, fontWeight:'bold', textTransform:'uppercase', color:colors.teal }}>
                     <span>Liabilities</span>
-                    <span className="font-normal text-gray-500">as at {reportDate}</span>
+                    <span style={{ fontWeight:'normal', color:'#6b7280', fontSize:9 }}>as at {reportDate}</span>
                   </div>
                   {renderSection('Liabilities', LIABILITY_GROUPS)}
                 </div>
 
                 {/* Assets */}
-                <div className="w-1/2 flex flex-col">
-                  <div className="bg-tally-light px-3 py-1 border-b border-tally-teal flex justify-between text-[10px] font-bold uppercase text-tally-teal">
+                <div style={{ width:'50%', display:'flex', flexDirection:'column' }}>
+                  <div style={{ background:colors.light, padding:'4px 12px', borderBottom:`1px solid ${colors.teal}`, display:'flex', justifyContent:'space-between', fontSize:10, fontWeight:'bold', textTransform:'uppercase', color:colors.teal }}>
                     <span>Assets</span>
-                    <span className="font-normal text-gray-500">as at {reportDate}</span>
+                    <span style={{ fontWeight:'normal', color:'#6b7280', fontSize:9 }}>as at {reportDate}</span>
                   </div>
                   {renderSection('Assets', ASSET_GROUPS)}
                 </div>
               </div>
 
               {/* Hint bar */}
-              <div className="bg-gray-50 border-t border-gray-100 px-3 py-1 flex gap-4 flex-wrap text-[9px] text-gray-400">
+              <div style={{ background:'#f9fafb', borderTop:'1px solid #f3f4f6', padding:'4px 12px', display:'flex', gap:16, flexWrap:'wrap', fontSize:9, color:'#9ca3af' }}>
                 <span>▸/▾ Click group to expand</span>
-                <span>Click ledger to view transactions</span>
-                <span>F1 Condense · Alt+P Print · Alt+E Export · ESC Back</span>
+                <span>Click ledger name to view transactions</span>
+                <span>F1 Condense · Alt+P Print · Alt+E Export CSV · ESC Back</span>
               </div>
             </div>
           </div>
         )}
 
         {/* Right hotkey panel */}
-        <div className="fixed right-0 top-12 bottom-0 w-24 bg-tally-sidebar flex flex-col gap-0.5 p-0.5 text-[10px] text-white z-20">
+        <div style={{ position:'fixed', right:0, top:32, bottom:0, width:96, background:colors.sidebar, display:'flex', flexDirection:'column', gap:2, padding:2, fontSize:10, color:'#fff', zIndex:20 }}>
           {[
             { label: 'F1: Condensed', fn: () => setExpandedGroups([]) },
             { label: 'F2: Period',    fn: () => {} },
             { label: 'F3: Company',   fn: () => {} },
-            { label: 'Alt+P: Print',  fn: () => printReport('balance-sheet-report') },
+            { label: 'Alt+P: Print',  fn: printReport },
             { label: 'Alt+E: Export', fn: handleExport },
             { label: 'F12: Config',   fn: () => {} },
             { label: 'ESC: Back',     fn: () => onBack?.() },
           ].map(btn => (
-            <div key={btn.label} onClick={btn.fn}
-              className="h-10 bg-tally-hotkey flex items-center px-2 cursor-pointer hover:bg-tally-accent hover:text-black select-none">
+            <div
+              key={btn.label}
+              onClick={btn.fn}
+              style={{ height:40, background:colors.hotkey, display:'flex', alignItems:'center', padding:'0 8px', cursor:'pointer', fontSize:10 }}
+              onMouseEnter={e => { e.currentTarget.style.background = colors.accent; e.currentTarget.style.color = '#000'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = colors.hotkey; e.currentTarget.style.color = '#fff'; }}
+            >
               {btn.label}
             </div>
           ))}
         </div>
       </div>
-
-      {/* Debug panel */}
-      {showDebug && (
-        <DebugPanel ledgers={ledgers} vouchers={vouchers} groups={groups} branchId={branchId} />
-      )}
     </>
   );
 }
