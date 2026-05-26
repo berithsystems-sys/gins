@@ -1,14 +1,17 @@
 /**
- * TallyPrime-style Profit & Loss A/c — v3
- * NEW FEATURES:
- * 1. ESC key returns to main page (parent closes this component)
- * 2. Arrow keys navigate ledger list directly (no Tab needed)
- * 3. Table expands to full screen when few items (no wasted space)
+ * TallyPrime-style Profit & Loss A/c — v2
+ * Fixes & features:
+ * 1. Keyboard shortcuts scoped to P&L only (stopPropagation + capture phase)
+ * 2. Click ledger name → opens LedgerDetail drill-down (from Trial Balance)
+ * 3. Zero-balance ledgers AND zero-balance groups are hidden
+ * 4. Comparison mode: up to 4 period columns (quarterly or custom), like TallyPrime screenshot
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { exportToExcel, printReport } from '../lib/ReportUtils';
 
+// ── Re-use the LedgerDetail component from Trial Balance ──────────────────────
+// (Copied inline so this file is self-contained; if you have it imported already, replace with import)
 interface Ledger {
   id: string; name: string; group?: string; group_name?: string;
   openingBalance?: number; balanceType?: 'Dr' | 'Cr';
@@ -64,7 +67,7 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
   return (
     <div style={{ fontFamily: FONT, fontSize: 12, display:'flex', flexDirection:'column', height:'100%', background:'#fff', border:'1px solid #b8c4cc', borderRadius:2, overflow:'hidden' }}>
       <div style={{ background: HDR, color:'#fff', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'3px 10px', fontSize:12, fontWeight:700, flexShrink:0 }}>
-        <button onClick={onBack} style={{ background:'none', border:'1px solid rgba(255,255,255,0.4)', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:FONT, padding:'1px 10px', borderRadius:2 }}>← Back (Esc)</button>
+        <button onClick={onBack} style={{ background:'none', border:'1px solid rgba(255,255,255,0.4)', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:FONT, padding:'1px 10px', borderRadius:2 }}>← Back</button>
         <span style={{ flex:2, textAlign:'center', fontWeight:800, fontSize:13 }}>{ledger.name}</span>
         <span />
       </div>
@@ -211,7 +214,7 @@ function AddPeriodModal({ onAdd, onCancel }: { onAdd:(label:string,from:string,t
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 interface Period { label: string; from: string; to: string; }
-interface PLScreenProps { branchId?: string; onBack?: () => void; }
+interface PLScreenProps { branchId?: string; }
 
 const FONT_   = `-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,sans-serif`;
 const HDR_BG  = '#1f4e79';
@@ -221,7 +224,7 @@ const ROW_BDR = '#e0e6ee';
 const DARK    = '#1a2a3a';
 
 // ─── Main PLScreen ─────────────────────────────────────────────────────────────
-export default function PLScreen({ branchId, onBack }: PLScreenProps) {
+export default function PLScreen({ branchId }: PLScreenProps) {
   const [ledgers, setLedgers]         = useState<any[]>([]);
   const [allVouchers, setAllVouchers] = useState<any[]>([]);
   const [companyName, setCompanyName] = useState('');
@@ -233,10 +236,6 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
   const [drillLedger, setDrillLedger] = useState<Ledger | null>(null);
   const [loading, setLoading]         = useState(true);
   const [showPercent, setShowPercent] = useState(false);
-  
-  // ─── Arrow key navigation ──────────────────────────────────────────
-  const [focusedLedgerId, setFocusedLedgerId] = useState<string | null>(null);
-  const ledgerListRef = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // ── Fetch once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -309,7 +308,7 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
 
   const salesTotal0 = Math.abs(groupTotalForPeriod('Sales Account', mainPeriod.from, mainPeriod.to));
 
-  // ─── Scoped keyboard shortcuts (capture phase, stopPropagation) ──────
+  // ── Scoped keyboard shortcuts (capture phase, stopPropagation) ──────
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       // Only intercept if not typing in an input
@@ -320,78 +319,28 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
       if (drillLedger) return; // LedgerDetail handles its own Esc
 
       let handled = false;
-      
-      // ─── NEW: ESC to go back to main page ──────────────────────
-      if (e.key === 'Escape') {
-        if (onBack) { onBack(); handled = true; }
-        else { setExpanded(new Set()); handled = true; }
-      }
-      else if (e.key === 'F2') { setShowPeriod(p=>!p); handled = true; }
+      if (e.key === 'F2') { setShowPeriod(p=>!p); handled = true; }
       else if (e.key === 'F5') {
         setExpanded(new Set([...LEFT_GROUPS, ...RIGHT_GROUPS])); handled = true;
+      }
+      else if (e.key === 'Escape') {
+        setExpanded(new Set()); handled = true;
       }
       else if (e.altKey && e.key.toLowerCase() === 'f') { setShowPercent(p=>!p); handled = true; }
       else if (e.altKey && e.key.toLowerCase() === 'p') { window.print(); handled = true; }
       else if (e.altKey && e.key.toLowerCase() === 'n') { setShowAddPeriod(true); handled = true; }
-      // ─── NEW: Arrow keys to navigate ledger list ───────────────
-      else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && focusedLedgerId) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        // Get all visible ledgers in order
-        const allVisibleLedgers: any[] = [];
-        [...LEFT_GROUPS, ...RIGHT_GROUPS].forEach(g => {
-          if (expanded.has(g)) {
-            groupLedgersNonZero(g, mainPeriod.from, mainPeriod.to).forEach(l => {
-              allVisibleLedgers.push(l);
-            });
-          }
-        });
-        
-        const currentIdx = allVisibleLedgers.findIndex(l => l.id === focusedLedgerId);
-        let nextIdx = currentIdx;
-        
-        if (e.key === 'ArrowUp') nextIdx = Math.max(0, currentIdx - 1);
-        else nextIdx = Math.min(allVisibleLedgers.length - 1, currentIdx + 1);
-        
-        if (nextIdx !== currentIdx && allVisibleLedgers[nextIdx]) {
-          const nextLedger = allVisibleLedgers[nextIdx];
-          setFocusedLedgerId(nextLedger.id);
-          
-          // Scroll into view
-          setTimeout(() => {
-            const el = ledgerListRef.current?.get(nextLedger.id);
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          }, 0);
-        }
-        handled = true;
-      }
-      // ─── NEW: Enter to drill into focused ledger ───────────────
-      else if (e.key === 'Enter' && focusedLedgerId) {
-        e.preventDefault();
-        e.stopPropagation();
-        const l = ledgers.find(x => x.id === focusedLedgerId);
-        if (l) setDrillLedger(l);
-        handled = true;
-      }
 
       if (handled) { e.preventDefault(); e.stopPropagation(); }
     };
     // Use capture phase so we intercept before app-level handlers
     window.addEventListener('keydown', h, true);
     return () => window.removeEventListener('keydown', h, true);
-  }, [drillLedger, focusedLedgerId, expanded, LEFT_GROUPS, RIGHT_GROUPS, groupLedgersNonZero, mainPeriod, ledgers, onBack]);
+  }, [drillLedger]);
 
   // ── Expand/collapse ──────────────────────────────────────────────────
-  const toggleGroup = (name: string) => {
-    setExpanded(prev => {
-      const n = new Set(prev);
-      n.has(name) ? n.delete(name) : n.add(name);
-      return n;
-    });
-    // Clear focused ledger when collapsing
-    setFocusedLedgerId(null);
-  };
+  const toggleGroup = (name: string) => setExpanded(prev => {
+    const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n;
+  });
 
   // ── Period label ─────────────────────────────────────────────────────
   const periodLabel = (p: {from:string;to:string}) =>
@@ -454,29 +403,13 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
           })}
         </tr>
         {isExp && groupLedgersNonZero(grpName, mainPeriod.from, mainPeriod.to).map(l => (
-          <tr 
-            key={l.id}
-            ref={(el) => {
-              if (el) ledgerListRef.current?.set(l.id, el);
-            }}
-            style={{
-              ...rs.ledgerRow,
-              background: focusedLedgerId === l.id ? '#cce5ff' : rs.ledgerRow.background,
-              borderLeft: focusedLedgerId === l.id ? '3px solid #1a5fa8' : 'none',
-            }}
-            onClick={() => {
-              setFocusedLedgerId(l.id);
-            }}
-            onDoubleClick={() => {
-              setDrillLedger(l);
-            }}
-          >
-            <td style={{ ...rs.tdName, paddingLeft: focusedLedgerId === l.id ? 25 : 28 }}>
+          <tr key={l.id} style={rs.ledgerRow}>
+            <td style={{ ...rs.tdName, paddingLeft:28 }}>
               {/* Clickable ledger name → drill down to Trial Balance detail */}
               <span
                 onClick={(e) => { e.stopPropagation(); setDrillLedger(l); }}
                 style={{ fontStyle:'italic', color:'#1a5fa8', cursor:'pointer', textDecoration:'underline', fontSize:11 }}
-                title="Click to view transactions (or press Enter)"
+                title="Click to view transactions"
               >
                 {l.name}
               </span>
@@ -525,20 +458,6 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
     </tr>
   );
 
-  // ── Count visible items to determine if table should expand ──────────
-  const visibleLedgerCount = useMemo(() => {
-    let count = 0;
-    [...LEFT_GROUPS, ...RIGHT_GROUPS].forEach(g => {
-      if (expanded.has(g)) {
-        count += groupLedgersNonZero(g, mainPeriod.from, mainPeriod.to).length;
-      }
-    });
-    return count;
-  }, [expanded, LEFT_GROUPS, RIGHT_GROUPS, groupLedgersNonZero, mainPeriod]);
-
-  // ── If few items, expand table to full screen ───────────────────────
-  const shouldExpandTable = visibleLedgerCount < 15; // Adjust threshold as needed
-
   return (
     <div style={s.root} id="pl-report">
       <style>{`
@@ -560,16 +479,13 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
 
       {/* Title Bar */}
       <div style={s.titleBar}>
-        {onBack && (
-          <button onClick={onBack} style={{ background:'none', border:'none', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, padding:'0 10px', marginRight:8 }}>← Back</button>
-        )}
         <span style={{ flex:1, fontWeight:700 }}>Profit & Loss A/c</span>
         <span style={{ flex:2, textAlign:'center', fontWeight:800, fontSize:12 }}>{companyName||'…'}</span>
         <span style={{ flex:1, textAlign:'right', opacity:0.7, fontSize:11 }}>{periodLabel(mainPeriod)}</span>
       </div>
 
       {/* Main content */}
-      <div style={{ ...s.contentWrap, paddingRight: shouldExpandTable ? 0 : 90 }}>
+      <div style={s.contentWrap}>
         {loading ? (
           <div style={{ padding:60, textAlign:'center', color:'#888', fontStyle:'italic', fontSize:13 }}>Loading…</div>
         ) : (
@@ -636,33 +552,30 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
         )}
       </div>
 
-      {/* Right Function Buttons - Hidden when table is expanded */}
-      {!shouldExpandTable && (
-        <div style={s.rightPanel} className="no-print">
-          {[
-            { k:'F2',    l:'Period',        a:()=>setShowPeriod(true) },
-            { k:'F5',    l:'Expand All',    a:()=>setExpanded(new Set([...LEFT_GROUPS,...RIGHT_GROUPS])) },
-            { k:'Esc',   l:'Go Back',       a:()=>onBack?onBack():setExpanded(new Set()) },
-            { k:'Alt+N', l:'Add Period',    a:()=>setShowAddPeriod(true) },
-            { k:'Alt+F', l:'Percentages',   a:()=>setShowPercent(p=>!p) },
-            { k:'Alt+P', l:'Print',         a:()=>window.print() },
-            { k:'Alt+E', l:'Export Excel',  a:handleExport },
-            { k:'',      l: extraPeriods.length > 0 ? `${extraPeriods.length} extra\nperiod(s)` : '', a:()=>{} },
-            { k:'✕ Clr', l:'Clear Periods', a:()=>setExtraPeriods([]) },
-            { k:'↑↓',    l:'Navigate',      a:()=>{} },
-            { k:'Enter', l:'Open Ledger',   a:()=>{} },
-          ].map((b,i) => (
-            <button key={i} onClick={b.a} className="no-print" style={{
-              ...s.sideBtn,
-              background: b.k==='Alt+N' ? 'rgba(100,200,100,0.15)' : b.k==='✕ Clr' ? 'rgba(255,80,80,0.15)' : b.k==='↑↓' ? 'rgba(100,150,200,0.15)' : 'none',
-              opacity: b.l ? 1 : 0.2,
-            }}>
-              <span style={s.sBtnKey}>{b.k}</span>
-              <span style={s.sBtnLabel}>{b.l}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Right Function Buttons */}
+      <div style={s.rightPanel} className="no-print">
+        {[
+          { k:'F2',    l:'Period',        a:()=>setShowPeriod(true) },
+          { k:'F5',    l:'Expand All',    a:()=>setExpanded(new Set([...LEFT_GROUPS,...RIGHT_GROUPS])) },
+          { k:'Esc',   l:'Collapse',      a:()=>setExpanded(new Set()) },
+          { k:'Alt+N', l:'Add Period',    a:()=>setShowAddPeriod(true) },
+          { k:'Alt+F', l:'Percentages',   a:()=>setShowPercent(p=>!p) },
+          { k:'Alt+P', l:'Print',         a:()=>window.print() },
+          { k:'Alt+E', l:'Export Excel',  a:handleExport },
+          { k:'',      l: extraPeriods.length > 0 ? `${extraPeriods.length} extra\nperiod(s)` : '', a:()=>{} },
+          { k:'✕ Clr', l:'Clear Periods', a:()=>setExtraPeriods([]) },
+          { k:'F12',   l:'Configure',     a:()=>{} },
+        ].map((b,i) => (
+          <button key={i} onClick={b.a} className="no-print" style={{
+            ...s.sideBtn,
+            background: b.k==='Alt+N' ? 'rgba(100,200,100,0.15)' : b.k==='✕ Clr' ? 'rgba(255,80,80,0.15)' : 'none',
+            opacity: b.l ? 1 : 0.2,
+          }}>
+            <span style={s.sBtnKey}>{b.k}</span>
+            <span style={s.sBtnLabel}>{b.l}</span>
+          </button>
+        ))}
+      </div>
 
       {/* Status Bar */}
       <div style={s.statusBar} className="no-print">
@@ -673,7 +586,7 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
           {extraPeriods.length > 0 && ` · Comparing ${allPeriods.length} periods`}
         </span>
         <span style={{ color:'#aaa', fontSize:10 }}>
-          ESC: Back  |  F2: Period  |  F5: Expand  |  ↑↓: Navigate ledgers  |  Enter: Open  |  Alt+F: %
+          F2: Period  |  F5: Expand  |  Alt+N: Add Comparison  |  Click ledger: View transactions  |  Alt+F: %
         </span>
       </div>
     </div>
@@ -684,7 +597,7 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
 const rs: Record<string, React.CSSProperties> = {
   th:         { padding:'5px 10px', fontSize:11, fontWeight:700, color:'#333', borderBottom:`1px solid ${BORDER}`, background:LIGHT, whiteSpace:'nowrap' },
   groupRow:   { borderBottom:`1px solid ${ROW_BDR}`, background:'#fff', transition:'background 0.07s' },
-  ledgerRow:  { borderBottom:`1px solid ${ROW_BDR}`, background:'#fafbff', transition:'all 0.1s ease' },
+  ledgerRow:  { borderBottom:`1px solid ${ROW_BDR}`, background:'#fafbff' },
   tdName:     { padding:'3px 8px', fontSize:12, verticalAlign:'middle', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' },
   tdAmt:      { padding:'3px 10px', fontSize:12, fontWeight:700, textAlign:'right', verticalAlign:'middle', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' },
   tdPct:      { padding:'3px 6px', fontSize:11, textAlign:'right', color:'#888', whiteSpace:'nowrap' },
@@ -696,7 +609,7 @@ const BORDER_ = '#b8c4cc'; const LIGHT_ = '#f0f4f8'; const ROW_BDR_ = '#e0e6ee';
 const s: Record<string, React.CSSProperties> = {
   root:        { fontFamily:FONT_, fontSize:12, color:'#1a1a1a', background:'#fff', display:'flex', flexDirection:'column', height:'100%', border:`1px solid ${BORDER_}`, borderRadius:2, overflow:'hidden', position:'relative' },
   titleBar:    { background:HDR_BG, color:'#fff', display:'flex', alignItems:'center', padding:'3px 8px', fontSize:11, fontWeight:600, flexShrink:0 },
-  contentWrap: { flex:1, overflowY:'auto' },
+  contentWrap: { flex:1, overflowY:'auto', paddingRight:90 },
   twoCol:      { display:'flex', minHeight:'100%' },
   col:         { flex:1, display:'flex', flexDirection:'column', minWidth:0 },
   divider:     { width:2, background:BORDER_, flexShrink:0 },
