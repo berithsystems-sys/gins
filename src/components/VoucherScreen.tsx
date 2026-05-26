@@ -199,6 +199,9 @@ export default function VoucherScreen({
       const tag = (e.target as HTMLElement)?.tagName;
       const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
+      // Dismiss success popup on any key
+      if (statusMsg?.type === 'ok') { setStatusMsg(null); return; }
+
       if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); handleSubmit(); return; }
       if (e.key === 'F12') { e.preventDefault(); setShowConfig(true); return; }
       if (e.altKey && e.key.toLowerCase() === 'a') { e.preventDefault(); handleAddEntry(); return; }
@@ -460,9 +463,10 @@ export default function VoucherScreen({
     }
   };
 
-  const showStatus = (text: string, type: 'ok' | 'err' | 'info') => {
-    setStatusMsg({ text, type });
-    setTimeout(() => setStatusMsg(null), 5000);
+  const showStatus = (text: string, kind: 'ok' | 'err' | 'info') => {
+    setStatusMsg({ text, type: kind });
+    // Success popup auto-dismisses after 3 s; errors stay until dismissed
+    if (kind === 'ok') setTimeout(() => setStatusMsg(null), 3000);
   };
 
   const accentColor = VOUCHER_COLORS[type] || '#006b6b';
@@ -473,6 +477,87 @@ export default function VoucherScreen({
       className="flex h-full bg-[#f5f0e8] font-mono text-xs select-none"
       style={{ fontFamily: '"Courier New", Courier, monospace' }}
     >
+
+      {/* ══ SUCCESS POPUP ══════════════════════════════════════════════ */}
+      {statusMsg?.type === 'ok' && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center pointer-events-none">
+          <div
+            className="pointer-events-auto flex flex-col items-center gap-3 bg-white border-4 shadow-2xl px-10 py-8 animate-bounce-in"
+            style={{ borderColor: accentColor, minWidth: 320 }}
+          >
+            {/* Big tick */}
+            <div
+              className="w-16 h-16 rounded-full flex items-center justify-center text-white text-3xl font-black"
+              style={{ backgroundColor: accentColor }}
+            >
+              ✓
+            </div>
+            <div className="text-center">
+              <div
+                className="text-[15px] font-black uppercase tracking-widest"
+                style={{ color: accentColor }}
+              >
+                Voucher Saved
+              </div>
+              <div className="text-[11px] text-gray-500 mt-1 font-bold">
+                {statusMsg.text}
+              </div>
+            </div>
+            {/* Auto-dismiss progress bar */}
+            <div className="w-full h-1 bg-gray-100 rounded overflow-hidden">
+              <div
+                className="h-full rounded"
+                style={{
+                  backgroundColor: accentColor,
+                  animation: 'shrink 3s linear forwards',
+                  width: '100%',
+                }}
+              />
+            </div>
+            <button
+              onClick={() => setStatusMsg(null)}
+              className="text-[10px] font-bold uppercase text-gray-400 hover:text-gray-700 mt-1"
+            >
+              Press any key or click to dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ══ ERROR / INFO INLINE BAR ════════════════════════════════════ */}
+      {statusMsg && statusMsg.type !== 'ok' && (
+        <div className="fixed top-0 left-0 right-0 z-[300] flex items-center justify-between px-4 py-2 shadow-lg"
+          style={{
+            backgroundColor: statusMsg.type === 'err' ? '#7a0000' : '#00006b',
+          }}
+        >
+          <span className="text-white text-[11px] font-bold">
+            {statusMsg.type === 'err' ? '✗ ' : 'ℹ '}{statusMsg.text}
+          </span>
+          <button
+            onClick={() => setStatusMsg(null)}
+            className="text-white/70 hover:text-white text-lg leading-none font-bold ml-4"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* CSS for popup animation */}
+      <style>{`
+        @keyframes bounce-in {
+          0%   { transform: scale(0.7); opacity: 0; }
+          60%  { transform: scale(1.05); opacity: 1; }
+          80%  { transform: scale(0.97); }
+          100% { transform: scale(1); }
+        }
+        @keyframes shrink {
+          from { width: 100%; }
+          to   { width: 0%; }
+        }
+        .animate-bounce-in { animation: bounce-in 0.35s ease forwards; }
+      `}</style>
+
       {/* ── Main Panel ── */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 
@@ -502,22 +587,6 @@ export default function VoucherScreen({
             />
           </div>
         </div>
-
-        {/* ── Status Message ── */}
-        {statusMsg && (
-          <div
-            className={`px-3 py-1 text-[11px] font-bold border-b ${
-              statusMsg.type === 'ok'
-                ? 'bg-green-100 text-green-800 border-green-300'
-                : statusMsg.type === 'err'
-                ? 'bg-red-100 text-red-800 border-red-300'
-                : 'bg-blue-100 text-blue-800 border-blue-300'
-            }`}
-          >
-            {statusMsg.type === 'ok' ? '✓ ' : statusMsg.type === 'err' ? '✗ ' : 'ℹ '}
-            {statusMsg.text}
-          </div>
-        )}
 
         {/* ── Account Field (Single Entry Mode) ── */}
         {config.singleEntry && type !== 'Journal' && (
