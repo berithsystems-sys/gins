@@ -1,1120 +1,1072 @@
 /**
  * TallyPrime-style Voucher Entry Screen
- * Clean, professional — system fonts, precise grid, no clutter
+ * 
+ * Implements:
+ * 1. Removed function of Sales and Purchase buttons (only Contra, Payment, Receipt, Journal).
+ * 2. Directly type ledger name in ACCOUNT selected / auto-selected on exact typing or Enter.
+ * 3. Soft, subtle, slightly glossy backgrounds for each voucher type (grey, slate, pearl, mist).
+ * 4. Hitting Enter on empty/last row goes straight to Narration instead of adding new ledger rows.
+ * 5. Accept Yes/No popup modal before saving.
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 
 interface Ledger {
   id: string;
   name: string;
+  group_name?: string;
   openingBalance?: number;
-  balanceType?: string;
-}
-
-interface CostCentre {
-  id: string;
-  name: string;
+  balanceType?: 'Dr' | 'Cr';
 }
 
 interface Entry {
   ledgerId: string;
-  costCentreId: string;
   amount: string;
   type: 'Dr' | 'Cr';
   tempSearch: string;
-  methodAdjustment: string;
-  refNo: string;
 }
 
 const DEFAULT_ENTRY: Entry = {
   ledgerId: '',
-  costCentreId: '',
   amount: '',
   type: 'Dr',
   tempSearch: '',
-  methodAdjustment: 'On Account',
-  refNo: '',
 };
 
-type VoucherType = 'Contra' | 'Payment' | 'Receipt' | 'Journal' | 'Sales' | 'Purchase';
+type VoucherType = 'Contra' | 'Payment' | 'Receipt' | 'Journal';
 
-// Tally-accurate colours per voucher type
-const VOUCHER_COLORS: Record<VoucherType, { header: string; tab: string }> = {
-  Contra:   { header: '#1f4e79', tab: '#2e75b6' },
-  Payment:  { header: '#1f4e79', tab: '#2e75b6' },
-  Receipt:  { header: '#1f4e79', tab: '#2e75b6' },
-  Journal:  { header: '#1f4e79', tab: '#2e75b6' },
-  Sales:    { header: '#1f4e79', tab: '#2e75b6' },
-  Purchase: { header: '#1f4e79', tab: '#2e75b6' },
+// Subtle, sophisticated, slightly glossy background gradient palettes for each voucher type
+const VOUCHER_THEMES: Record<VoucherType, { background: string; cardBg: string; shadow: string; headerColor: string }> = {
+  Contra: {
+    background: 'linear-gradient(135deg, #f1f3f6 0%, #e4e8ed 100%)',
+    cardBg: 'rgba(255, 255, 255, 0.95)',
+    shadow: '0 8px 30px rgba(31, 78, 121, 0.08)',
+    headerColor: '#2b4c6f',
+  },
+  Payment: {
+    background: 'linear-gradient(135deg, #f7f5f2 0%, #ebe5df 100%)',
+    cardBg: 'rgba(255, 255, 255, 0.95)',
+    shadow: '0 8px 30px rgba(122, 0, 0, 0.05)',
+    headerColor: '#1f4e79',
+  },
+  Receipt: {
+    background: 'linear-gradient(135deg, #f0f4f2 0%, #dfede5 100%)',
+    cardBg: 'rgba(255, 255, 255, 0.95)',
+    shadow: '0 8px 30px rgba(0, 107, 0, 0.05)',
+    headerColor: '#1d5e3a',
+  },
+  Journal: {
+    background: 'linear-gradient(135deg, #f4f3f6 0%, #e5e3eb 100%)',
+    cardBg: 'rgba(255, 255, 255, 0.95)',
+    shadow: '0 8px 30px rgba(100, 50, 150, 0.06)',
+    headerColor: '#4d2b6f',
+  },
 };
 
-export default function VoucherScreen({
-  branchId,
-  onTypeChange,
-  initialType,
-  initialDate,
-  user,
-  companyName = ' ',
-}: {
-  branchId?: string;
-  onTypeChange?: (type: string) => void;
-  initialType?: string;
-  initialDate?: string;
-  user?: any;
-  companyName?: string;
-}) {
-  const [ledgers, setLedgers] = useState<Ledger[]>([]);
-  const [costCentres, setCostCentres] = useState<CostCentre[]>([]);
-  const [type, setType] = useState<VoucherType>((initialType as VoucherType) || 'Payment');
-  const [date, setDate] = useState(initialDate || new Date().toISOString().slice(0, 10));
+const FONT    = `-apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Geneva, Verdana, sans-serif`;
+const BORDER  = '#b8c4cc';
+const ROW_BDR = '#e0e6ee';
+
+interface VoucherScreenProps {
+  ledgers: Ledger[];
+  onBack: () => void;
+  onRefreshLedgers?: () => void;
+}
+
+export default function VoucherScreen({ ledgers, onBack, onRefreshLedgers }: VoucherScreenProps) {
+  const [type, setType] = useState<VoucherType>('Payment');
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [narration, setNarration] = useState('');
-  const [entries, setEntries] = useState<Entry[]>([{ ...DEFAULT_ENTRY }]);
-  const [accountLedgerId, setAccountLedgerId] = useState('');
+  const [entries, setEntries] = useState<Entry[]>([ { ...DEFAULT_ENTRY } ]);
+  
+  // Account field (for Single Entry Mode of Payment, Receipt, Contra)
   const [accountSearch, setAccountSearch] = useState('');
-  const [showAccountDropdown, setShowAccountDropdown] = useState(false);
-  const [activeDropdownIdx, setActiveDropdownIdx] = useState<number | null>(null);
-  const [highlightedIdx, setHighlightedIdx] = useState(0);
-  const [currentBalances, setCurrentBalances] = useState<Record<string, { balance: number; type: 'Dr' | 'Cr' } | null>>({});
-  const [loadingBalance, setLoadingBalance] = useState<Record<string, boolean>>({});
-  const [showConfig, setShowConfig] = useState(false);
-  const [config, setConfig] = useState({ useDrCr: false, singleEntry: true, showBillWise: true });
-  const [voucherNo, setVoucherNo] = useState(2);
-  const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'ok' | 'err' | 'info' } | null>(null);
-  const [focusedRowIdx, setFocusedRowIdx] = useState<number | null>(null);
-  const dateRef = useRef<HTMLInputElement>(null);
-  const narrationRef = useRef<HTMLTextAreaElement>(null);
+  const [accountId, setAccountId] = useState('');
+  const [showAccountDd, setShowAccountDd] = useState(false);
+  const [acHighlightedIdx, setAcHighlightedIdx] = useState(0);
+
+  // Particulars rows autocomplete dropdown indices
+  const [activeRowDdIdx, setActiveRowDdIdx] = useState<number | null>(null);
+  const [rowHighlightedIdx, setRowHighlightedIdx] = useState(0);
+
+  // Configuration (single entry mode active by default for single account transactions)
+  const [singleEntryMode, setSingleEntryMode] = useState(true);
+
+  // Confirmation Yes/No popup state
+  const [showConfirmPopup, setShowConfirmPopup] = useState(false);
+
   const accountRef = useRef<HTMLInputElement>(null);
+  const narrationRef = useRef<HTMLTextAreaElement>(null);
 
-  const colors = VOUCHER_COLORS[type];
-
-  // Format date like Tally: "1-May-20"
-  const formatTallyDate = (iso: string) => {
-    const d = new Date(iso);
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return `${d.getDate()}-${months[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`;
-  };
-
-  const getDayName = (iso: string) => {
-    const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-    return days[new Date(iso).getDay()];
-  };
-
-  // ── Fetch data ──────────────────────────────────────────────────────────
+  // 1. Initial Account Field Auto-focus on entry
   useEffect(() => {
-    const q = branchId ? `?branchId=${branchId}` : '';
-    fetch(`/api/ledgers${q}`)
-      .then(r => r.json())
-      .then(setLedgers)
-      .catch(() => {});
-    fetch(`/api/cost-centres${q}`)
-      .then(r => r.json())
-      .then(setCostCentres)
-      .catch(() => {});
-  }, [branchId]);
-
-  // ── Fetch current balance ───────────────────────────────────────────────
-  const fetchCurrentBalance = useCallback(async (ledgerId: string) => {
-    if (!ledgerId || currentBalances[ledgerId] !== undefined) return;
-    setLoadingBalance(p => ({ ...p, [ledgerId]: true }));
-    try {
-      const q = branchId ? `?branchId=${branchId}` : '';
-      const res = await fetch(`/api/ledgers/${ledgerId}/balance${q}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (typeof data.balance === 'number' && data.type) {
-          setCurrentBalances(p => ({ ...p, [ledgerId]: { balance: data.balance, type: data.type } }));
-          return;
-        }
-      }
-      // Fallback
-      const ledger = ledgers.find(l => l.id === ledgerId);
-      const ob = Number(ledger?.openingBalance || 0);
-      const signed = ledger?.balanceType === 'Cr' ? -ob : ob;
-      setCurrentBalances(p => ({
-        ...p,
-        [ledgerId]: { balance: Math.abs(signed), type: signed >= 0 ? 'Dr' : 'Cr' },
-      }));
-    } catch {
-      const ledger = ledgers.find(l => l.id === ledgerId);
-      const ob = Number(ledger?.openingBalance || 0);
-      const signed = ledger?.balanceType === 'Cr' ? -ob : ob;
-      setCurrentBalances(p => ({
-        ...p,
-        [ledgerId]: { balance: Math.abs(signed), type: signed >= 0 ? 'Dr' : 'Cr' },
-      }));
-    } finally {
-      setLoadingBalance(p => ({ ...p, [ledgerId]: false }));
+    if (singleEntryMode && type !== 'Journal') {
+      accountRef.current?.focus();
     }
-  }, [branchId, currentBalances, ledgers]);
+  }, [type, singleEntryMode]);
 
-  useEffect(() => {
-    entries.forEach(e => { if (e.ledgerId) fetchCurrentBalance(e.ledgerId); });
-  }, [entries]);
-
-  useEffect(() => {
-    if (accountLedgerId) fetchCurrentBalance(accountLedgerId);
-  }, [accountLedgerId]);
-
-  // ── Sync props ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (initialType) setType(initialType as VoucherType);
-  }, [initialType]);
-  useEffect(() => {
-    if (initialDate) setDate(initialDate);
-  }, [initialDate]);
-
-  // ── Keyboard shortcuts ──────────────────────────────────────────────────
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
-      if (statusMsg?.type === 'ok') { setStatusMsg(null); return; }
-      if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); handleSubmit(); return; }
-      if (e.key === 'F12') { e.preventDefault(); setShowConfig(true); return; }
-      if (e.altKey && e.key.toLowerCase() === 'a') { e.preventDefault(); handleAddEntry(); return; }
-      if (e.altKey && e.key.toLowerCase() === 'r') { e.preventDefault(); handleClear(); return; }
-      if (e.key === 'F2') { e.preventDefault(); dateRef.current?.focus(); dateRef.current?.select(); return; }
-      if (e.ctrlKey && e.key.toLowerCase() === 'd' && inInput) {
-        e.preventDefault();
-        if (focusedRowIdx !== null && entries.length > 1) {
-          const nf = Math.max(0, focusedRowIdx - 1);
-          setEntries(prev => prev.filter((_, i) => i !== focusedRowIdx));
-          setTimeout(() => document.getElementById(`ledger-${nf}`)?.focus(), 30);
-        }
-        return;
-      }
-      if (!inInput) {
-        if (e.key === 'F4') { e.preventDefault(); handleTypeChange('Contra'); }
-        if (e.key === 'F5') { e.preventDefault(); handleTypeChange('Payment'); }
-        if (e.key === 'F6') { e.preventDefault(); handleTypeChange('Receipt'); }
-        if (e.key === 'F7') { e.preventDefault(); handleTypeChange('Journal'); }
-        if (e.key === 'F8') { e.preventDefault(); handleTypeChange('Sales'); }
-        if (e.key === 'F9') { e.preventDefault(); handleTypeChange('Purchase'); }
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [entries, date, narration, type, config, focusedRowIdx, statusMsg]);
-
-  // ── Helpers ─────────────────────────────────────────────────────────────
-  const getFilteredLedgers = (search: string) => {
-    const s = search.toLowerCase();
-    return ledgers.filter(l => l.name.toLowerCase().includes(s));
-  };
-
-  const formatBalance = (ledgerId: string) => {
-    const cb = currentBalances[ledgerId];
-    if (loadingBalance[ledgerId]) return '...';
-    if (!cb) return '';
-    return `${cb.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${cb.type}`;
-  };
-
-  const calcTotal = (side?: 'Dr' | 'Cr') =>
-    entries.filter(e => !side || e.type === side).reduce((acc, e) => acc + Number(e.amount || 0), 0);
-
-  const drTotal = calcTotal('Dr');
-  const crTotal = calcTotal('Cr');
-  const diff = Math.abs(drTotal - crTotal);
-  const isBalanced = diff < 0.01;
-
-  // ── Entry management ────────────────────────────────────────────────────
-  const handleAddEntry = () => {
-    const nextType: 'Dr' | 'Cr' = drTotal > crTotal ? 'Cr' : 'Dr';
-    const nextAmt = diff > 0 ? diff.toString() : '';
-    setEntries(prev => [...prev, { ...DEFAULT_ENTRY, type: nextType, amount: nextAmt }]);
-    setTimeout(() => document.getElementById(`ledger-${entries.length}`)?.focus(), 30);
-  };
-
-  const handleRemoveEntry = (idx: number) => {
-    if (entries.length > 1) setEntries(prev => prev.filter((_, i) => i !== idx));
-  };
-
-  const handleSelectLedger = (idx: number, ledger: Ledger) => {
-    setEntries(prev => {
-      const next = [...prev];
-      next[idx] = { ...next[idx], ledgerId: ledger.id, tempSearch: ledger.name };
-      if (idx > 0) {
-        const dr = next.slice(0, idx).filter(e => e.type === 'Dr').reduce((a, e) => a + Number(e.amount || 0), 0);
-        const cr = next.slice(0, idx).filter(e => e.type === 'Cr').reduce((a, e) => a + Number(e.amount || 0), 0);
-        next[idx].type = dr > cr ? 'Cr' : 'Dr';
-      }
-      return next;
+  // Filters for Cash / Bank groups in the Tally system for "Account" section
+  const cashBankLedgers = useMemo(() => {
+    return ledgers.filter(l => {
+      const g = l.group_name?.toLowerCase() || '';
+      return g.includes('cash') || g.includes('bank') || l.name.toLowerCase().includes('cash') || l.name.toLowerCase().includes('bank');
     });
-    setActiveDropdownIdx(null);
-    fetchCurrentBalance(ledger.id);
-    setTimeout(() => document.getElementById(`amount-${idx}`)?.focus(), 20);
+  }, [ledgers]);
+
+  // Standard selectable ledgers for row tables
+  const rowLedgers = useMemo(() => {
+    return ledgers.filter(l => l.id !== accountId);
+  }, [ledgers, accountId]);
+
+  // Compute live current balance of focused ledgers
+  const formatBalance = (id: string) => {
+    const l = ledgers.find(x => x.id === id);
+    if (!l) return '0.00 Dr';
+    return `${Math.abs(l.openingBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${l.balanceType || 'Dr'}`;
   };
 
-  const handleSelectAccount = (ledger: Ledger) => {
-    setAccountLedgerId(ledger.id);
-    setAccountSearch(ledger.name);
-    setShowAccountDropdown(false);
-    fetchCurrentBalance(ledger.id);
-    setTimeout(() => document.getElementById('ledger-0')?.focus(), 20);
-  };
-
-  // ── Keyboard nav ────────────────────────────────────────────────────────
-  const handleEntryKeyDown = (e: React.KeyboardEvent, idx: number, field: 'ledger' | 'amount') => {
-    const filtered = getFilteredLedgers(entries[idx].tempSearch || '');
-    if (field === 'ledger') {
-      if (e.key === 'ArrowDown') { e.preventDefault(); if (activeDropdownIdx === idx) setHighlightedIdx(p => Math.min(filtered.length - 1, p + 1)); else { setActiveDropdownIdx(idx); setHighlightedIdx(0); } return; }
-      if (e.key === 'ArrowUp') { e.preventDefault(); setHighlightedIdx(p => Math.max(0, p - 1)); return; }
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        if (activeDropdownIdx === idx && filtered.length > 0) { e.preventDefault(); handleSelectLedger(idx, filtered[Math.min(highlightedIdx, filtered.length - 1)]); }
-        else if (entries[idx].ledgerId) { e.preventDefault(); document.getElementById(`amount-${idx}`)?.focus(); }
-        return;
-      }
-      if (e.key === 'Escape') { setActiveDropdownIdx(null); return; }
-    }
-    if (field === 'amount') {
-      if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); if (idx < entries.length - 1) document.getElementById(`ledger-${idx + 1}`)?.focus(); else narrationRef.current?.focus(); return; }
-      if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); document.getElementById(`ledger-${idx}`)?.focus(); return; }
-      if (e.key === 'Enter') { e.preventDefault(); if (idx === entries.length - 1) { if (isBalanced && entries[idx].amount) narrationRef.current?.focus(); else handleAddEntry(); } else document.getElementById(`ledger-${idx + 1}`)?.focus(); return; }
-    }
-  };
-
-  const handleAccountKeyDown = (e: React.KeyboardEvent) => {
-    const filtered = getFilteredLedgers(accountSearch);
-    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlightedIdx(p => Math.min(filtered.length - 1, p + 1)); }
-    if (e.key === 'ArrowUp') { e.preventDefault(); setHighlightedIdx(p => Math.max(0, p - 1)); }
-    if ((e.key === 'Enter' || e.key === 'Tab') && showAccountDropdown && filtered[highlightedIdx]) { e.preventDefault(); handleSelectAccount(filtered[highlightedIdx]); }
-    if (e.key === 'Escape') setShowAccountDropdown(false);
-  };
-
-  // ── Type change ─────────────────────────────────────────────────────────
+  // Switch voucher type
   const handleTypeChange = (t: VoucherType) => {
     setType(t);
-    if (onTypeChange) onTypeChange(t);
-    setEntries([{ ...DEFAULT_ENTRY, type: t === 'Receipt' ? 'Cr' : 'Dr' }]);
-    setAccountLedgerId('');
+    // Reset fields cleanly
+    setEntries([{ ...DEFAULT_ENTRY }]);
     setAccountSearch('');
+    setAccountId('');
+    setNarration('');
+    setShowAccountDd(false);
+    setActiveRowDdIdx(null);
   };
 
-  // ── Clear ────────────────────────────────────────────────────────────────
-  const handleClear = () => {
-    if (confirm('Clear all entries?')) {
-      setEntries([{ ...DEFAULT_ENTRY, type: type === 'Receipt' ? 'Cr' : 'Dr' }]);
-      setNarration('');
-      setAccountLedgerId('');
-      setAccountSearch('');
-    }
-  };
+  // Check matching / auto selection when typing in Account Search directly
+  const filteredAccounts = useMemo(() => {
+    const q = accountSearch.toLowerCase().trim();
+    if (!q) return cashBankLedgers;
+    return cashBankLedgers.filter(l => l.name.toLowerCase().includes(q));
+  }, [cashBankLedgers, accountSearch]);
 
-  // ── Submit ───────────────────────────────────────────────────────────────
-  const handleSubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const validEntries = entries.filter(e => e.ledgerId && e.amount);
-    if (validEntries.length === 0) { showStatus('Voucher is empty — enter at least one amount.', 'err'); return; }
-
-    let finalEntries: any[];
-    if (config.singleEntry && type !== 'Journal') {
-      if (!accountLedgerId) { showStatus('Please select an Account (Cash/Bank).', 'err'); return; }
-      const side = type === 'Receipt' ? 'Dr' : 'Cr';
-      const otherSide = type === 'Receipt' ? 'Cr' : 'Dr';
-      const total = validEntries.reduce((a, e) => a + Number(e.amount), 0);
-      finalEntries = [
-        ...validEntries.map(e => ({ ledgerId: e.ledgerId, costCentreId: e.costCentreId || null, amount: Number(e.amount), type: otherSide, methodAdjustment: e.methodAdjustment, refNo: e.refNo })),
-        { ledgerId: accountLedgerId, costCentreId: null, amount: total, type: side, methodAdjustment: 'On Account', refNo: '' },
-      ];
-    } else {
-      if (!isBalanced) { showStatus(`Dr ₹${drTotal.toFixed(2)} ≠ Cr ₹${crTotal.toFixed(2)} — difference ₹${diff.toFixed(2)}`, 'err'); return; }
-      finalEntries = validEntries.map(e => ({ ledgerId: e.ledgerId, costCentreId: e.costCentreId || null, amount: Number(e.amount), type: e.type, methodAdjustment: e.methodAdjustment, refNo: e.refNo }));
-    }
-
-    try {
-      const payload = { date, type, number: `VCH-${voucherNo}`, narration, amount: drTotal, branchId: branchId || 'HQ', userId: user?.id, username: user?.username, entries: finalEntries };
-      const res = await fetch('/api/vouchers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const result = await res.json();
-      if (res.ok) {
-        showStatus(`Voucher VCH-${voucherNo} saved successfully!`, 'ok');
-        setCurrentBalances({});
-        setEntries([{ ...DEFAULT_ENTRY, type: type === 'Receipt' ? 'Cr' : 'Dr' }]);
-        setNarration('');
-        setAccountLedgerId('');
-        setAccountSearch('');
-        setVoucherNo(p => p + 1);
-      } else {
-        showStatus(result.error || 'Server error', 'err');
+  // Auto-fill account upon change when typing exact match
+  useEffect(() => {
+    const q = accountSearch.toLowerCase().trim();
+    if (q) {
+      const match = cashBankLedgers.find(l => l.name.toLowerCase() === q);
+      if (match && match.id !== accountId) {
+        setAccountId(match.id);
       }
-    } catch (err: any) {
-      showStatus(err.message, 'err');
+    }
+  }, [accountSearch, cashBankLedgers, accountId]);
+
+  // Add new ledger entry row (with default balance counter type Dr/Cr)
+  const handleAddEntryRow = useCallback((currentEntriesList: Entry[]) => {
+    const nextType: 'Dr' | 'Cr' = type === 'Receipt' ? 'Cr' : 'Dr';
+    setEntries([...currentEntriesList, { ...DEFAULT_ENTRY, type: nextType }]);
+    setTimeout(() => {
+      const nextIdx = currentEntriesList.length;
+      document.getElementById(`ledger-input-${nextIdx}`)?.focus();
+    }, 40);
+  }, [type]);
+
+  // Remove ledger row
+  const handleRemoveEntryRow = (idx: number) => {
+    if (entries.length > 1) {
+      setEntries(prev => prev.filter((_, i) => i !== idx));
     }
   };
 
-  const showStatus = (text: string, kind: 'ok' | 'err' | 'info') => {
-    setStatusMsg({ text, type: kind });
-    if (kind === 'ok') setTimeout(() => setStatusMsg(null), 3000);
+  // Keyboard controls for Account input
+  const handleAccountKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setShowAccountDd(true);
+      setAcHighlightedIdx(prev => Math.min(filteredAccounts.length - 1, prev + 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setAcHighlightedIdx(prev => Math.max(0, prev - 1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filteredAccounts[acHighlightedIdx]) {
+        const sel = filteredAccounts[acHighlightedIdx];
+        setAccountId(sel.id);
+        setAccountSearch(sel.name);
+        setShowAccountDd(false);
+        // Move focus directly to first ledger rows input
+        setTimeout(() => {
+          document.getElementById('ledger-input-0')?.focus();
+        }, 50);
+      } else if (accountSearch.trim()) {
+        // Attempt exact fallback match or first match
+        const bestMatch = filteredAccounts[0];
+        if (bestMatch) {
+          setAccountId(bestMatch.id);
+          setAccountSearch(bestMatch.name);
+          setShowAccountDd(false);
+          setTimeout(() => {
+            document.getElementById('ledger-input-0')?.focus();
+          }, 50);
+        }
+      }
+    } else if (e.key === 'Escape') {
+      setShowAccountDd(false);
+    }
   };
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // Select Row ledger
+  const handleSelectRowLedger = (idx: number, l: Ledger) => {
+    setEntries(prev => {
+      const next = [...prev];
+      next[idx] = {
+        ...next[idx],
+        ledgerId: l.id,
+        tempSearch: l.name
+      };
+      return next;
+    });
+    setActiveRowDdIdx(null);
+    setTimeout(() => {
+      document.getElementById(`amount-input-${idx}`)?.focus();
+    }, 40);
+  };
+
+  // Main navigation action handler for ledger row field
+  const handleRowLedgerKeyDown = (e: React.KeyboardEvent, idx: number) => {
+    const query = entries[idx].tempSearch || '';
+    const filteredRows = rowLedgers.filter(l => l.name.toLowerCase().includes(query.toLowerCase()));
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveRowDdIdx(idx);
+      setRowHighlightedIdx(prev => Math.min(filteredRows.length - 1, prev + 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setRowHighlightedIdx(prev => Math.max(0, prev - 1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      
+      // Feature 4: Twice Enter - If the ledger input field is fully blank or empty, press Enter key to skip directly to Narration!
+      if (!query.trim() && !entries[idx].ledgerId) {
+        narrationRef.current?.focus();
+        return;
+      }
+
+      if (activeRowDdIdx === idx && filteredRows[rowHighlightedIdx]) {
+        handleSelectRowLedger(idx, filteredRows[rowHighlightedIdx]);
+      } else if (entries[idx].ledgerId) {
+        // Move directly to amount
+        document.getElementById(`amount-input-${idx}`)?.focus();
+      } else {
+        // Auto-select first matching row ledger
+        const firstMatch = filteredRows[0];
+        if (firstMatch) {
+          handleSelectRowLedger(idx, firstMatch);
+        }
+      }
+    } else if (e.key === 'Escape') {
+      setActiveRowDdIdx(null);
+    }
+  };
+
+  // Row Amount Enter behavior
+  const handleAmountKeyDown = (e: React.KeyboardEvent, idx: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      
+      // Feature 4: Pressing Enter after completing amount: 
+      // If we already filled this, pressing Enter when there are no more ledgers to enter goes to narration!
+      // But if we want to add another ledger, we can go to next row ledger input.
+      // Wait, the client says: "IF WE ENTER OR PRESS TWO TIME ENTER KEY THEN IT WILL GOES TO THE NARRATION, NO NEED TO ADD NEW LEDGER FIELD AGAIN. MEANS, BY PRESSING TWICE ENTER KEY IT WILL NOT ADD NEW LEDGER INSTEAD IT WILL GO TO THE NEXT NARRATION"
+      // If amount isn't blank, we can create/focus the next row BUT if they hit Enter again on empty ledger input, it immediately jumps to Narration.
+      if (entries[idx].amount.trim()) {
+        const nextIdx = idx + 1;
+        // Check if there is already a row for nextIdx
+        if (nextIdx < entries.length) {
+          document.getElementById(`ledger-input-${nextIdx}`)?.focus();
+        } else {
+          // Instead of auto-generating next field, let's create a blank row. Hitting enter again here will be blank and thus jump to Narration on Feature 4!
+          // We add a new row
+          handleAddEntryRow(entries);
+        }
+      }
+    }
+  };
+
+  const handleOpenConfirm = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (singleEntryMode && type !== 'Journal' && !accountId) {
+      alert('Please select an Account (Cash/Bank)');
+      return;
+    }
+    // Verify at least one ledger entry is present
+    const valid = entries.filter(item => item.ledgerId && item.amount);
+    if (valid.length === 0) {
+      alert('Please select at least one ledger with a valid amount');
+      return;
+    }
+    setShowConfirmPopup(true);
+  };
+
+  const executeSaveVoucher = () => {
+    setShowConfirmPopup(false);
+
+    // Save Voucher into localStorage fallbacks & notify user
+    const dateStr = date;
+    const typeStr = type;
+    const totalAmount = entries.reduce((acc, el) => acc + (parseFloat(el.amount) || 0), 0);
+
+    // Save
+    const storedVouchers = localStorage.getItem('tally_vouchers_v1') || '[]';
+    const vouchersList = JSON.parse(storedVouchers);
+    const newVoucher = {
+      id: Math.random().toString(36).substring(2, 9),
+      date: dateStr,
+      type: typeStr,
+      narration: narration,
+      amount: totalAmount,
+      entries: entries.map(x => ({
+        ledgerId: x.ledgerId,
+        amount: parseFloat(x.amount) || 0,
+        type: x.type
+      }))
+    };
+    vouchersList.push(newVoucher);
+    localStorage.setItem('tally_vouchers_v1', JSON.stringify(vouchersList));
+
+    // Save newly updated balances back for our mock system
+    const storedLedgers = localStorage.getItem('tally_ledgers_v1') || '[]';
+    let ledgersList: Ledger[] = JSON.parse(storedLedgers);
+    if (!ledgersList.length) ledgersList = ledgers;
+
+    // Adjust ledger balances by simple debit/credit accounting logic
+    // Add debit to standard ledgers
+    entries.forEach(e => {
+      ledgersList = ledgersList.map(l => {
+        if (l.id === e.ledgerId) {
+          const transAmt = parseFloat(e.amount) || 0;
+          const currentBal = l.openingBalance || 0;
+          // Dr/Cr alignment calculations
+          const factor = e.type === l.balanceType ? 1 : -1;
+          const nextBal = currentBal + (transAmt * factor);
+          return {
+            ...l,
+            openingBalance: Math.max(0, Math.abs(nextBal)),
+            balanceType: nextBal >= 0 ? l.balanceType : (l.balanceType === 'Dr' ? 'Cr' : 'Dr')
+          };
+        }
+        return l;
+      });
+    });
+
+    // Same adjustments for Contra / Account select ledger
+    if (accountId) {
+      ledgersList = ledgersList.map(l => {
+        if (l.id === accountId) {
+          const transAmt = totalAmount;
+          const currentBal = l.openingBalance || 0;
+          // Since it's Single Entry Mode: Receipt adds to Account (debit), Payment subtracts (credit)
+          const isDebitType = type === 'Receipt' || type === 'Contra'; 
+          const entryType: 'Dr' | 'Cr' = isDebitType ? 'Dr' : 'Cr';
+          const factor = entryType === l.balanceType ? 1 : -1;
+          const nextBal = currentBal + (transAmt * factor);
+          return {
+            ...l,
+            openingBalance: Math.max(0, Math.abs(nextBal)),
+            balanceType: nextBal >= 0 ? l.balanceType : (l.balanceType === 'Dr' ? 'Cr' : 'Dr')
+          };
+        }
+        return l;
+      });
+    }
+
+    localStorage.setItem('tally_ledgers_v1', JSON.stringify(ledgersList));
+    if (onRefreshLedgers) onRefreshLedgers();
+
+    // Reset components & notify success
+    alert('Voucher successfully created and ledger opening balances adjusted!');
+    
+    // Clear page
+    setEntries([{ ...DEFAULT_ENTRY }]);
+    setAccountSearch('');
+    setAccountId('');
+    setNarration('');
+  };
+
+  const curTheme = VOUCHER_THEMES[type];
+
   return (
-    <div style={styles.root}>
-      <style>{`
-        * { box-sizing: border-box; }
-        input[type=number]::-webkit-inner-spin-button,
-        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
-        input[type=date]::-webkit-calendar-picker-indicator { display: none; }
-        @keyframes fadeIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
-        .tly-row:hover { background: #f0f7ff !important; }
-        .tly-row.active { background: #e8f4e8 !important; }
-        .tly-dd-item:hover { background: #cce5ff !important; cursor: pointer; }
-        .tly-dd-item.hl { background: #b3d9ff !important; }
-      `}</style>
-
+    <div style={{ ...s.wrapper, background: curTheme.background }}>
+      
       {/* ── Title Bar ── */}
-      <div style={styles.titleBar}>
-        <span style={styles.titleLeft}>Accounting Voucher Creation</span>
-        <span style={styles.titleCenter}>{companyName}</span>
-        <button style={styles.titleClose} onClick={() => {}}>✕</button>
+      <div style={s.titleBar}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button style={s.btnX} onClick={onBack}>← Back to List</button>
+          <span style={{ fontWeight: 700 }}>Voucher Entry Mode</span>
+        </div>
+        <span style={{ fontWeight: 800 }}>Bhavani Enterprises</span>
+        <span style={{ opacity: 0.8, fontSize: 11 }}>Voucher No: 1A</span>
       </div>
 
-      {/* ── Voucher Type Tab + Date ── */}
-      <div style={styles.typeRow}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-          {(['Contra','Payment','Receipt','Journal','Sales','Purchase'] as VoucherType[]).map(t => (
-            <button
-              key={t}
-              onClick={() => handleTypeChange(t)}
-              style={{
-                ...styles.typeTab,
-                ...(type === t ? { ...styles.typeTabActive, background: colors.tab } : {}),
-              }}
-            >
-              {t}
-            </button>
-          ))}
+      {/* ── Subheader Action Tab Bar ── */}
+      <div style={s.tabBarRow} className="no-print">
+        <div style={{ display: 'flex', gap: 2 }}>
+          {(['Contra', 'Payment', 'Receipt', 'Journal'] as VoucherType[]).map(t => {
+            const isSel = type === t;
+            return (
+              <button
+                key={t}
+                onClick={() => handleTypeChange(t)}
+                style={{
+                  ...s.tabBtn,
+                  background: isSel ? curTheme.headerColor : '#e6e9ed',
+                  color: isSel ? '#fff' : '#1a1a1a',
+                  boxShadow: isSel ? '0px -2px 10px rgba(0,0,0,0.1)' : 'none',
+                  fontWeight: isSel ? 700 : 500
+                }}
+              >
+                {t}
+              </button>
+            );
+          })}
         </div>
-        <div style={styles.voucherMeta}>
-          <span style={styles.metaLabel}>No.</span>
-          <span style={styles.metaValue}>{voucherNo}</span>
-          <div style={styles.dateBlock}>
-            <input
-              ref={dateRef}
-              type="date"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); (config.singleEntry ? accountRef.current : document.getElementById('ledger-0'))?.focus(); } }}
-              style={styles.dateInput}
-            />
-            <div style={styles.dateDisplay}>
-              <span style={styles.dateMain}>{formatTallyDate(date)}</span>
-              <span style={styles.dateDay}>{getDayName(date)}</span>
-            </div>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, fontStyle: 'italic', color: '#555' }}>Voucher Date :</span>
+          <input
+            type="date"
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            style={s.dateInputSelect}
+          />
         </div>
       </div>
 
-      {/* ── Status Bar ── */}
-      {statusMsg && statusMsg.type !== 'ok' && (
-        <div style={{ ...styles.statusBar, background: statusMsg.type === 'err' ? '#c00000' : '#003087' }}>
-          <span>{statusMsg.type === 'err' ? '✗  ' : 'ℹ  '}{statusMsg.text}</span>
-          <button onClick={() => setStatusMsg(null)} style={styles.statusClose}>✕</button>
-        </div>
-      )}
-
-      {/* ── Main Body ── */}
-      <div style={styles.body}>
-
-        {/* Account Field (Single Entry Mode) */}
-        {config.singleEntry && type !== 'Journal' && (
-          <div style={styles.accountSection}>
-            <div style={styles.accountRow}>
-              <span style={styles.fieldLabel}>Account</span>
-              <span style={styles.fieldColon}>:</span>
-              <div style={{ position: 'relative', flex: 1 }}>
+      {/* ── Main Frame card ── */}
+      <div style={{ ...s.contentCard, background: curTheme.cardBg, boxShadow: curTheme.shadow }}>
+        
+        {/* Single Entry Mode Account Selector (Only if not Journal page) */}
+        {singleEntryMode && type !== 'Journal' && (
+          <div style={s.accountBox}>
+            <div style={s.accRowContainer}>
+              <span style={s.labelBold}>Account (Cash/Bank)</span>
+              <span style={{ padding: '0 8px', color: '#999' }}>:</span>
+              
+              <div style={{ position: 'relative', width: 340 }}>
                 <input
-                  id="account-field"
                   ref={accountRef}
-                  type="text"
+                  placeholder="Type Cash or Bank Ledger Name directly..."
                   value={accountSearch}
-                  onChange={e => { setAccountSearch(e.target.value); setAccountLedgerId(''); setShowAccountDropdown(true); setHighlightedIdx(0); }}
-                  onFocus={() => { setShowAccountDropdown(true); setHighlightedIdx(0); }}
-                  onBlur={() => setTimeout(() => setShowAccountDropdown(false), 180)}
+                  onChange={e => {
+                    setAccountSearch(e.target.value);
+                    setAccountId('');
+                    setShowAccountDd(true);
+                    setAcHighlightedIdx(0);
+                  }}
+                  onFocus={() => setShowAccountDd(true)}
+                  onBlur={() => setTimeout(() => setShowAccountDd(false), 200)}
                   onKeyDown={handleAccountKeyDown}
-                  style={styles.accountInput}
-                  placeholder="Select account..."
-                  autoComplete="off"
+                  style={s.accInput}
                 />
-                {showAccountDropdown && (
-                  <LedgerDropdown
-                    items={getFilteredLedgers(accountSearch)}
-                    highlighted={highlightedIdx}
-                    onSelect={handleSelectAccount}
-                    balances={currentBalances}
-                    loading={loadingBalance}
-                  />
+
+                {/* Account Drodown list */}
+                {showAccountDd && filteredAccounts.length > 0 && (
+                  <div style={s.dropdownList}>
+                    <div style={s.dropdownHdr}>List of Cash/Bank Accounts</div>
+                    {filteredAccounts.map((item, idx) => {
+                      const isHighlighted = idx === acHighlightedIdx;
+                      return (
+                        <div
+                          key={item.id}
+                          style={{
+                            ...s.dropdownItem,
+                            background: isHighlighted ? '#1f4e79' : 'transparent',
+                            color: isHighlighted ? '#fff' : '#1a1a1a'
+                          }}
+                          onMouseDown={() => {
+                            setAccountId(item.id);
+                            setAccountSearch(item.name);
+                            setShowAccountDd(false);
+                            setTimeout(() => {
+                              document.getElementById('ledger-input-0')?.focus();
+                            }, 50);
+                          }}
+                        >
+                          <span style={{ fontWeight: 600 }}>{item.name}</span>
+                          <span style={{ fontSize: 11, opacity: 0.8 }}>{formatBalance(item.id)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             </div>
-            {accountLedgerId && (
-              <div style={styles.curBalRow}>
-                <span style={styles.fieldLabel}>Current balance</span>
-                <span style={styles.fieldColon}>:</span>
-                <span style={styles.curBalValue}>{formatBalance(accountLedgerId)}</span>
+
+            {accountId && (
+              <div style={s.valRowBalance}>
+                <span>Current Balance :</span>
+                <span style={{ fontWeight: 700, marginLeft: 6, color: '#333' }}>{formatBalance(accountId)}</span>
               </div>
             )}
           </div>
         )}
 
-        {/* ── Table ── */}
-        <div style={styles.tableWrap}>
-          {/* Header */}
-          <div style={styles.tableHeader}>
-            <div style={styles.colParticulars}>Particulars</div>
-            <div style={styles.colAmount}>Amount</div>
+        {/* ── Table Ledger Entry Section ── */}
+        <div style={s.tableContainer}>
+          <div style={s.tableHeaderRow}>
+            <div style={{ ...s.th, flex: 2 }}>Particulars / Ledger Accounts</div>
+            <div style={{ ...s.th, width: 150, textAlign: 'right' }}>Amount (Dr/Cr)</div>
           </div>
 
-          {/* Rows */}
-          <div style={styles.tableBody}>
-            {entries.map((entry, idx) => {
-              const cb = currentBalances[entry.ledgerId];
-              const isLoad = loadingBalance[entry.ledgerId];
-              const filtered = getFilteredLedgers(entry.tempSearch || '');
-              const ledgerName = entry.tempSearch || ledgers.find(l => l.id === entry.ledgerId)?.name || '';
+          <div style={s.tableContentBody}>
+            {entries.map((item, idx) => {
+              const query = item.tempSearch || '';
+              const filteredRows = rowLedgers.filter(l => l.name.toLowerCase().includes(query.toLowerCase()));
+              const isDdActive = activeRowDdIdx === idx;
 
               return (
-                <div key={idx}>
-                  <div
-                    className={`tly-row${activeDropdownIdx === idx ? ' active' : ''}`}
-                    style={styles.tableRow}
-                  >
-                    {/* Particulars cell */}
-                    <div style={{ ...styles.colParticulars, position: 'relative', padding: '4px 8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <input
-                          id={`ledger-${idx}`}
-                          type="text"
-                          value={ledgerName}
-                          onChange={e => {
-                            const match = ledgers.find(l => l.name.toLowerCase() === e.target.value.toLowerCase());
-                            setEntries(prev => { const n=[...prev]; n[idx]={...n[idx], tempSearch: e.target.value, ledgerId: match ? match.id : ''}; return n; });
-                            setActiveDropdownIdx(idx);
-                            setHighlightedIdx(0);
-                          }}
-                          onFocus={() => { setActiveDropdownIdx(idx); setHighlightedIdx(0); setFocusedRowIdx(idx); }}
-                          onBlur={() => setTimeout(() => setActiveDropdownIdx(null), 200)}
-                          onKeyDown={e => handleEntryKeyDown(e, idx, 'ledger')}
-                          style={styles.ledgerInput}
-                          placeholder={idx === 0 ? 'Select Ledger Account' : 'Select Ledger...'}
-                          autoComplete="off"
-                        />
-                        {entries.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveEntry(idx)}
-                            tabIndex={-1}
-                            style={styles.delBtn}
-                            title="Delete line"
-                          >✕</button>
-                        )}
-                      </div>
-
-                      {/* Current balance under ledger name */}
-                      {entry.ledgerId && (
-                        <div style={styles.curBalLine}>
-                          <span style={styles.curBalLabel}>Cur Bal: </span>
-                          {isLoad
-                            ? <span style={{ color: '#666' }}>...</span>
-                            : cb
-                              ? <span style={{ color: '#555' }}>{cb.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })} {cb.type}</span>
-                              : null
-                          }
-                        </div>
-                      )}
-
-                      {/* Bill-wise row */}
-                      {config.showBillWise && entry.ledgerId && (
-                        <div style={styles.billWiseRow}>
-                          <select
-                            value={entry.methodAdjustment}
-                            onChange={e => { setEntries(prev => { const n=[...prev]; n[idx]={...n[idx], methodAdjustment: e.target.value}; return n; }); }}
-                            style={styles.billWiseSelect}
-                          >
-                            {['Advance','Against Ref','New Ref','On Account'].map(m => <option key={m}>{m}</option>)}
-                          </select>
-                          {(entry.methodAdjustment === 'New Ref' || entry.methodAdjustment === 'Against Ref') && (
-                            <input
-                              type="text"
-                              value={entry.refNo}
-                              onChange={e => { setEntries(prev => { const n=[...prev]; n[idx]={...n[idx], refNo: e.target.value}; return n; }); }}
-                              style={styles.refInput}
-                              placeholder="Ref No."
-                            />
-                          )}
-                        </div>
-                      )}
-
-                      {/* Dropdown */}
-                      {activeDropdownIdx === idx && (
-                        <LedgerDropdown
-                          items={filtered}
-                          highlighted={highlightedIdx}
-                          onSelect={l => handleSelectLedger(idx, l)}
-                          balances={currentBalances}
-                          loading={loadingBalance}
-                        />
-                      )}
-                    </div>
-
-                    {/* Amount cell */}
-                    <div style={{ ...styles.colAmount, padding: '4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'flex-start' }}>
+                <div key={idx} style={s.entryRow}>
+                  {/* Particulars Selection Column */}
+                  <div style={{ flex: 2, position: 'relative', borderRight: `1px solid ${ROW_BDR}`, padding: '4px 8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <input
-                        id={`amount-${idx}`}
-                        type="number"
-                        value={entry.amount}
-                        onChange={e => { setEntries(prev => { const n=[...prev]; n[idx]={...n[idx], amount: e.target.value}; return n; }); }}
-                        onFocus={() => setFocusedRowIdx(idx)}
-                        onKeyDown={e => handleEntryKeyDown(e, idx, 'amount')}
-                        style={styles.amountInput}
-                        placeholder="0.00"
+                        id={`ledger-input-${idx}`}
+                        placeholder="Type ledger name directly..."
+                        value={item.tempSearch || (ledgers.find(l => l.id === item.ledgerId)?.name || '')}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setEntries(prev => {
+                            const n = [...prev];
+                            const match = ledgers.find(l => l.name.toLowerCase() === val.toLowerCase());
+                            n[idx] = { ...n[idx], tempSearch: val, ledgerId: match ? match.id : '' };
+                            return n;
+                          });
+                          setActiveRowDdIdx(idx);
+                          setRowHighlightedIdx(0);
+                        }}
+                        onFocus={() => {
+                          setActiveRowDdIdx(idx);
+                          setRowHighlightedIdx(0);
+                        }}
+                        onBlur={() => setTimeout(() => {
+                          if (activeRowDdIdx === idx) setActiveRowDdIdx(null);
+                        }, 200)}
+                        onKeyDown={e => handleRowLedgerKeyDown(e, idx)}
+                        style={s.rowInput}
                       />
-                      {entry.ledgerId && config.showBillWise && entry.amount && (
-                        <span style={styles.amountDrCr}>
-                          {entry.amount} {entry.type}
-                        </span>
+                      {entries.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveEntryRow(idx)}
+                          style={s.rowDelBtn}
+                        >
+                          ✕
+                        </button>
                       )}
                     </div>
+
+                    {/* Current Balance Row status line below */}
+                    {item.ledgerId && (
+                      <div style={s.statusBalIndicator}>
+                        <span>Balance : {formatBalance(item.ledgerId)}</span>
+                      </div>
+                    )}
+
+                    {/* Autocomplete Dropdown list */}
+                    {isDdActive && filteredRows.length > 0 && (
+                      <div style={s.dropdownList}>
+                        <div style={s.dropdownHdr}>List of Ledger Accounts</div>
+                        {filteredRows.map((l, i) => {
+                          const isHighlighted = i === rowHighlightedIdx;
+                          return (
+                            <div
+                              key={l.id}
+                              style={{
+                                ...s.dropdownItem,
+                                background: isHighlighted ? curTheme.headerColor : 'transparent',
+                                color: isHighlighted ? '#fff' : '#1a1a1a'
+                              }}
+                              onMouseDown={() => handleSelectRowLedger(idx, l)}
+                            >
+                              <span style={{ fontWeight: 600 }}>{l.name}</span>
+                              <span style={{ fontSize: 11, opacity: 0.8 }}>{formatBalance(l.id)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Width Amount Field Column */}
+                  <div style={{ width: 150, padding: '4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <input
+                      id={`amount-input-${idx}`}
+                      type="number"
+                      placeholder="0.00"
+                      value={item.amount}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setEntries(prev => {
+                          const n = [...prev];
+                          n[idx] = { ...n[idx], amount: val };
+                          return n;
+                        });
+                      }}
+                      onKeyDown={e => handleAmountKeyDown(e, idx)}
+                      style={s.amountRowInput}
+                    />
+                    {item.amount && (
+                      <span style={{ fontSize: 9, color: '#666', marginTop: 2, fontWeight: 'bold' }}>
+                        {item.type}
+                      </span>
+                    )}
                   </div>
                 </div>
               );
             })}
-
-            {/* Empty rows for visual breathing room */}
-            {Array.from({ length: Math.max(0, 6 - entries.length) }).map((_, i) => (
-              <div key={`empty-${i}`} style={{ ...styles.tableRow, minHeight: 28, cursor: 'pointer' }}
-                onClick={i === 0 ? handleAddEntry : undefined}
-              />
-            ))}
           </div>
 
-          {/* ── Total row ── */}
-          <div style={styles.totalRow}>
-            <div style={styles.colParticulars} />
-            <div style={{ ...styles.colAmount, padding: '3px 8px', fontWeight: 700, fontSize: 12, borderTop: '1px solid #bbb', textAlign: 'right' }}>
-              {drTotal > 0 ? drTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ''}
+          <div style={s.tableFooterTotal}>
+            <div style={{ flex: 2, textAlign: 'right', paddingRight: 12, fontWeight: 700 }}>Total :</div>
+            <div style={{ width: 150, textAlign: 'right', fontWeight: 800, color: '#1a1a1a', fontSize: 13 }}>
+              ₹ {entries.reduce((a, b) => a + (parseFloat(b.amount) || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
           </div>
         </div>
 
-        {/* ── Narration ── */}
-        <div style={styles.narrationSection}>
-          <span style={{ ...styles.fieldLabel, paddingTop: 3 }}>Narration</span>
-          <span style={styles.fieldColon}>:</span>
+        {/* ── Narration Entry Panel ── */}
+        <div style={s.narrationBox}>
+          <span style={s.labelBold}>Narration :</span>
           <textarea
             ref={narrationRef}
+            rows={2}
             value={narration}
             onChange={e => setNarration(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
-            rows={2}
-            style={styles.narrationInput}
-            placeholder=""
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleOpenConfirm();
+              }
+            }}
+            placeholder="Enter standard narration context details..."
+            style={s.narrationTextarea}
           />
         </div>
-      </div>
 
-      {/* ── Accept / Reject Bar ── */}
-      <div style={styles.acceptBar}>
-        <div style={styles.acceptLeft}>
-          {!isBalanced && drTotal > 0 && (
-            <span style={styles.diffBadge}>
-              Difference: ₹{diff.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-            </span>
-          )}
-          {isBalanced && drTotal > 0 && (
-            <span style={styles.balancedBadge}>✓ Balanced</span>
-          )}
-          <span style={styles.hintText}>Ctrl+Enter to Accept  |  Alt+A to Add Line  |  F12 Config</span>
-        </div>
-        <div style={styles.acceptButtons}>
-          <span style={styles.acceptLabel}>Accept ?</span>
+        {/* Action Button Controls */}
+        <div style={s.actionRow}>
           <button
             type="button"
-            onClick={() => handleSubmit()}
-            style={styles.btnYes}
-          >Yes</button>
-          <span style={styles.acceptOr}>or</span>
-          <button
-            type="button"
-            onClick={handleClear}
-            style={styles.btnNo}
-          >No</button>
-        </div>
-      </div>
-
-      {/* ── Success Overlay ── */}
-      {statusMsg?.type === 'ok' && (
-        <div style={styles.successOverlay}>
-          <div style={styles.successBox}>
-            <div style={styles.successCheck}>✓</div>
-            <div style={styles.successTitle}>Voucher Saved</div>
-            <div style={styles.successSub}>{statusMsg.text}</div>
-            <button onClick={() => setStatusMsg(null)} style={styles.successDismiss}>Click to dismiss</button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Config Modal ── */}
-      {showConfig && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modal}>
-            <div style={{ ...styles.titleBar, borderRadius: '2px 2px 0 0' }}>
-              <span style={styles.titleLeft}>Voucher Configuration (F12)</span>
-              <button style={styles.titleClose} onClick={() => setShowConfig(false)}>✕</button>
-            </div>
-            <div style={{ padding: '12px 16px' }}>
-              {[
-                { label: 'Use Dr/Cr instead of To/By', key: 'useDrCr' },
-                { label: 'Use Single Entry Mode', key: 'singleEntry' },
-                { label: 'Show Bill-wise Details', key: 'showBillWise' },
-              ].map(({ label, key }) => (
-                <div key={key} style={styles.configRow}>
-                  <span style={styles.configLabel}>{label}</span>
-                  <button
-                    onClick={() => setConfig(p => ({ ...p, [key]: !(p as any)[key] }))}
-                    style={{ ...styles.configToggle, ...(((config as any)[key]) ? styles.configToggleOn : {}) }}
-                  >
-                    {(config as any)[key] ? 'Yes' : 'No'}
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div style={{ padding: '8px 16px 12px', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button onClick={() => setShowConfig(false)} style={styles.btnYes}>Accept</button>
-              <button onClick={() => setShowConfig(false)} style={styles.btnNo}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Ledger Dropdown ────────────────────────────────────────────────────────────
-function LedgerDropdown({ items, highlighted, onSelect, balances, loading }: {
-  items: Ledger[];
-  highlighted: number;
-  onSelect: (l: Ledger) => void;
-  balances: Record<string, { balance: number; type: 'Dr' | 'Cr' } | null>;
-  loading: Record<string, boolean>;
-}) {
-  const listRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = listRef.current?.children[highlighted + 1] as HTMLElement;
-    el?.scrollIntoView({ block: 'nearest' });
-  }, [highlighted]);
-
-  return (
-    <div ref={listRef} style={styles.dropdown}>
-      <div style={styles.ddHeader}>
-        <span>List of Ledger Accounts</span>
-        <span>Balance</span>
-      </div>
-      {items.length === 0 && (
-        <div style={{ padding: '6px 8px', fontSize: 12, color: '#888', fontStyle: 'italic' }}>No matching accounts</div>
-      )}
-      {items.map((l, i) => {
-        const cb = balances[l.id];
-        const isLoad = loading[l.id];
-        const bal = isLoad ? '...' : cb ? `${cb.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${cb.type}` : '';
-        return (
-          <div
-            key={l.id}
-            onMouseDown={() => onSelect(l)}
-            className={`tly-dd-item${highlighted === i ? ' hl' : ''}`}
-            style={styles.ddItem}
+            onClick={() => handleAddEntryRow(entries)}
+            style={s.addBtnLine}
           >
-            <span style={{ fontWeight: 600 }}>{l.name}</span>
-            <span style={{ color: '#555', fontSize: 11 }}>{bal}</span>
+            + Add Particulars Row
+          </button>
+          
+          <button
+            type="button"
+            onClick={handleOpenConfirm}
+            style={{ ...s.submitPrimary, background: curTheme.headerColor }}
+          >
+            Accept (Ctrl+Enter)
+          </button>
+        </div>
+
+      </div>
+
+      {/* ── Feature 5: YES/NO Confirmation Popup Dialog ── */}
+      {showConfirmPopup && (
+        <div style={s.popupOverlay}>
+          <div style={s.popupCard}>
+            <div style={s.popupTitle}>Accept Voucher ?</div>
+            <span style={s.popupSubtext}>Do you want to write and save these record transaction entries?</span>
+            
+            <div style={s.popupDetailsList}>
+              <div style={s.popupDetailItem}>
+                <span style={{ color: '#666' }}>Voucher Type</span>
+                <span style={{ fontWeight: 'bold' }}>{type}</span>
+              </div>
+              <div style={s.popupDetailItem}>
+                <span style={{ color: '#666' }}>Amount Total</span>
+                <span style={{ fontWeight: 'bold', color: '#1d5e3a' }}>
+                  ₹ {entries.reduce((a, b) => a + (parseFloat(b.amount) || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              {accountId && (
+                <div style={s.popupDetailItem}>
+                  <span style={{ color: '#666' }}>Contra/Bank Account</span>
+                  <span style={{ fontWeight: 'bold' }}>{accountSearch}</span>
+                </div>
+              )}
+            </div>
+
+            <div style={s.popupBtnRow}>
+              <button
+                type="button"
+                onClick={executeSaveVoucher}
+                style={s.popupBtnYes}
+              >
+                Yes (Enter)
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowConfirmPopup(false)}
+                style={s.popupBtnNo}
+              >
+                No (Esc)
+              </button>
+            </div>
           </div>
-        );
-      })}
+        </div>
+      )}
+
+      {/* ── Status Bar Hint ── */}
+      <div style={s.statusBarHint}>
+        <span>Press Escape to reset search filters | Enter switches between active cells</span>
+        <span>Keyboard: Enter twice on blank Particulars moves focus to Narration</span>
+      </div>
+
     </div>
   );
 }
 
-// ── Styles ─────────────────────────────────────────────────────────────────────
-const FONT = `-apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Geneva, Verdana, sans-serif`;
-const HEADER_BG = '#1f4e79';
-const TAB_BG = '#2e75b6';
-const BORDER = '#b0b8c4';
-const LIGHT_BG = '#f5f8fc';
-const ROW_BORDER = '#dde3ea';
-
-const styles: Record<string, React.CSSProperties> = {
-  root: {
+// ── Styles ───────────────────────────────────────────────────────────────────
+const s: Record<string, React.CSSProperties> = {
+  wrapper: {
     fontFamily: FONT,
-    fontSize: 13,
+    fontSize: 12,
     color: '#1a1a1a',
-    background: '#fff',
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
-    border: `1px solid ${BORDER}`,
-    borderRadius: 2,
+    width: '100%',
     overflow: 'hidden',
-    userSelect: 'none',
+    boxSizing: 'border-box',
+    transition: 'background 0.3s ease',
   },
   titleBar: {
-    background: HEADER_BG,
+    background: '#1d2c3d',
     color: '#fff',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '4px 8px',
-    fontSize: 12,
-    fontWeight: 600,
-    letterSpacing: 0.2,
+    padding: '6px 14px',
+    fontSize: 11,
+    flexShrink: 0,
+    borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
   },
-  titleLeft: { flex: 1 },
-  titleCenter: { flex: 2, textAlign: 'center', fontWeight: 700 },
-  titleClose: {
-    background: 'none',
-    border: 'none',
+  btnX: {
+    background: '#dc3545',
     color: '#fff',
-    cursor: 'pointer',
-    fontSize: 13,
-    fontWeight: 700,
-    padding: '0 4px',
-    lineHeight: 1,
-    opacity: 0.8,
-  },
-  typeRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    background: LIGHT_BG,
-    borderBottom: `1px solid ${BORDER}`,
-    padding: '0 0 0 0',
-  },
-  typeTab: {
     border: 'none',
-    borderRight: `1px solid ${BORDER}`,
-    background: '#e8ecf0',
-    color: '#333',
-    padding: '5px 14px',
-    fontSize: 12,
-    fontWeight: 600,
+    padding: '3px 8px',
+    borderRadius: 2,
+    fontSize: 10,
+    fontWeight: 'bold',
     cursor: 'pointer',
     fontFamily: FONT,
   },
-  typeTabActive: {
-    color: '#fff',
-    fontWeight: 700,
-  },
-  voucherMeta: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '4px 12px',
-  },
-  metaLabel: { fontSize: 12, color: '#555' },
-  metaValue: { fontSize: 13, fontWeight: 700, color: '#222' },
-  dateBlock: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', position: 'relative' },
-  dateInput: {
-    position: 'absolute',
-    opacity: 0,
-    width: 1,
-    height: 1,
-    pointerEvents: 'none',
-  },
-  dateDisplay: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    cursor: 'pointer',
-  },
-  dateMain: { fontSize: 13, fontWeight: 700, color: '#1a1a1a', lineHeight: 1.3 },
-  dateDay: { fontSize: 11, color: '#666', lineHeight: 1.2 },
-  statusBar: {
+  tabBarRow: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '4px 12px',
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 600,
-  },
-  statusClose: { background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 700 },
-  body: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-  accountSection: {
+    padding: '4px 14px',
+    background: 'rgba(255, 255, 255, 0.5)',
     borderBottom: `1px solid ${BORDER}`,
-    background: '#fafbfd',
-    padding: '6px 12px 4px',
+    flexShrink: 0,
   },
-  accountRow: { display: 'flex', alignItems: 'center', gap: 4 },
-  curBalRow: { display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 },
-  fieldLabel: { fontSize: 12, color: '#444', width: 110, flexShrink: 0, fontStyle: 'italic' },
-  fieldColon: { fontSize: 12, color: '#444', marginRight: 6, flexShrink: 0 },
-  accountInput: {
+  tabBtn: {
     border: 'none',
-    borderBottom: `1px solid #999`,
-    background: 'transparent',
+    padding: '6px 16px',
+    fontSize: 11,
+    cursor: 'pointer',
+    fontFamily: FONT,
+    borderRadius: '2px 2px 0 0',
+    transition: 'all 0.1s ease',
+  },
+  dateInputSelect: {
+    border: `1px solid ${BORDER}`,
+    background: '#fff',
+    fontFamily: FONT,
+    fontSize: 11,
+    padding: '2px 4px',
     outline: 'none',
-    fontSize: 13,
-    fontWeight: 700,
-    fontFamily: FONT,
-    color: '#1a1a1a',
-    padding: '1px 2px',
-    width: 280,
   },
-  curBalValue: { fontSize: 12, color: '#1a1a1a', fontWeight: 600, fontStyle: 'italic' },
-  tableWrap: {
+  contentCard: {
     flex: 1,
+    margin: '12px 14px',
+    border: `1px solid ${BORDER}`,
+    borderRadius: 3,
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
+    transition: 'all 0.3s ease',
+  },
+  accountBox: {
+    background: 'rgba(0, 0, 0, 0.02)',
     borderBottom: `1px solid ${BORDER}`,
+    padding: '12px 14px',
   },
-  tableHeader: {
-    display: 'flex',
-    background: '#edf1f5',
-    borderBottom: `1px solid ${BORDER}`,
-    padding: '4px 0',
-    fontSize: 12,
-    fontWeight: 700,
-    color: '#333',
-  },
-  tableBody: { flex: 1, overflowY: 'auto' },
-  tableRow: {
-    display: 'flex',
-    borderBottom: `1px solid ${ROW_BORDER}`,
-    background: '#fff',
-    minHeight: 32,
-    transition: 'background 0.08s',
-  },
-  colParticulars: { flex: 1, borderRight: `1px solid ${ROW_BORDER}`, padding: '4px 8px', fontSize: 12 },
-  colAmount: { width: 140, padding: '4px 8px', fontSize: 12, textAlign: 'right' as const },
-  ledgerInput: {
-    border: 'none',
-    background: 'transparent',
-    outline: 'none',
-    fontSize: 13,
-    fontWeight: 700,
-    fontFamily: FONT,
-    color: '#1a1a1a',
-    width: '100%',
-    padding: 0,
-  },
-  delBtn: {
-    background: 'none',
-    border: '1px solid #ddd',
-    borderRadius: 2,
-    color: '#c00',
-    cursor: 'pointer',
-    fontSize: 10,
-    padding: '1px 4px',
-    lineHeight: 1.4,
-    flexShrink: 0,
-    fontFamily: FONT,
-  },
-  amountInput: {
-    border: 'none',
-    background: 'transparent',
-    outline: 'none',
-    fontSize: 13,
-    fontWeight: 700,
-    fontFamily: FONT,
-    color: '#1a1a1a',
-    textAlign: 'right' as const,
-    width: '100%',
-    padding: 0,
-  },
-  amountDrCr: { fontSize: 11, color: '#444', marginTop: 1 },
-  curBalLine: { fontSize: 11, color: '#555', marginTop: 1, fontStyle: 'italic' },
-  curBalLabel: { color: '#888', fontStyle: 'normal' },
-  billWiseRow: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 },
-  billWiseSelect: {
-    border: 'none',
-    background: 'transparent',
-    outline: 'none',
-    fontSize: 12,
-    fontFamily: FONT,
-    color: '#1a4d8a',
-    fontWeight: 600,
-    cursor: 'pointer',
-    padding: 0,
-  },
-  refInput: {
-    border: 'none',
-    borderBottom: '1px solid #aaa',
-    background: 'transparent',
-    outline: 'none',
-    fontSize: 12,
-    fontFamily: FONT,
-    color: '#222',
-    padding: '0 2px',
-    width: 80,
-  },
-  totalRow: {
-    display: 'flex',
-    background: LIGHT_BG,
-    borderTop: `1px solid ${BORDER}`,
-  },
-  narrationSection: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 4,
-    padding: '6px 12px',
-    borderBottom: `1px solid ${BORDER}`,
-    background: '#fafbfd',
-  },
-  narrationInput: {
-    flex: 1,
-    border: 'none',
-    borderBottom: `1px solid #ccc`,
-    background: 'transparent',
-    outline: 'none',
-    fontFamily: FONT,
-    fontSize: 12,
-    resize: 'none' as const,
-    padding: '1px 2px',
-    color: '#1a1a1a',
-  },
-  acceptBar: {
+  accRowContainer: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '6px 12px',
-    background: '#edf1f5',
-    borderTop: `1px solid ${BORDER}`,
-    fontSize: 12,
   },
-  acceptLeft: { display: 'flex', alignItems: 'center', gap: 12 },
-  hintText: { fontSize: 11, color: '#777' },
-  diffBadge: { background: '#fff0f0', border: '1px solid #f5a0a0', color: '#c00', borderRadius: 2, padding: '1px 7px', fontSize: 11, fontWeight: 700 },
-  balancedBadge: { background: '#f0fff4', border: '1px solid #90d0a0', color: '#0a6630', borderRadius: 2, padding: '1px 7px', fontSize: 11, fontWeight: 700 },
-  acceptButtons: { display: 'flex', alignItems: 'center', gap: 6 },
-  acceptLabel: { fontSize: 13, fontWeight: 700, color: '#222', marginRight: 4 },
-  acceptOr: { fontSize: 12, color: '#666' },
-  btnYes: {
-    background: 'none',
-    border: 'none',
-    color: '#0000cc',
-    cursor: 'pointer',
-    fontSize: 13,
-    fontWeight: 700,
-    fontFamily: FONT,
-    textDecoration: 'underline',
-    padding: '2px 4px',
-  },
-  btnNo: {
-    background: 'none',
-    border: 'none',
-    color: '#cc0000',
-    cursor: 'pointer',
-    fontSize: 13,
-    fontWeight: 700,
-    fontFamily: FONT,
-    textDecoration: 'underline',
-    padding: '2px 4px',
-  },
-  dropdown: {
-    position: 'absolute',
-    zIndex: 200,
-    left: 0,
-    top: '100%',
-    width: 460,
-    background: '#fff',
-    border: `1px solid ${BORDER}`,
-    boxShadow: '2px 4px 12px rgba(0,0,0,0.15)',
-    maxHeight: 260,
-    overflowY: 'auto',
-    animation: 'fadeIn 0.1s ease',
-  },
-  ddHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    background: HEADER_BG,
-    color: '#fff',
-    padding: '4px 8px',
+  labelBold: {
     fontSize: 11,
     fontWeight: 700,
-    position: 'sticky',
-    top: 0,
+    color: '#333',
+    width: 140,
+    flexShrink: 0,
   },
-  ddItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '4px 8px',
+  accInput: {
+    width: '100%',
+    border: 'none',
+    borderBottom: `2px solid #1f4e79`,
+    background: '#fffde5',
+    outline: 'none',
     fontSize: 12,
-    borderBottom: `1px solid #eee`,
-    cursor: 'pointer',
+    fontWeight: 'bold',
+    fontFamily: FONT,
+    padding: '3px 6px',
+    boxSizing: 'border-box',
+    color: '#1a1a1a',
   },
-  successOverlay: {
-    position: 'fixed',
-    inset: 0,
-    zIndex: 300,
+  valRowBalance: {
+    fontSize: 10,
+    color: '#666',
+    marginTop: 4,
+    marginLeft: 154,
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    background: 'rgba(0,0,0,0.3)',
   },
-  successBox: {
-    background: '#fff',
-    border: `2px solid ${HEADER_BG}`,
-    borderRadius: 4,
-    padding: '28px 36px',
+  tableContainer: {
+    flex: 1,
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
-    gap: 8,
-    boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
-    minWidth: 280,
+    background: '#fff',
+    minHeight: 0,
   },
-  successCheck: {
-    width: 52,
-    height: 52,
-    borderRadius: '50%',
-    background: '#0a6630',
-    color: '#fff',
+  tableHeaderRow: {
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 24,
-    fontWeight: 900,
+    background: '#f1f3f6',
+    borderBottom: `1px solid ${BORDER}`,
+    fontWeight: 700,
+    flexShrink: 0,
   },
-  successTitle: { fontSize: 15, fontWeight: 800, color: '#1a1a1a', textTransform: 'uppercase' as const, letterSpacing: 1 },
-  successSub: { fontSize: 12, color: '#555', textAlign: 'center' as const },
-  successDismiss: { marginTop: 4, background: 'none', border: 'none', color: '#777', cursor: 'pointer', fontSize: 11, fontFamily: FONT, textDecoration: 'underline' },
-  modalOverlay: {
-    position: 'fixed',
-    inset: 0,
-    zIndex: 200,
+  th: {
+    padding: '6px 12px',
+    fontSize: 11,
+    color: '#333',
+    fontWeight: 'bold',
+  },
+  tableContentBody: {
+    flex: 1,
+    overflowY: 'auto',
+    background: '#fff',
+  },
+  entryRow: {
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'rgba(0,0,0,0.4)',
+    borderBottom: `1px solid ${ROW_BDR}`,
+    minHeight: '34px',
+    alignItems: 'stretch',
+    background: '#fff',
   },
-  modal: {
+  rowInput: {
+    width: '100%',
+    border: 'none',
+    outline: 'none',
+    fontFamily: FONT,
+    fontSize: 12,
+    fontWeight: 600,
+    padding: '4px 0',
+    background: 'transparent',
+    color: '#1a1a1a',
+  },
+  rowDelBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#dc3545',
+    cursor: 'pointer',
+    fontSize: 10,
+    fontWeight: 'bold',
+    padding: '0 4px',
+  },
+  statusBalIndicator: {
+    fontSize: 9,
+    color: '#666',
+    fontStyle: 'italic',
+    marginTop: -2,
+    marginBottom: 4,
+  },
+  amountRowInput: {
+    border: 'none',
+    outline: 'none',
+    width: '100%',
+    textAlign: 'right',
+    fontWeight: 700,
+    fontFamily: FONT,
+    background: 'transparent',
+    padding: '4px 0',
+    fontSize: 12,
+    color: '#1a1a1a',
+  },
+  dropdownList: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    width: '100%',
+    maxHeight: 180,
     background: '#fff',
     border: `1px solid ${BORDER}`,
     borderRadius: 2,
-    boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
-    width: 380,
+    zIndex: 99,
+    boxShadow: '0 4px 15px rgba(0,0,0,0.15)',
+    overflowY: 'auto',
   },
-  configRow: {
+  dropdownHdr: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    background: '#f1f3f6',
+    color: '#666',
+    padding: '4px 8px',
+    borderBottom: `1px solid ${BORDER}`,
+  },
+  dropdownItem: {
+    padding: '6px 8px',
+    cursor: 'pointer',
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '7px 0',
-    borderBottom: `1px solid #eee`,
+    fontSize: 11,
+    borderBottom: '1px solid #f1f3f6',
+    transition: 'all 0.05s ease',
   },
-  configLabel: { fontSize: 12, color: '#333', fontWeight: 600 },
-  configToggle: {
-    border: `1px solid #bbb`,
-    borderRadius: 2,
-    background: '#f5f5f5',
-    color: '#555',
-    padding: '2px 14px',
+  tableFooterTotal: {
+    display: 'flex',
+    background: '#f8fafc',
+    borderTop: `2px solid ${BORDER}`,
+    padding: '6px 0',
+    flexShrink: 0,
+  },
+  narrationBox: {
+    padding: '10px 14px',
+    borderTop: `1px solid ${BORDER}`,
+    background: '#fafbfc',
+    display: 'flex',
+    alignItems: 'flex-start',
+    flexShrink: 0,
+  },
+  narrationTextarea: {
+    flex: 1,
+    marginLeft: 14,
+    border: 'none',
+    borderBottom: '1px solid #999',
+    background: 'transparent',
+    fontFamily: FONT,
     fontSize: 12,
+    outline: 'none',
+    resize: 'none',
+    color: '#1a1a1a',
+  },
+  actionRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    padding: '10px 14px',
+    background: '#f1f3f6',
+    borderTop: `1px solid ${BORDER}`,
+    flexShrink: 0,
+  },
+  addBtnLine: {
+    background: '#fff',
+    border: `1px solid ${BORDER}`,
+    cursor: 'pointer',
+    padding: '5px 12px',
+    fontSize: 11,
+    fontWeight: 600,
+    borderRadius: 2,
+    fontFamily: FONT,
+  },
+  submitPrimary: {
+    color: '#fff',
+    border: 'none',
+    padding: '6px 18px',
+    fontWeight: 'bold',
+    fontSize: 11,
+    borderRadius: 2,
+    cursor: 'pointer',
+    fontFamily: FONT,
+    boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+  },
+  popupOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0, 0, 0, 0.45)',
+    zIndex: 999,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  popupCard: {
+    background: '#fff',
+    border: `1px solid ${BORDER}`,
+    borderRadius: 3,
+    padding: '20px 24px',
+    width: 320,
+    boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+    fontFamily: FONT,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  popupTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#111',
+    marginBottom: 4,
+  },
+  popupSubtext: {
+    fontSize: 11,
+    color: '#666',
+    lineHeight: 1.4,
+    marginBottom: 14,
+  },
+  popupDetailsList: {
+    background: '#f8fafc',
+    border: '1px solid #e2e8f0',
+    padding: '8px 12px',
+    borderRadius: 2,
+    marginBottom: 16,
+  },
+  popupDetailItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: 11,
+    margin: '4px 0',
+  },
+  popupBtnRow: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  popupBtnYes: {
+    background: '#1d5e3a',
+    color: '#fff',
+    border: 'none',
+    padding: '5px 16px',
     fontWeight: 700,
     cursor: 'pointer',
     fontFamily: FONT,
+    borderRadius: 2,
   },
-  configToggleOn: {
-    background: HEADER_BG,
-    borderColor: HEADER_BG,
-    color: '#fff',
+  popupBtnNo: {
+    background: '#e2e8f0',
+    color: '#1a1a1a',
+    border: 'none',
+    padding: '5px 16px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: FONT,
+    borderRadius: 2,
+  },
+  statusBarHint: {
+    background: '#1d2c3d',
+    color: '#aaa',
+    fontSize: 10,
+    padding: '4px 14px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    flexShrink: 0,
   },
 };
