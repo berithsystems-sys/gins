@@ -129,17 +129,29 @@ export default function VoucherScreen({
   useEffect(() => { if (initialDate) setDate(initialDate); }, [initialDate]);
 
   // ── Keyboard shortcuts
+  // Uses { capture: true } so our handler runs BEFORE the browser handles
+  // F5 (refresh), F7 (caret browse), F12 (devtools), Alt+D (address bar), etc.
   useEffect(() => {
+    // Keys we always want to own — preventDefault immediately before any logic
+    const APP_KEYS = new Set(['F2','F4','F5','F6','F7','F8','F9','F12']);
+
     const handler = (e) => {
       const tag = e.target?.tagName;
       const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
-      if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); setShowAcceptPopup(true); return; }
-      if (e.key === 'F12') { e.preventDefault(); setShowConfig(true); return; }
-      if (e.altKey && e.key.toLowerCase() === 'a') { e.preventDefault(); handleAddEntry(); return; }
-      if (e.altKey && e.key.toLowerCase() === 'r') { e.preventDefault(); handleClear(); return; }
-      if (e.key === 'F2') { e.preventDefault(); dateRef.current?.focus(); dateRef.current?.select(); return; }
+
+      // ── Block browser defaults for every key this app uses ──────────────
+      if (APP_KEYS.has(e.key)) e.preventDefault();
+      if (e.ctrlKey && e.key === 'Enter') e.preventDefault();
+      if (e.altKey && ['a','r','d'].includes(e.key.toLowerCase())) e.preventDefault();
+      if (e.ctrlKey && e.key.toLowerCase() === 'd') e.preventDefault();
+
+      // ── App actions ──────────────────────────────────────────────────────
+      if (e.ctrlKey && e.key === 'Enter') { setShowAcceptPopup(true); return; }
+      if (e.key === 'F12') { setShowConfig(true); return; }
+      if (e.altKey && e.key.toLowerCase() === 'a') { handleAddEntry(); return; }
+      if (e.altKey && e.key.toLowerCase() === 'r') { handleClear(); return; }
+      if (e.key === 'F2') { dateRef.current?.focus(); dateRef.current?.select(); return; }
       if (e.ctrlKey && e.key.toLowerCase() === 'd' && inInput) {
-        e.preventDefault();
         if (focusedRowIdx !== null && entries.length > 1) {
           const nf = Math.max(0, focusedRowIdx - 1);
           setEntries(prev => prev.filter((_, i) => i !== focusedRowIdx));
@@ -147,15 +159,16 @@ export default function VoucherScreen({
         }
         return;
       }
-      if (!inInput) {
-        if (e.key === 'F4') { e.preventDefault(); handleTypeChange('Contra'); }
-        if (e.key === 'F5') { e.preventDefault(); handleTypeChange('Payment'); }
-        if (e.key === 'F6') { e.preventDefault(); handleTypeChange('Receipt'); }
-        if (e.key === 'F7') { e.preventDefault(); handleTypeChange('Journal'); }
-      }
+      // F4–F7 work whether or not focus is in an input (capture phase handles it)
+      if (e.key === 'F4') { handleTypeChange('Contra'); return; }
+      if (e.key === 'F5') { handleTypeChange('Payment'); return; }
+      if (e.key === 'F6') { handleTypeChange('Receipt'); return; }
+      if (e.key === 'F7') { handleTypeChange('Journal'); return; }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+
+    // capture: true → fires before browser default AND before child handlers
+    window.addEventListener('keydown', handler, { capture: true });
+    return () => window.removeEventListener('keydown', handler, { capture: true });
   }, [entries, date, narration, type, config, focusedRowIdx]);
 
   // ── Helpers
