@@ -111,35 +111,58 @@ export default function VoucherScreen({
   }, [branchId]);
 
   // ── Fetch CURRENT balance for a ledger ────────────────────────────────
+  // Computes: opening balance ± all voucher entries for this ledger
   const fetchCurrentBalance = useCallback(
     async (ledgerId: string) => {
       if (!ledgerId || currentBalances[ledgerId] !== undefined) return;
       setLoadingBalance((p) => ({ ...p, [ledgerId]: true }));
       try {
         const q = branchId ? `?branchId=${branchId}` : '';
+
+        // Try dedicated balance endpoint first (if you've added it to server.ts)
         const res = await fetch(`/api/ledgers/${ledgerId}/balance${q}`);
         if (res.ok) {
           const data = await res.json();
-          setCurrentBalances((p) => ({ ...p, [ledgerId]: data }));
-        } else {
-          // Fallback to opening balance
-          const ob = ledgerBalances[ledgerId] ?? 0;
-          setCurrentBalances((p) => ({
-            ...p,
-            [ledgerId]: { balance: Math.abs(ob), type: ob >= 0 ? 'Dr' : 'Cr' },
-          }));
+          // Endpoint returns { balance, type } — normalise
+          if (typeof data.balance === 'number' && data.type) {
+            setCurrentBalances((p) => ({ ...p, [ledgerId]: { balance: data.balance, type: data.type } }));
+            return;
+          }
         }
-      } catch {
-        const ob = ledgerBalances[ledgerId] ?? 0;
+
+        // ── Fallback: compute from voucher entries via existing endpoint ──
+        const vRes = await fetch(`/api/vouchers/ledger/${ledgerId}${q}`);
+        const ledger = ledgers.find((l) => l.id === ledgerId);
+        const ob = Number(ledger?.openingBalance || 0);
+        const obType = ledger?.balanceType === 'Cr' ? -1 : 1;
+        let running = ob * obType; // Dr = positive, Cr = negative
+
+        if (vRes.ok) {
+          const vouchers: any[] = await vRes.json();
+          for (const v of vouchers) {
+            const amt = Number(v.entry_amount || 0);
+            running += v.entry_type === 'Dr' ? amt : -amt;
+          }
+        }
+
         setCurrentBalances((p) => ({
           ...p,
-          [ledgerId]: { balance: Math.abs(ob), type: ob >= 0 ? 'Dr' : 'Cr' },
+          [ledgerId]: { balance: Math.abs(running), type: running >= 0 ? 'Dr' : 'Cr' },
+        }));
+      } catch {
+        // Last resort: use opening balance from ledger list
+        const ledger = ledgers.find((l) => l.id === ledgerId);
+        const ob = Number(ledger?.openingBalance || 0);
+        const signed = ledger?.balanceType === 'Cr' ? -ob : ob;
+        setCurrentBalances((p) => ({
+          ...p,
+          [ledgerId]: { balance: Math.abs(signed), type: signed >= 0 ? 'Dr' : 'Cr' },
         }));
       } finally {
         setLoadingBalance((p) => ({ ...p, [ledgerId]: false }));
       }
     },
-    [branchId, currentBalances, ledgerBalances]
+    [branchId, currentBalances, ledgerBalances, ledgers]
   );
 
   useEffect(() => {
@@ -167,6 +190,9 @@ export default function VoucherScreen({
     if (initialDate) setDate(initialDate);
   }, [initialDate]);
 
+  // Track which row index is currently focused for Ctrl+D delete
+  const [focusedRowIdx, setFocusedRowIdx] = useState<number | null>(null);
+
   // ── Global keyboard shortcuts ─────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -178,6 +204,18 @@ export default function VoucherScreen({
       if (e.altKey && e.key.toLowerCase() === 'a') { e.preventDefault(); handleAddEntry(); return; }
       if (e.altKey && e.key.toLowerCase() === 'r') { e.preventDefault(); handleClear(); return; }
       if (e.key === 'F2') { e.preventDefault(); dateRef.current?.focus(); dateRef.current?.select(); return; }
+
+      // Ctrl+D — delete currently focused row
+      if (e.ctrlKey && e.key.toLowerCase() === 'd' && inInput) {
+        e.preventDefault();
+        if (focusedRowIdx !== null && entries.length > 1) {
+          const nextFocus = Math.max(0, focusedRowIdx - 1);
+          setEntries((prev) => prev.filter((_, i) => i !== focusedRowIdx));
+          setTimeout(() => document.getElementById(`ledger-${nextFocus}`)?.focus(), 30);
+        }
+        return;
+      }
+
       if (!inInput) {
         if (e.key === 'F4') { e.preventDefault(); handleTypeChange('Contra'); }
         if (e.key === 'F5') { e.preventDefault(); handleTypeChange('Payment'); }
@@ -189,7 +227,7 @@ export default function VoucherScreen({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [entries, date, narration, type, config]);
+  }, [entries, date, narration, type, config, focusedRowIdx]);
 
   // ── Helpers ───────────────────────────────────────────────────────────
   const getFilteredLedgers = (search: string) => {
@@ -286,23 +324,33 @@ export default function VoucherScreen({
     }
 
     if (field === 'amount') {
-      if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+      // Tab — only navigate, NEVER add new lines
+      if (e.key === 'Tab' && !e.shiftKey) {
         e.preventDefault();
-        if (idx === entries.length - 1) {
-          // Last line — if balanced, go to narration, else add new line
-          if (isBalanced && entries[idx].amount) {
-            narrationRef.current?.focus();
-          } else {
-            handleAddEntry();
-          }
-        } else {
+        if (idx < entries.length - 1) {
           document.getElementById(`ledger-${idx + 1}`)?.focus();
+        } else {
+          narrationRef.current?.focus(); // Tab from last amount → narration
         }
         return;
       }
       if (e.key === 'Tab' && e.shiftKey) {
         e.preventDefault();
         document.getElementById(`ledger-${idx}`)?.focus();
+        return;
+      }
+      // Enter — add new line (TallyPrime behaviour)
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (idx === entries.length - 1) {
+          if (isBalanced && entries[idx].amount) {
+            narrationRef.current?.focus(); // balanced → jump to narration
+          } else {
+            handleAddEntry(); // not balanced → add next line
+          }
+        } else {
+          document.getElementById(`ledger-${idx + 1}`)?.focus();
+        }
         return;
       }
     }
@@ -572,7 +620,8 @@ export default function VoucherScreen({
                   setActiveDropdownIdx(idx);
                   setHighlightedIdx(0);
                 }}
-                onFocusLedger={() => { setActiveDropdownIdx(idx); setHighlightedIdx(0); }}
+                onFocusLedger={() => { setActiveDropdownIdx(idx); setHighlightedIdx(0); setFocusedRowIdx(idx); }}
+                onFocusAmount={() => setFocusedRowIdx(idx)}
                 onBlurLedger={() => setTimeout(() => setActiveDropdownIdx(null), 200)}
                 onSelectLedger={(l) => handleSelectLedger(idx, l)}
                 onAmountChange={(val) => {
@@ -607,7 +656,7 @@ export default function VoucherScreen({
               className="border-b border-dashed border-gray-200 py-1 px-3 text-[10px] text-gray-300 italic cursor-pointer hover:bg-gray-50"
               onClick={handleAddEntry}
             >
-              ↵ Press Enter in last amount field or Alt+A to add line
+              ↵ Enter in last amount → new line &nbsp;|&nbsp; Tab → navigate only &nbsp;|&nbsp; Alt+A → add line
             </div>
           </div>
 
@@ -703,7 +752,8 @@ export default function VoucherScreen({
           {[
             'F2: Date', 'F4: Contra', 'F5: Payment', 'F6: Receipt',
             'F7: Journal', 'F8: Sales', 'F9: Purchase', 'F12: Config',
-            'Alt+A: Add Line', 'Alt+R: Clear', 'Ctrl+Enter: Save',
+            'Alt+A: Add Line', 'Ctrl+D: Delete Line', 'Alt+R: Clear', 'Ctrl+Enter: Save',
+            'Tab: Navigate', 'Enter: New Line',
           ].map((k) => (
             <span key={k} className="bg-gray-100 px-1 rounded border border-gray-200">{k}</span>
           ))}
@@ -848,7 +898,7 @@ function EntryRow({
   getDrLabel, getCrLabel, totalEntries, formatBalance,
   onTypeChange, onSearchChange, onFocusLedger, onBlurLedger,
   onSelectLedger, onAmountChange, onMethodChange, onRefNoChange,
-  onRemove, onKeyDown, getFilteredLedgers,
+  onRemove, onKeyDown, getFilteredLedgers, onFocusAmount,
 }: any) {
   const filtered = getFilteredLedgers(entry.tempSearch || '');
   const cb = currentBalances[entry.ledgerId];
@@ -857,7 +907,7 @@ function EntryRow({
   return (
     <>
       <div
-        className={`grid items-start border-b border-gray-100 hover:bg-[#f0f8f0] group transition-colors ${
+        className={`grid items-start border-b border-gray-100 hover:bg-[#f0f8f0] transition-colors ${
           activeDropdownIdx === idx ? 'bg-[#f0f8f0]' : ''
         }`}
         style={{ gridTemplateColumns: '80px 1fr 130px 130px' }}
@@ -890,30 +940,35 @@ function EntryRow({
               placeholder={idx === 0 ? 'Select Ledger Account...' : 'Select Ledger...'}
               autoComplete="off"
             />
+            {/* Delete button — always visible when multiple rows */}
             {totalEntries > 1 && (
               <button
                 type="button"
                 onClick={onRemove}
-                className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 text-sm leading-none px-0.5"
+                title="Delete this line (Ctrl+D)"
+                className="flex items-center gap-0.5 text-[9px] font-bold text-red-400 hover:text-red-700 hover:bg-red-50 border border-red-200 hover:border-red-400 px-1 py-0.5 rounded transition-colors shrink-0"
                 tabIndex={-1}
               >
-                ×
+                ✕ Del
               </button>
             )}
           </div>
-          {/* Current balance display — the key feature */}
+          {/* Current balance — prominent display */}
           {entry.ledgerId && (
-            <div className="text-[10px] mt-0.5 font-bold" style={{ color: '#006b6b' }}>
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className="text-[9px] text-gray-400 uppercase font-bold">Cur Bal:</span>
               {isLoad ? (
-                <span className="italic text-gray-400">Loading balance...</span>
+                <span className="text-[10px] italic text-gray-400">Loading...</span>
               ) : cb ? (
-                <>
-                  Current Balance :{' '}
-                  <span style={{ color: cb.type === 'Dr' ? '#7a0000' : '#006b00' }}>
-                    ₹ {cb.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })} {cb.type}
-                  </span>
-                </>
-              ) : null}
+                <span
+                  className="text-[10px] font-bold font-mono"
+                  style={{ color: cb.type === 'Dr' ? '#7a0000' : '#006b00' }}
+                >
+                  ₹ {cb.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })} {cb.type}
+                </span>
+              ) : (
+                <span className="text-[10px] text-gray-300">—</span>
+              )}
             </div>
           )}
 
@@ -939,6 +994,7 @@ function EntryRow({
                   type="number"
                   value={entry.amount}
                   onChange={(e) => onAmountChange(e.target.value)}
+                  onFocus={onFocusAmount}
                   onKeyDown={(e: React.KeyboardEvent) => onKeyDown(e, idx, 'amount')}
                   className="w-full text-right bg-transparent focus:outline-none font-bold font-mono text-[11px] text-red-800"
                   placeholder="0.00"
@@ -952,6 +1008,7 @@ function EntryRow({
                   type="number"
                   value={entry.amount}
                   onChange={(e) => onAmountChange(e.target.value)}
+                  onFocus={onFocusAmount}
                   onKeyDown={(e: React.KeyboardEvent) => onKeyDown(e, idx, 'amount')}
                   className="w-full text-right bg-transparent focus:outline-none font-bold font-mono text-[11px] text-green-800"
                   placeholder="0.00"
@@ -966,6 +1023,7 @@ function EntryRow({
               type="number"
               value={entry.amount}
               onChange={(e) => onAmountChange(e.target.value)}
+              onFocus={onFocusAmount}
               onKeyDown={(e: React.KeyboardEvent) => onKeyDown(e, idx, 'amount')}
               className="w-full text-right bg-transparent focus:outline-none font-bold font-mono text-[11px]"
               placeholder="0.00"
