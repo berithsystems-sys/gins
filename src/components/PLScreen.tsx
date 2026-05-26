@@ -452,8 +452,8 @@ export default function PLScreen({ branchId }: PLScreenProps) {
   const SectionHeader = ({ label }: { label: string }) => (
     <tr style={{ background:'#fafbff' }}>
       <td colSpan={1 + (showPercent?1:0) + allPeriods.length}
-        style={{ padding:'6px 10px 2px', fontSize:12, fontStyle:'italic', fontWeight:600, color:'#444', letterSpacing:3, borderBottom:'none' }}>
-        {label.split('').join(' ')}
+        style={{ padding:'6px 10px 2px', fontSize:12, fontStyle:'italic', fontWeight:600, color:'#444', letterSpacing:2, borderBottom:'none' }}>
+        {label}
       </td>
     </tr>
   );
