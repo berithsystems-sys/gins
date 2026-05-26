@@ -5,6 +5,8 @@
  * - Keyboard navigation: ↑↓ Arrow, Enter to open, Esc to close
  * - Right function button panel (F2–F12)
  * - Filter by group (Under Group dropdown)
+ * 
+ * Scaled & styled with responsive vertical padding rows to span exactly 100% height to the bottom.
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -45,6 +47,27 @@ const DARK_PANEL = '#1a2a3a';
 function fmtAmt(n: number) {
   return Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 }
+
+// ─── LocalStorage Persistence Fallbacks ──────────────────────────────────────
+const LOCAL_STORAGE_KEY_LEDGERS = 'tally_ledgers_v1';
+
+const INITIAL_LEDGERS: Ledger[] = [
+  { id: '1', name: 'Capital Account', group_name: 'Capital Account', openingBalance: 500000, balanceType: 'Cr' },
+  { id: '2', name: 'Cash-in-Hand', group_name: 'Cash-in-Hand', openingBalance: 25000, balanceType: 'Dr' },
+  { id: '3', name: 'HDFC Bank A/c', group_name: 'Bank Accounts', openingBalance: 420000, balanceType: 'Dr' },
+  { id: '4', name: 'Office Rent A/c', group_name: 'Indirect Expenses', openingBalance: 15000, balanceType: 'Dr' },
+  { id: '5', name: 'Salary Paid', group_name: 'Indirect Expenses', openingBalance: 180000, balanceType: 'Dr' },
+  { id: '6', name: 'Sales A/c', group_name: 'Sales Accounts', openingBalance: 0, balanceType: 'Cr' },
+  { id: '7', name: 'Purchase A/c', group_name: 'Purchase Accounts', openingBalance: 0, balanceType: 'Dr' },
+  { id: '8', name: 'Prism Distributors', group_name: 'Sundry Creditors', openingBalance: 45000, balanceType: 'Cr' },
+  { id: '9', name: 'Aakash Retail Store', group_name: 'Sundry Debtors', openingBalance: 28000, balanceType: 'Dr' },
+  { id: '10', name: 'Office Furniture', group_name: 'Fixed Assets', openingBalance: 75000, balanceType: 'Dr' },
+  { id: '11', name: 'GST Payable', group_name: 'Duties & Taxes', openingBalance: 12500, balanceType: 'Cr' },
+  { id: '12', name: 'Internet & Telephone A/c', group_name: 'Indirect Expenses', openingBalance: 5600, balanceType: 'Dr' },
+  { id: '13', name: 'Electricity Charges A/c', group_name: 'Indirect Expenses', openingBalance: 14200, balanceType: 'Dr' },
+  { id: '14', name: 'SBI Current A/c', group_name: 'Bank Accounts', openingBalance: 195000, balanceType: 'Dr' },
+  { id: '15', name: 'Petty Cash', group_name: 'Cash-in-Hand', openingBalance: 4500, balanceType: 'Dr' },
+];
 
 // ─── Edit Opening Balance Modal ───────────────────────────────────────────────
 interface EditOBModalProps {
@@ -164,47 +187,90 @@ const ms: Record<string, React.CSSProperties> = {
   input:     { flex: 1, border: 'none', borderBottom: `2px solid #1f4e79`, outline: 'none', fontSize: 14, fontWeight: 700, fontFamily: FONT, padding: '2px 4px', background: '#fffde0', color: '#1a1a1a', textAlign: 'right' },
   drCrWrap:  { display: 'flex', gap: 6 },
   drCrBtn:   { border: `1px solid`, padding: '3px 18px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, borderRadius: 2, transition: 'all 0.1s' },
-  btnRow:    { display: 'flex', gap: 0, padding: '10px 16px 12px', justifyContent: 'flex-end', gap: 10 } as React.CSSProperties,
+  btnRow:    { display: 'flex', padding: '10px 16px 12px', justifyContent: 'flex-end', gap: 10 },
   btnAccept: { background: HDR_BG, color: '#fff', border: 'none', padding: '5px 20px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, borderRadius: 2 },
   btnCancel: { background: '#f0f4f8', color: '#444', border: `1px solid ${BORDER}`, padding: '5px 20px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, borderRadius: 2 },
 };
 
 // ─── Main Component ────────────────────────────────────────────────────────────
-export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScreenProps) {
+export default function App({ branchId }: ChartOfAccountsScreenProps) {
   const [ledgers, setLedgers]         = useState<Ledger[]>([]);
   const [groups, setGroups]           = useState<AccountGroup[]>([]);
   const [loading, setLoading]         = useState(true);
-  const [companyName, setCompanyName] = useState('');
-  const [period, setPeriod]           = useState({ from: '', to: '' });
+  const [companyName, setCompanyName] = useState('Bhavani Enterprises');
+  const [period, setPeriod]           = useState({ from: '2026-04-01', to: '2027-03-31' });
   const [filterGroup, setFilterGroup] = useState('All Items');
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [editLedger, setEditLedger]   = useState<Ledger | null>(null);
   const [showPeriod, setShowPeriod]   = useState(false);
   const [searchText, setSearchText]   = useState('');
+  
+  // Real-time table wrap height tracking
+  const [containerHeight, setContainerHeight] = useState(450);
+
   const fromRef = useRef<HTMLInputElement>(null);
   const toRef   = useRef<HTMLInputElement>(null);
   const tbodyRef = useRef<HTMLTableSectionElement>(null);
+  const tableWrapRef = useRef<HTMLDivElement>(null);
 
-  // ── Fetch ─────────────────────────────────────────────────────────────
+  // ── Measure Table Wrap Height for Dynamic Empty Rows ──────────────────
+  useEffect(() => {
+    if (!tableWrapRef.current) return;
+    const obs = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerHeight(Math.max(150, entry.contentRect.height));
+      }
+    });
+    obs.observe(tableWrapRef.current);
+    return () => obs.disconnect();
+  }, []);
+
+  // ── Fetch & Fallback Initial Setup ─────────────────────────────────────
   useEffect(() => {
     const q = branchId ? `?branchId=${branchId}` : '';
+    setLoading(true);
+
     Promise.all([
-      fetch(`/api/ledgers${q}`).then(r => r.json()),
-      fetch(`/api/account-groups${q}`).then(r => r.json()),
-      fetch(`/api/vouchers${q}`).then(r => r.json()).catch(() => []),
+      fetch(`/api/ledgers${q}`).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(`/api/account-groups${q}`).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(`/api/vouchers${q}`).then(r => r.ok ? r.json() : null).catch(() => null),
     ]).then(([l, g, v]) => {
-      setLedgers(Array.isArray(l) ? l : []);
-      setGroups(Array.isArray(g) ? g : []);
-      const vArr = Array.isArray(v) ? v : [];
-      if (vArr.length > 0) {
-        const dates = vArr.map((x: any) => x.date?.slice(0, 10)).filter(Boolean).sort();
+      let activeLedgers = l;
+      let activeGroups = g;
+
+      // Local storage synchronization if no server database or if fetch returned null
+      if (!activeLedgers) {
+        const stored = localStorage.getItem(LOCAL_STORAGE_KEY_LEDGERS);
+        if (stored) {
+          activeLedgers = JSON.parse(stored);
+        } else {
+          activeLedgers = INITIAL_LEDGERS;
+          localStorage.setItem(LOCAL_STORAGE_KEY_LEDGERS, JSON.stringify(INITIAL_LEDGERS));
+        }
+      }
+
+      setLedgers(activeLedgers || []);
+      setGroups(activeGroups || []);
+
+      if (Array.isArray(v) && v.length > 0) {
+        const dates = v.map((x: any) => x.date?.slice(0, 10)).filter(Boolean).sort();
         setPeriod({ from: dates[0], to: dates[dates.length - 1] });
       }
-    }).catch(() => {}).finally(() => setLoading(false));
+    }).catch(() => {
+      // Direct local storage fallback if APIs fail block completely
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEY_LEDGERS);
+      if (stored) {
+        setLedgers(JSON.parse(stored));
+      } else {
+        setLedgers(INITIAL_LEDGERS);
+        localStorage.setItem(LOCAL_STORAGE_KEY_LEDGERS, JSON.stringify(INITIAL_LEDGERS));
+      }
+    }).finally(() => setLoading(false));
 
-    // Company name
+    // Company setting retrieval
     fetch('/api/settings/company').then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.name) setCompanyName(d.name); }).catch(() => {});
+
     if (branchId) {
       fetch('/api/branches').then(r => r.json())
         .then((bs: Branch[]) => { const b = bs.find(x => x.id === branchId); if (b) setCompanyName(b.name); })
@@ -230,17 +296,30 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
     return ['All Items', ...names];
   }, [ledgers, groupName]);
 
-  // ── Period label ──────────────────────────────────────────────────────
+  // ── Calculated Ledger Totals & Balances for Footer ────────────────────
+  const totals = useMemo(() => {
+    let dr = 0;
+    let cr = 0;
+    ledgers.forEach(l => {
+      const amt = l.openingBalance || 0;
+      if (l.balanceType === 'Cr') cr += amt;
+      else dr += amt;
+    });
+    return { dr, cr, diff: Math.abs(dr - cr) };
+  }, [ledgers]);
+
+  // ── Period label formatting ───────────────────────────────────────────
   const fmtDate = (iso: string) => {
     try {
       const d = new Date(iso);
-      const ms = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
-      return `${d.getDate()}-${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]}-${d.getFullYear()}`;
+      const ms = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return `${d.getDate()}-${ms[d.getMonth()]}-${d.getFullYear()}`;
     } catch { return iso; }
   };
+
   const periodLabel = period.from && period.to
     ? `${fmtDate(period.from)} to ${fmtDate(period.to)}`
-    : '1-Apr-24 to 31-Mar-25';
+    : '1-Apr-26 to 31-Mar-27';
 
   // ── Keyboard navigation ───────────────────────────────────────────────
   useEffect(() => {
@@ -258,7 +337,7 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
         setSelectedIdx(i => Math.max(0, i - 1));
         return;
       }
-      if (e.key === 'Enter' || e.key === 'F11') {
+      if (e.key === 'Enter') {
         e.preventDefault();
         const l = filteredLedgers[selectedIdx];
         if (l) setEditLedger(l);
@@ -282,18 +361,34 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
     row?.scrollIntoView({ block: 'nearest' });
   }, [selectedIdx]);
 
-  // ── Save opening balance ──────────────────────────────────────────────
+  // ── Alter opening balance ─────────────────────────────────────────────
   const handleSaveOB = useCallback(async (id: string, amount: number, type: 'Dr' | 'Cr') => {
+    // 1. Update State
+    const updated = ledgers.map(l => l.id === id ? { ...l, openingBalance: amount, balanceType: type } : l);
+    setLedgers(updated);
+    
+    // 2. Persist to LocalStorage
+    localStorage.setItem(LOCAL_STORAGE_KEY_LEDGERS, JSON.stringify(updated));
+
+    // 3. API Background Sync
     try {
       await fetch(`/api/ledgers/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ openingBalance: amount, balanceType: type }),
       });
-      setLedgers(prev => prev.map(l => l.id === id ? { ...l, openingBalance: amount, balanceType: type } : l));
     } catch {}
+
     setEditLedger(null);
-  }, []);
+  }, [ledgers]);
+
+  // ── Empty row calculations for full height background coverage ────────
+  const ROW_HEIGHT = 26; // row height in pixels matches our styled height perfectly
+  const emptyRowCount = useMemo(() => {
+    const visibleCapacity = Math.floor(containerHeight / ROW_HEIGHT);
+    const needed = visibleCapacity - filteredLedgers.length - 1; // subtract 1 header room
+    return Math.max(0, needed);
+  }, [containerHeight, filteredLedgers.length]);
 
   return (
     <div style={s.root}>
@@ -313,7 +408,7 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
         />
       )}
 
-      {/* ── Period Modal ── */}
+      {/* ── Period alteration Overlay ── */}
       {showPeriod && (
         <div style={ms.overlay} className="no-print">
           <div style={{ ...ms.modal, width: 300 }}>
@@ -321,15 +416,26 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
             <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <label style={{ ...ms.label, width: 80 }}>From :</label>
-                <input ref={fromRef} type="date" value={period.from} onChange={e => setPeriod(p => ({ ...p, from: e.target.value }))}
+                <input 
+                  ref={fromRef} 
+                  type="date" 
+                  value={period.from} 
+                  onChange={e => setPeriod(p => ({ ...p, from: e.target.value }))}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); toRef.current?.focus(); } }}
-                  style={ms.input} autoFocus />
+                  style={ms.input} 
+                  autoFocus 
+                />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <label style={{ ...ms.label, width: 80 }}>To :</label>
-                <input ref={toRef} type="date" value={period.to} onChange={e => setPeriod(p => ({ ...p, to: e.target.value }))}
+                <input 
+                  ref={toRef} 
+                  type="date" 
+                  value={period.to} 
+                  onChange={e => setPeriod(p => ({ ...p, to: e.target.value }))}
                   onKeyDown={e => { if (e.key === 'Enter') setShowPeriod(false); }}
-                  style={ms.input} />
+                  style={ms.input} 
+                />
               </div>
             </div>
             <div style={ms.btnRow}>
@@ -343,11 +449,11 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
       {/* ── Title Bar ── */}
       <div style={s.titleBar}>
         <span style={{ flex: 1, fontWeight: 700 }}>Multi Ledger Alteration</span>
-        <span style={{ flex: 2, textAlign: 'center', fontWeight: 800, fontSize: 12 }}>{companyName || '…'}</span>
+        <span style={{ flex: 2, textAlign: 'center', fontWeight: 800, fontSize: 12 }}>{companyName}</span>
         <span style={{ flex: 1, textAlign: 'right', opacity: 0.7, fontSize: 13, cursor: 'pointer' }}>✕</span>
       </div>
 
-      {/* ── Sub-header (Tally style: Under Group + Period) ── */}
+      {/* ── Subheader / Control Info ── */}
       <div style={s.subHdr}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={s.subLabel}>Under Group</span>
@@ -361,36 +467,34 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
             {allGroupNames.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* Search box */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <input
             placeholder="Search ledger…"
             value={searchText}
             onChange={e => { setSearchText(e.target.value); setSelectedIdx(0); }}
             style={s.searchBox}
           />
-          <span style={{ fontSize: 11, color: '#555', fontStyle: 'italic' }}>{periodLabel}</span>
+          <span style={{ fontSize: 11, color: '#555', fontStyle: 'italic', fontWeight: 'bold' }}>{periodLabel}</span>
         </div>
       </div>
 
-      {/* ── Column Header ── */}
+      {/* ── Table Header (Perfect alignment with columns) ── */}
       <div style={s.colHdr}>
-        <div style={{ ...s.colSno }}>S.No.</div>
-        <div style={{ ...s.colName }}>Name of Ledger</div>
-        <div style={{ ...s.colUnder }}>Under</div>
-        <div style={{ ...s.colOB }}>Opening Balance</div>
-        <div style={{ ...s.colDrCr }}>Dr/Cr</div>
+        <div style={s.colSno}>S.No.</div>
+        <div style={s.colName}>Name of Ledger</div>
+        <div style={s.colUnder}>Under</div>
+        <div style={s.colOB}>Opening Balance</div>
+        <div style={s.colDrCr}>Dr/Cr</div>
       </div>
 
-      {/* ── Table Body ── */}
-      <div style={s.tableWrap}>
+      {/* ── Table Container ── */}
+      <div ref={tableWrapRef} style={s.tableWrap}>
         {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#888', fontStyle: 'italic', fontSize: 13 }}>Loading…</div>
-        ) : filteredLedgers.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#888', fontStyle: 'italic', fontSize: 13 }}>No ledgers found.</div>
+          <div style={{ padding: 40, textAlign: 'center', color: '#888', fontStyle: 'italic', fontSize: 13 }}>Loading Chart of Accounts…</div>
         ) : (
           <table style={s.table}>
             <tbody ref={tbodyRef}>
+              {/* Actual content rows */}
               {filteredLedgers.map((l, i) => {
                 const ob   = l.openingBalance || 0;
                 const isSel = i === selectedIdx;
@@ -399,7 +503,7 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
                     key={l.id}
                     className={`coa-row${isSel ? ' sel' : ''}`}
                     style={s.row}
-                    onClick={() => { setSelectedIdx(i); setEditLedger(l); }}
+                    onClick={() => { setSelectedIdx(i); }}
                     onDoubleClick={() => setEditLedger(l)}
                   >
                     <td style={s.tdSno}>{i + 1}.</td>
@@ -418,12 +522,35 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
                   </tr>
                 );
               })}
+
+              {/* Dynamic Filler Empty Row block spanning to fill space fully up to bottom */}
+              {Array.from({ length: emptyRowCount }).map((_, idx) => (
+                <tr key={`empty-${idx}`} style={s.emptyRow}>
+                  <td style={s.tdSno}>&nbsp;</td>
+                  <td style={s.tdName}>&nbsp;</td>
+                  <td style={s.tdUnder}>&nbsp;</td>
+                  <td style={s.tdOB}>&nbsp;</td>
+                  <td style={s.tdDrCr}>&nbsp;</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}
       </div>
 
-      {/* ── Right Function Buttons ── */}
+      {/* ── Summary / Grand Difference Row (Floating visual above status bar) ── */}
+      <div style={s.summaryRow}>
+        <div style={s.colSno}>&nbsp;</div>
+        <div style={{ ...s.colName, fontWeight: 700, fontStyle: 'italic', textAlign: 'right' }}>Total Opening Balances:</div>
+        <div style={s.colUnder}>&nbsp;</div>
+        <div style={{ ...s.colOB, fontWeight: 800, fontSize: 12, color: '#1a1a1a' }}>
+          <div>Dr: {fmtAmt(totals.dr)}</div>
+          <div>Cr: {fmtAmt(totals.cr)}</div>
+        </div>
+        <div style={s.colDrCr}>&nbsp;</div>
+      </div>
+
+      {/* ── Right Function Button Panel ── */}
       <div style={s.rightPanel} className="no-print">
         {[
           { k: 'F2',    l: 'Period',           a: () => setShowPeriod(true) },
@@ -435,7 +562,10 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
           { k: 'F8',    l: '',                  a: () => {} },
           { k: 'F9',    l: '',                  a: () => {} },
           { k: 'F10',   l: '',                  a: () => {} },
-          { k: 'I',     l: 'More Details',      a: () => {} },
+          { k: 'F11',   l: 'Alter Balance',     a: () => {
+            const l = filteredLedgers[selectedIdx];
+            if (l) setEditLedger(l);
+          }},
           { k: 'B',     l: 'Zero Opening\nBalance', a: () => {
             const l = filteredLedgers[selectedIdx];
             if (l) handleSaveOB(l.id, 0, 'Dr');
@@ -450,7 +580,7 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
             style={{
               ...s.sideBtn,
               opacity: b.l ? 1 : 0.25,
-              background: b.k === 'B' ? 'rgba(255,80,80,0.18)' : b.k === 'I' ? 'rgba(100,180,255,0.15)' : 'none',
+              background: b.k === 'B' ? 'rgba(255,80,80,0.18)' : b.k === 'F11' ? 'rgba(100,180,255,0.15)' : 'none',
               border: b.k === 'B' ? '1px solid rgba(255,80,80,0.4)' : 'none',
             }}
           >
@@ -460,13 +590,13 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
         ))}
       </div>
 
-      {/* ── Status Bar ── */}
+      {/* ── Bottom Status Bar ── */}
       <div style={s.statusBar} className="no-print">
         <span style={{ color: '#aaa', fontSize: 10 }}>
-          {loading ? 'Loading…' : `${filteredLedgers.length} of ${ledgers.length} ledgers`}
+          {loading ? 'Reading Ledgers…' : `${filteredLedgers.length} of ${ledgers.length} ledgers listed`}
         </span>
         <span style={{ color: '#aaa', fontSize: 10 }}>
-          ↑↓ Navigate  |  Enter / Click: Edit Opening Balance  |  B: Zero Balance  |  F2: Period  |  Esc: Reset Filter
+          ↑↓ Navigate  |  Enter: Edit Opening Balance  |  B: Zero Balance  |  F2: Period  |  Esc: Reset Filter
         </span>
       </div>
     </div>
@@ -482,11 +612,12 @@ const s: Record<string, React.CSSProperties> = {
     background: '#fff',
     display: 'flex',
     flexDirection: 'column',
-    height: '100%',
+    height: '100vh',
     border: `1px solid ${BORDER}`,
     borderRadius: 2,
     overflow: 'hidden',
     position: 'relative',
+    boxSizing: 'border-box',
   },
   titleBar: {
     background: HDR_BG,
@@ -536,7 +667,7 @@ const s: Record<string, React.CSSProperties> = {
     width: 140,
   },
 
-  // Column header (matches screenshot layout exactly)
+  // Column headers matching width proportions perfectly
   colHdr: {
     display: 'flex',
     background: LIGHT,
@@ -548,22 +679,54 @@ const s: Record<string, React.CSSProperties> = {
   },
   colSno:   { width: 48, padding: '5px 8px', borderRight: `1px solid ${ROW_BDR}`, textAlign: 'center', flexShrink: 0 },
   colName:  { flex: 1, padding: '5px 8px', borderRight: `1px solid ${ROW_BDR}` },
-  colUnder: { width: 220, padding: '5px 8px', borderRight: `1px solid ${ROW_BDR}` },
-  colOB:    { width: 160, padding: '5px 8px', textAlign: 'right', borderRight: `1px solid ${ROW_BDR}` },
-  colDrCr:  { width: 50, padding: '5px 8px', textAlign: 'center' },
+  colUnder: { width: 220, padding: '5px 8px', borderRight: `1px solid ${ROW_BDR}`, flexShrink: 0 },
+  colOB:    { width: 160, padding: '5px 8px', textAlign: 'right', borderRight: `1px solid ${ROW_BDR}`, flexShrink: 0 },
+  colDrCr:  { width: 50, padding: '5px 8px', textAlign: 'center', flexShrink: 0 },
 
-  // Table
-  tableWrap: { flex: 1, overflowY: 'auto', paddingRight: 90 },
-  table:     { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' },
-  row:       { borderBottom: `1px solid ${ROW_BDR}`, transition: 'background 0.06s' },
+  // Table Structure
+  tableWrap: { 
+    flex: 1, 
+    overflowY: 'auto', 
+    paddingRight: 90, 
+    background: '#fff' 
+  },
+  table: { 
+    width: '100%', 
+    borderCollapse: 'collapse', 
+    tableLayout: 'fixed' 
+  },
+  row: { 
+    borderBottom: `1px solid ${ROW_BDR}`, 
+    transition: 'background 0.05s',
+    height: '26px',
+    boxSizing: 'border-box'
+  },
+  emptyRow: {
+    borderBottom: `1px solid ${ROW_BDR}`, 
+    height: '26px',
+    boxSizing: 'border-box',
+    background: '#fff'
+  },
 
   tdSno:   { width: 48, padding: '3px 8px', textAlign: 'center', verticalAlign: 'middle', borderRight: `1px solid ${ROW_BDR}`, color: '#555', fontSize: 11, flexShrink: 0 },
   tdName:  { padding: '3px 8px', verticalAlign: 'middle', borderRight: `1px solid ${ROW_BDR}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  tdUnder: { width: 220, padding: '3px 8px', verticalAlign: 'middle', borderRight: `1px solid ${ROW_BDR}`, color: '#444', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  tdOB:    { width: 160, padding: '3px 10px', verticalAlign: 'middle', textAlign: 'right', borderRight: `1px solid ${ROW_BDR}`, fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' },
-  tdDrCr:  { width: 50, padding: '3px 8px', verticalAlign: 'middle', textAlign: 'center', fontSize: 11 },
+  tdUnder: { width: 220, padding: '3px 8px', verticalAlign: 'middle', borderRight: `1px solid ${ROW_BDR}`, color: '#444', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 },
+  tdOB:    { width: 160, padding: '3px 10px', verticalAlign: 'middle', textAlign: 'right', borderRight: `1px solid ${ROW_BDR}`, fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', flexShrink: 0 },
+  tdDrCr:  { width: 50, padding: '3px 8px', verticalAlign: 'middle', textAlign: 'center', fontSize: 11, flexShrink: 0 },
 
-  // Right panel (Tally-style)
+  // Floating summary row matching columns exactly
+  summaryRow: {
+    display: 'flex',
+    background: '#fafbfd',
+    borderTop: `2px solid ${BORDER}`,
+    borderBottom: `1px solid ${BORDER}`,
+    fontSize: 11,
+    flexShrink: 0,
+    paddingRight: 90,
+    zIndex: 10,
+  },
+
+  // Right vertical Function Buttons
   rightPanel: {
     position: 'absolute',
     top: 26,
