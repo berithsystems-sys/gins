@@ -286,7 +286,7 @@ export default function ChartOfAccountsScreen({ branchId }: ChartOfAccountsScree
   const handleSaveOB = useCallback(async (id: string, amount: number, type: 'Dr' | 'Cr') => {
     try {
       await fetch(`/api/ledgers/${id}`, {
-        method: 'PATCH',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ openingBalance: amount, balanceType: type }),
       });
