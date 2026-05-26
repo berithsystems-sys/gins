@@ -1,599 +1,682 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+/**
+ * TallyPrime-style Balance Sheet A/c
+ * Features:
+ * 1. Two-column layout: Liabilities (left) | Assets (right)
+ * 2. Groups: Capital Account, Loans (Liability), Current Liabilities | Fixed Assets, Investments, Current Assets, Suspense
+ * 3. Click ledger name → LedgerDetail drill-down (same as P&L / Trial Balance)
+ * 4. Keyboard shortcuts scoped (F2 period, F5 expand, Esc collapse, Alt+P print, Alt+E export)
+ * 5. Comparison mode: add extra periods (Alt+N)
+ * 6. Zero-balance groups/ledgers hidden
+ * 7. Nett difference row (should balance to zero)
+ */
 
-// ─── Types matching exact DB schema ───────────────────────────────────────────
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { exportToExcel, printReport } from '../lib/ReportUtils';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 interface Ledger {
-  id: string;
-  name: string;
-  group_name?: string;
-  group?: string;
-  openingBalance?: number;
-  balanceType?: 'Dr' | 'Cr';
-  branchId?: string;
-}
-interface VoucherEntry {
-  ledgerId: string;
-  amount: number;
-  type: 'Dr' | 'Cr';
-}
-interface Voucher {
-  id: string;
-  date?: string;
-  type?: string;
-  narration?: string;
-  entries: VoucherEntry[];
-}
-interface Group {
-  id: string;
-  name: string;
-  parent_group?: string;
-  under?: string;
-}
-interface DrillEntry {
-  date: string;
-  voucherType: string;
-  narration: string;
-  debit: number;
-  credit: number;
-  balance: number;
+  id: string; name: string; group?: string; group_name?: string;
+  openingBalance?: number; balanceType?: 'Dr' | 'Cr';
 }
 
-// ─── ALL groups that belong to each Balance Sheet side ───────────────────────
-const LIABILITY_GROUPS = [
-  'Capital Account',
-  'Loans (Liability)',
-  'Current Liabilities',
-  'Suspense Account',
-  'Reserves and Surplus',
-  'Bank OD',
-  'Secured Loans',
-  'Unsecured Loans',
-];
+function fmtAmtAbs(n: number) {
+  return Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+}
+function fmtDate(iso: string) {
+  try {
+    const d = new Date(iso);
+    const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${d.getDate()}-${M[d.getMonth()]}-${d.getFullYear()}`;
+  } catch { return iso; }
+}
 
-const ASSET_GROUPS = [
-  'Fixed Assets',
-  'Investments',
-  'Current Assets',
-  'Bank Accounts',
-  'Cash',
-  'Cash-in-Hand',
-  'Sundry Debtors',
-  'Stock-in-Hand',
-  'Loans & Advances (Asset)',
-  'Deposits (Asset)',
-  'Miscellaneous Expenses (Asset)',
-];
-
-// ─── Inline styles using CSS variables with fallbacks ─────────────────────────
-const colors = {
-  sidebar:  'var(--tally-sidebar, #1a3a4a)',
-  teal:     'var(--tally-teal, #0d6e6e)',
-  accent:   'var(--tally-accent, #e8b84b)',
-  light:    'var(--tally-light, #e8f4f4)',
-  bg:       'var(--tally-bg, #f0f4f4)',
-  hotkey:   'var(--tally-hotkey, #253f50)',
-};
-
-// ─── Ledger Drill-Down Modal ──────────────────────────────────────────────────
-function LedgerDrillDown({ ledger, entries, onClose }: {
-  ledger: Ledger; entries: DrillEntry[]; onClose: () => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
+// ─── LedgerDetail (drill-down, identical to P&L) ─────────────────────────────
+function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?: string; onBack: () => void }) {
+  const [rows, setRows]       = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    ref.current?.focus();
-    const handler = (e: KeyboardEvent) => {
-      e.stopPropagation();
-      if (e.key === 'Escape') onClose();
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onBack(); }
     };
-    window.addEventListener('keydown', handler, true);
-    return () => window.removeEventListener('keydown', handler, true);
-  }, [onClose]);
+    window.addEventListener('keydown', h, true);
+    return () => window.removeEventListener('keydown', h, true);
+  }, [onBack]);
 
-  const ob = Number(ledger.openingBalance || 0);
-  let runBal = ledger.balanceType === 'Cr' ? -ob : ob;
-  const totalDebit  = entries.reduce((a, e) => a + e.debit,  0);
-  const totalCredit = entries.reduce((a, e) => a + e.credit, 0);
-  const finalBal = runBal + totalDebit - totalCredit;
+  useEffect(() => {
+    const q = branchId ? `?branchId=${branchId}` : '';
+    fetch(`/api/vouchers/ledger/${ledger.id}${q}`)
+      .then(r => r.json()).then(d => setRows(Array.isArray(d) ? d : []))
+      .catch(() => setRows([])).finally(() => setLoading(false));
+  }, [ledger.id, branchId]);
+
+  const ob     = Number(ledger.openingBalance || 0);
+  const obSgn  = ledger.balanceType === 'Cr' ? -ob : ob;
+  let running  = obSgn;
+  const withRun = rows.map(r => {
+    const amt = Number(r.entry_amount || 0);
+    running  += r.entry_type === 'Dr' ? amt : -amt;
+    return { ...r, running };
+  });
+  const totalDr = rows.filter(r => r.entry_type === 'Dr').reduce((a,r) => a + Number(r.entry_amount||0), 0);
+  const totalCr = rows.filter(r => r.entry_type === 'Cr').reduce((a,r) => a + Number(r.entry_amount||0), 0);
+  const closing = obSgn + totalDr - totalCr;
+
+  const FONT = `-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,sans-serif`;
+  const HDR  = '#1f4e79';
+  const BD   = '#e0e6ee';
 
   return (
-    <div
-      style={{ position:'fixed', inset:0, zIndex:50, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.6)' }}
-      onClick={onClose}
-    >
-      <div
-        ref={ref} tabIndex={-1}
-        style={{ background:'#fff', width:860, maxHeight:'88vh', display:'flex', flexDirection:'column', boxShadow:'0 8px 40px rgba(0,0,0,0.3)', border:`2px solid ${colors.teal}`, outline:'none' }}
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div style={{ background:colors.sidebar, color:'#fff', padding:'8px 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <span style={{ fontSize:11, fontWeight:'bold', textTransform:'uppercase' }}>Ledger Transactions — {ledger.name}</span>
-          <span style={{ color:colors.accent, fontSize:10 }}>ESC to close</span>
+    <div style={{ fontFamily: FONT, fontSize: 12, display:'flex', flexDirection:'column', height:'100%', background:'#fff', border:'1px solid #b8c4cc', borderRadius:2, overflow:'hidden' }}>
+      <div style={{ background: HDR, color:'#fff', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'3px 10px', fontSize:12, fontWeight:700, flexShrink:0 }}>
+        <button onClick={onBack} style={{ background:'none', border:'1px solid rgba(255,255,255,0.4)', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:FONT, padding:'1px 10px', borderRadius:2 }}>← Back</button>
+        <span style={{ flex:2, textAlign:'center', fontWeight:800, fontSize:13 }}>{ledger.name}</span>
+        <span />
+      </div>
+      <div style={{ display:'flex', justifyContent:'space-between', padding:'5px 12px', background:'#fafbfd', borderBottom:'1px solid #b8c4cc', flexShrink:0 }}>
+        <div>
+          <span style={{ fontSize:11, color:'#777', fontStyle:'italic' }}>Ledger: </span>
+          <span style={{ fontSize:12, fontWeight:700 }}>{ledger.name}</span>
+          <span style={{ fontSize:11, color:'#777', fontStyle:'italic', marginLeft:16 }}>Group: </span>
+          <span style={{ fontSize:12, fontWeight:700 }}>{ledger.group || ledger.group_name || '—'}</span>
         </div>
-        {/* Sub-header */}
-        <div style={{ background:colors.light, padding:'4px 16px', display:'flex', gap:24, fontSize:10, borderBottom:`1px solid ${colors.teal}` }}>
-          <span><b>Group:</b> {ledger.group_name || ledger.group || '—'}</span>
-          <span><b>Opening Balance:</b> ₹{ob.toLocaleString('en-IN', { minimumFractionDigits: 2 })} {ledger.balanceType}</span>
+        <div>
+          <span style={{ fontSize:11, color:'#777', fontStyle:'italic' }}>Opening Balance: </span>
+          <span style={{ fontSize:12, fontWeight:700, color: obSgn >= 0 ? '#7a0000' : '#006b00' }}>
+            {fmtAmtAbs(ob)} {ledger.balanceType || 'Dr'}
+          </span>
         </div>
-        {/* Column headers */}
-        <div style={{ display:'grid', gridTemplateColumns:'100px 110px 1fr 95px 95px 115px', background:colors.light, padding:'4px 12px', fontSize:10, fontWeight:'bold', textTransform:'uppercase', borderBottom:`1px solid ${colors.teal}`, color:colors.teal }}>
-          <span>Date</span><span>Type</span><span>Narration</span>
-          <span style={{ textAlign:'right' }}>Debit</span>
-          <span style={{ textAlign:'right' }}>Credit</span>
-          <span style={{ textAlign:'right' }}>Balance</span>
+      </div>
+      <div style={{ flex:1, overflowY:'auto' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
+          <thead>
+            <tr style={{ background:'#f0f4f8', position:'sticky', top:0, zIndex:5 }}>
+              {['Date','Particulars','Vch Type','Vch No.','Debit (₹)','Credit (₹)','Balance'].map((h,i) => (
+                <th key={h} style={{ padding:'4px 8px', fontSize:11, fontWeight:700, color:'#333', borderBottom:'1px solid #b8c4cc', borderRight:'1px solid #e0e6ee', background:'#f0f4f8', textAlign: i >= 4 ? 'right' : i === 3 ? 'center' : 'left', whiteSpace:'nowrap', width: i===0?80:i===2?100:i===3?70:i>=4?120:undefined }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr style={{ background:'#f8fbff', borderBottom:`1px solid ${BD}` }}>
+              <td style={{ padding:'3px 8px', borderRight:`1px solid ${BD}` }} />
+              <td style={{ padding:'3px 8px', fontWeight:700, fontStyle:'italic', color:'#555', borderRight:`1px solid ${BD}` }}>Opening Balance</td>
+              <td style={{ padding:'3px 8px', borderRight:`1px solid ${BD}` }} /><td style={{ padding:'3px 8px', borderRight:`1px solid ${BD}` }} />
+              <td style={{ padding:'3px 10px', textAlign:'right', color:'#7a0000', borderRight:`1px solid ${BD}` }}>{obSgn > 0 ? fmtAmtAbs(ob) : ''}</td>
+              <td style={{ padding:'3px 10px', textAlign:'right', color:'#006b00', borderRight:`1px solid ${BD}` }}>{obSgn < 0 ? fmtAmtAbs(ob) : ''}</td>
+              <td style={{ padding:'3px 10px', textAlign:'right', fontWeight:700 }}>{fmtAmtAbs(ob)} {ledger.balanceType||'Dr'}</td>
+            </tr>
+            {loading ? (
+              <tr><td colSpan={7} style={{ padding:24, textAlign:'center', color:'#888', fontStyle:'italic' }}>Loading…</td></tr>
+            ) : withRun.length === 0 ? (
+              <tr><td colSpan={7} style={{ padding:24, textAlign:'center', color:'#888', fontStyle:'italic' }}>No transactions found.</td></tr>
+            ) : withRun.map((r,i) => {
+              const isDr = r.entry_type === 'Dr';
+              const runType = r.running >= 0 ? 'Dr' : 'Cr';
+              return (
+                <tr key={`${r.id}-${i}`} style={{ borderBottom:`1px solid ${BD}`, background: i%2===0?'#fff':'#fafbfd' }}>
+                  <td style={{ padding:'3px 8px', borderRight:`1px solid ${BD}` }}>{fmtDate(r.date)}</td>
+                  <td style={{ padding:'3px 8px', fontWeight:600, borderRight:`1px solid ${BD}`, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.narration||r.type||'—'}</td>
+                  <td style={{ padding:'3px 8px', fontStyle:'italic', color:'#555', borderRight:`1px solid ${BD}` }}>{r.type}</td>
+                  <td style={{ padding:'3px 8px', textAlign:'center', borderRight:`1px solid ${BD}` }}>{r.number||''}</td>
+                  <td style={{ padding:'3px 10px', textAlign:'right', color:'#7a0000', fontWeight: isDr?700:400, borderRight:`1px solid ${BD}` }}>{isDr?fmtAmtAbs(r.entry_amount):''}</td>
+                  <td style={{ padding:'3px 10px', textAlign:'right', color:'#006b00', fontWeight:!isDr?700:400, borderRight:`1px solid ${BD}` }}>{!isDr?fmtAmtAbs(r.entry_amount):''}</td>
+                  <td style={{ padding:'3px 10px', textAlign:'right', fontWeight:600 }}>{fmtAmtAbs(r.running)} {runType}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr style={{ background:'#f0f4f8', borderTop:'1px solid #b8c4cc', position:'sticky', bottom:0 }}>
+              <td colSpan={4} style={{ padding:'4px 8px', fontWeight:700, textAlign:'right', borderRight:`1px solid ${BD}`, paddingRight:8 }}>Closing Balance</td>
+              <td style={{ padding:'4px 10px', textAlign:'right', fontWeight:700, color:'#7a0000', borderTop:'2px solid #555', borderRight:`1px solid ${BD}` }}>{totalDr>0?fmtAmtAbs(totalDr):''}</td>
+              <td style={{ padding:'4px 10px', textAlign:'right', fontWeight:700, color:'#006b00', borderTop:'2px solid #555', borderRight:`1px solid ${BD}` }}>{totalCr>0?fmtAmtAbs(totalCr):''}</td>
+              <td style={{ padding:'4px 10px', textAlign:'right', fontWeight:800, borderTop:'2px solid #555' }}>{fmtAmtAbs(closing)} {closing>=0?'Dr':'Cr'}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Period Modal ──────────────────────────────────────────────────────────────
+function PeriodModal({ from, to, onAccept, onCancel }: { from:string; to:string; onAccept:(f:string,t:string)=>void; onCancel:()=>void }) {
+  const [f, setF] = useState(from);
+  const [t, setT] = useState(to);
+  const toRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel(); } };
+    window.addEventListener('keydown', h, true);
+    return () => window.removeEventListener('keydown', h, true);
+  }, [onCancel]);
+  const HDR = '#1f4e79'; const BD = '#b8c4cc';
+  const FONT = `-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif`;
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.4)' }}>
+      <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:2, boxShadow:'0 8px 32px rgba(0,0,0,0.28)', width:300, overflow:'hidden', fontFamily:FONT }}>
+        <div style={{ background:HDR, color:'#fff', padding:'5px 12px', fontSize:12, fontWeight:700 }}>Change Period  <span style={{ fontSize:9, opacity:0.6 }}>F2</span></div>
+        <div style={{ padding:'14px 16px', display:'flex', flexDirection:'column', gap:12 }}>
+          {[{lbl:'From Date :', val:f, set:setF, ref:undefined as any, onKey:(e:React.KeyboardEvent)=>{ if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();toRef.current?.focus();}}},
+            {lbl:'To Date :',   val:t, set:setT, ref:toRef,           onKey:(e:React.KeyboardEvent)=>{ if(e.key==='Enter') onAccept(f,t);}}
+          ].map((row,i) => (
+            <div key={i} style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <label style={{ fontSize:12, color:'#555', fontStyle:'italic', width:90, flexShrink:0 }}>{row.lbl}</label>
+              <input autoFocus={i===0} ref={row.ref} type="date" value={row.val} onChange={e=>row.set(e.target.value)} onKeyDown={row.onKey}
+                style={{ flex:1, border:'none', borderBottom:`2px solid ${HDR}`, outline:'none', fontSize:13, fontWeight:700, fontFamily:FONT, padding:'2px 4px', background:'#fffde0', color:'#1a1a1a' }} />
+            </div>
+          ))}
         </div>
-        {/* Rows */}
-        <div style={{ flex:1, overflowY:'auto' }}>
-          <div style={{ display:'grid', gridTemplateColumns:'100px 110px 1fr 95px 95px 115px', padding:'4px 12px', fontSize:10, background:'#fefce8', borderBottom:'1px solid #fef08a', fontWeight:600 }}>
-            <span style={{ color:'#9ca3af' }}>—</span>
-            <span style={{ color:'#374151' }}>Opening Balance</span>
-            <span style={{ color:'#9ca3af', fontStyle:'italic' }}>—</span>
-            <span style={{ textAlign:'right', fontFamily:'monospace', color:'#16a34a' }}>{runBal > 0 ? runBal.toLocaleString('en-IN', { minimumFractionDigits:2 }) : ''}</span>
-            <span style={{ textAlign:'right', fontFamily:'monospace', color:'#dc2626' }}>{runBal < 0 ? Math.abs(runBal).toLocaleString('en-IN', { minimumFractionDigits:2 }) : ''}</span>
-            <span style={{ textAlign:'right', fontFamily:'monospace', color:colors.teal }}>{Math.abs(runBal).toLocaleString('en-IN', { minimumFractionDigits:2 })} {runBal >= 0 ? 'Dr' : 'Cr'}</span>
-          </div>
-          {entries.length === 0 ? (
-            <div style={{ textAlign:'center', padding:'48px 0', fontSize:11, color:'#9ca3af', fontStyle:'italic' }}>No transactions recorded for this ledger.</div>
-          ) : entries.map((e, i) => {
-            runBal += e.debit - e.credit;
-            return (
-              <div key={i} style={{ display:'grid', gridTemplateColumns:'100px 110px 1fr 95px 95px 115px', padding:'2px 12px', fontSize:10, borderBottom:'1px solid #f9fafb', background: i%2===1 ? '#f9fafb' : '#fff' }}>
-                <span style={{ color:'#6b7280' }}>{e.date}</span>
-                <span style={{ color:'#374151', fontWeight:500 }}>{e.voucherType}</span>
-                <span style={{ color:'#9ca3af', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{e.narration||'—'}</span>
-                <span style={{ textAlign:'right', fontFamily:'monospace', color:'#16a34a' }}>{e.debit>0?e.debit.toLocaleString('en-IN',{minimumFractionDigits:2}):''}</span>
-                <span style={{ textAlign:'right', fontFamily:'monospace', color:'#dc2626' }}>{e.credit>0?e.credit.toLocaleString('en-IN',{minimumFractionDigits:2}):''}</span>
-                <span style={{ textAlign:'right', fontFamily:'monospace', color:colors.teal, fontWeight:600 }}>{Math.abs(runBal).toLocaleString('en-IN',{minimumFractionDigits:2})} {runBal>=0?'Dr':'Cr'}</span>
-              </div>
-            );
-          })}
-        </div>
-        {/* Footer */}
-        <div style={{ display:'grid', gridTemplateColumns:'100px 110px 1fr 95px 95px 115px', padding:'8px 12px', fontSize:10, fontWeight:900, background:colors.light, borderTop:`2px solid ${colors.teal}`, color:colors.teal }}>
-          <span style={{ gridColumn:'1/4', textTransform:'uppercase' }}>Closing Balance</span>
-          <span style={{ textAlign:'right', fontFamily:'monospace' }}>{totalDebit.toLocaleString('en-IN',{minimumFractionDigits:2})}</span>
-          <span style={{ textAlign:'right', fontFamily:'monospace' }}>{totalCredit.toLocaleString('en-IN',{minimumFractionDigits:2})}</span>
-          <span style={{ textAlign:'right', fontFamily:'monospace' }}>{Math.abs(finalBal).toLocaleString('en-IN',{minimumFractionDigits:2})} {finalBal>=0?'Dr':'Cr'}</span>
+        <div style={{ padding:'8px 16px 12px', display:'flex', justifyContent:'flex-end', gap:10 }}>
+          <button onClick={()=>onAccept(f,t)} style={{ background:HDR, color:'#fff', border:'none', padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Accept</button>
+          <button onClick={onCancel}          style={{ background:'#f0f4f8', color:'#444', border:`1px solid ${BD}`, padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Cancel</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-export default function BalanceSheetScreen({ branchId, onBack }: {
-  branchId?: string; onBack?: () => void;
-}) {
-  const [ledgers,        setLedgers]        = useState<Ledger[]>([]);
-  const [vouchers,       setVouchers]       = useState<Voucher[]>([]);
-  const [groups,         setGroups]         = useState<Group[]>([]);
-  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
-  const [companyName,    setCompanyName]    = useState('');
-  const [drillLedger,    setDrillLedger]    = useState<Ledger | null>(null);
-  const [loading,        setLoading]        = useState(true);
-  const [error,          setError]          = useState<string | null>(null);
-  const [debugInfo,      setDebugInfo]      = useState<string>('');
-  const [fetchDetails,   setFetchDetails]   = useState<string>('');
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // ── Fetch data with enhanced error handling ────────────────────────────────
+// ─── Add Comparison Period Modal ───────────────────────────────────────────────
+function AddPeriodModal({ onAdd, onCancel }: { onAdd:(label:string,from:string,to:string)=>void; onCancel:()=>void }) {
+  const [label, setLabel] = useState('');
+  const [from,  setFrom]  = useState('');
+  const [to,    setTo]    = useState('');
+  const HDR = '#1f4e79'; const BD = '#b8c4cc';
+  const FONT = `-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif`;
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      setFetchDetails('');
-      
-      try {
-        // Build query string
-        const q = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
-        const endpoints = {
-          ledgers: `/api/ledgers${q}`,
-          vouchers: `/api/vouchers${q}`,
-          groups: `/api/account-groups${q}`,
-          branches: `/api/branches`,
-        };
-
-        const fetchLog: string[] = [];
-
-        const fetchWithLog = async (name: string, url: string) => {
-          try {
-            fetchLog.push(`📡 Fetching ${name}: ${url}`);
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-              fetchLog.push(`❌ ${name}: HTTP ${response.status}`);
-              const text = await response.text();
-              fetchLog.push(`   Response: ${text.substring(0, 100)}`);
-              return [];
-            }
-            
-            const data = await response.json();
-            const isArray = Array.isArray(data);
-            fetchLog.push(`✅ ${name}: ${isArray ? data.length + ' items' : 'received object'}`);
-            return isArray ? data : [];
-          } catch (err: any) {
-            fetchLog.push(`⚠️ ${name}: ${err.message}`);
-            return [];
-          }
-        };
-
-        const [l, v, g, b] = await Promise.all([
-          fetchWithLog('Ledgers', endpoints.ledgers),
-          fetchWithLog('Vouchers', endpoints.vouchers),
-          fetchWithLog('Groups', endpoints.groups),
-          fetchWithLog('Branches', endpoints.branches),
-        ]);
-
-        setFetchDetails(fetchLog.join('\n'));
-
-        setLedgers(l);
-        setVouchers(v);
-        setGroups(g);
-
-        // Debug info
-        const knownGroups = [...LIABILITY_GROUPS, ...ASSET_GROUPS];
-        const ledgerGroups = [...new Set(l.map((ld: Ledger) => ld.group_name || ld.group || 'NONE'))];
-        const matchedGroups = ledgerGroups.filter(g => knownGroups.includes(g as string));
-        setDebugInfo(`${l.length} ledgers | ${v.length} vouchers | BS groups found: ${matchedGroups.join(', ') || 'NONE'}`);
-
-        // Auto-expand groups that have ledgers
-        const allBSGroups = [...LIABILITY_GROUPS, ...ASSET_GROUPS];
-        const groupsWithData = allBSGroups.filter(gName =>
-          l.some((ld: Ledger) => ld.group_name === gName || ld.group === gName)
-        );
-        setExpandedGroups(groupsWithData);
-
-        if (Array.isArray(b)) {
-          const br = b.find((c: any) => c.id === branchId);
-          if (br) setCompanyName(br.name);
-          else if (b.length > 0 && !branchId) setCompanyName(b[0]?.name || '');
-        }
-
-        // ⚠️ If no data at all, show error
-        if (l.length === 0 && v.length === 0 && g.length === 0) {
-          setError('⚠️ No data fetched from any endpoint. Check your API endpoints.');
-        }
-      } catch (err: any) {
-        console.error('[BS] fetch error:', err);
-        setError(err.message || 'Unknown error');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [branchId]);
-
-  useEffect(() => { containerRef.current?.focus(); }, [loading]);
-
-  // ── Balance calculation ────────────────────────────────────────────────────
-  const calculateBalance = useCallback((ledgerId: string): number => {
-    const ledger = ledgers.find(l => l.id === ledgerId);
-    if (!ledger) return 0;
-    const ob = Number(ledger.openingBalance || 0);
-    let bal = ledger.balanceType === 'Cr' ? -ob : ob;
-    for (const v of vouchers) {
-      if (!Array.isArray(v.entries)) continue;
-      for (const e of v.entries) {
-        if (e.ledgerId !== ledgerId) continue;
-        const amt = Number(e.amount || 0);
-        bal += e.type === 'Dr' ? amt : -amt;
-      }
-    }
-    return bal;
-  }, [ledgers, vouchers]);
-
-  const getGroupTotal = useCallback((groupName: string): number => {
-    const groupLedgers = ledgers.filter(l => l.group_name === groupName || l.group === groupName);
-    let total = groupLedgers.reduce((acc, l) => acc + calculateBalance(l.id), 0);
-    const subGroups = groups.filter(g => g.parent_group === groupName || g.under === groupName);
-    for (const sg of subGroups) total += getGroupTotal(sg.name);
-    return total;
-  }, [ledgers, groups, calculateBalance]);
-
-  const getDrillEntries = useCallback((ledger: Ledger): DrillEntry[] => {
-    const result: DrillEntry[] = [];
-    const relevant = vouchers
-      .filter(v => Array.isArray(v.entries) && v.entries.some(e => e.ledgerId === ledger.id))
-      .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
-    for (const v of relevant) {
-      for (const e of v.entries) {
-        if (e.ledgerId !== ledger.id) continue;
-        const amt = Number(e.amount || 0);
-        result.push({
-          date: v.date ? new Date(v.date).toLocaleDateString('en-IN') : '—',
-          voucherType: v.type || 'Journal',
-          narration: v.narration || '',
-          debit:  e.type === 'Dr' ? amt : 0,
-          credit: e.type === 'Cr' ? amt : 0,
-          balance: 0,
-        });
-      }
-    }
-    return result;
-  }, [vouchers]);
-
-  const handleExport = useCallback(() => {
-    try {
-      const rows = [
-        ...LIABILITY_GROUPS.map(g => ({ Side: 'Liabilities', Group: g, Amount: -getGroupTotal(g) })),
-        ...ASSET_GROUPS.map(g => ({ Side: 'Assets', Group: g, Amount: getGroupTotal(g) })),
-      ];
-      const csv = ['Side,Group,Amount', ...rows.map(r => `${r.Side},${r.Group},${r.Amount.toFixed(2)}`)].join('\n');
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-      a.download = 'Balance_Sheet.csv';
-      a.click();
-    } catch(e) { console.error('Export failed', e); }
-  }, [getGroupTotal]);
-
-  const printReport = () => {
-    const el = document.getElementById('balance-sheet-report');
-    if (!el) return;
-    const w = window.open('', '_blank');
-    if (!w) return;
-    w.document.write(`<html><head><title>Balance Sheet</title><style>body{font-family:monospace;font-size:11px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px}</style></head><body>${el.innerHTML}</body></html>`);
-    w.document.close();
-    w.print();
-  };
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Escape') { onBack?.(); return; }
-    e.stopPropagation();
-    if (e.altKey && e.key.toUpperCase() === 'P') { e.preventDefault(); printReport(); }
-    if (e.altKey && e.key.toUpperCase() === 'E') { e.preventDefault(); handleExport(); }
-    if (e.key === 'F1') { e.preventDefault(); setExpandedGroups([]); }
-  }, [onBack, handleExport]);
-
-  const toggleGroup = (name: string) =>
-    setExpandedGroups(prev =>
-      prev.includes(name) ? prev.filter(g => g !== name) : [...prev, name]
-    );
-
-  // ── Render one BS side ─────────────────────────────────────────────────────
-  const renderSection = (title: string, groupNames: string[]) => {
-    const isLiab = title === 'Liabilities';
-
-    const sections = groupNames.map(name => {
-      const raw     = getGroupTotal(name);
-      const display = isLiab ? -raw : raw;
-      const ledgerCount = ledgers.filter(l => l.group_name === name || l.group === name).length;
-      return { name, raw, display, ledgerCount };
-    }).filter(s => s.ledgerCount > 0);
-
-    const total = sections.reduce((acc, s) => acc + s.display, 0);
-
-    return (
-      <div style={{ display:'flex', flexDirection:'column', height:'100%' }}>
-        <div style={{ flex:1 }}>
-          {sections.length === 0 ? (
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'48px 16px', gap:8 }}>
-              <span style={{ fontSize:10, color:'#9ca3af', fontStyle:'italic' }}>No ledgers assigned to {title} groups</span>
-              <span style={{ fontSize:9, color:'#d1d5db' }}>
-                {isLiab ? LIABILITY_GROUPS.join(', ') : ASSET_GROUPS.join(', ')}
-              </span>
-            </div>
-          ) : sections.map(s => {
-            const isExpanded = expandedGroups.includes(s.name);
-            const groupLedgers = ledgers.filter(l =>
-              (l.group_name === s.name || l.group === s.name)
-            );
-
-            return (
-              <div key={s.name} style={{ borderBottom:'1px solid #f3f4f6' }}>
-                {/* Group header */}
-                <div
-                  onClick={() => toggleGroup(s.name)}
-                  style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 12px', cursor:'pointer', userSelect:'none', background: isExpanded ? `${colors.light}` : 'transparent' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = colors.light)}
-                  onMouseLeave={e => (e.currentTarget.style.background = isExpanded ? colors.light : 'transparent')}
-                >
-                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                    <span style={{ fontSize:9, color:colors.teal, width:12, fontWeight:'bold' }}>
-                      {isExpanded ? '▾' : '▸'}
-                    </span>
-                    <span style={{ fontSize:11, fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.05em', color:'#374151' }}>
-                      {s.name}
-                    </span>
-                    <span style={{ fontSize:9, color:'#9ca3af' }}>({s.ledgerCount})</span>
-                  </div>
-                  <span style={{ fontSize:11, fontFamily:'monospace', fontWeight:'bold', color: s.display >= 0 ? '#1f2937' : '#dc2626' }}>
-                    {s.display.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-
-                {/* Expanded: ledger rows */}
-                {isExpanded && (
-                  <div style={{ background:'#fafafa', borderTop:'1px solid #f3f4f6', paddingBottom:4 }}>
-                    {groupLedgers.map(l => {
-                      const bal     = calculateBalance(l.id);
-                      const display = isLiab ? -bal : bal;
-                      return (
-                        <div
-                          key={l.id}
-                          onClick={() => setDrillLedger(l)}
-                          title="Click to view transactions"
-                          style={{ display:'flex', justifyContent:'space-between', padding:'2px 40px', fontSize:10, color:colors.teal, cursor:'pointer' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = '#e8f4f4'; e.currentTarget.style.fontWeight = '600'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.fontWeight = 'normal'; }}
-                        >
-                          <span style={{ fontStyle:'italic' }}>{l.name}</span>
-                          <span style={{ fontFamily:'monospace' }}>
-                            {display.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Total row */}
-        <div style={{ background:colors.light, padding:'8px 12px', display:'flex', justifyContent:'space-between', fontWeight:900, fontSize:12, color:colors.teal, borderTop:`2px solid ${colors.teal}`, marginTop:'auto' }}>
-          <span>TOTAL</span>
-          <span style={{ fontFamily:'monospace' }}>
-            ₹ {total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-          </span>
-        </div>
-      </div>
-    );
-  };
-
-  const reportDate = new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
-
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel(); } };
+    window.addEventListener('keydown', h, true);
+    return () => window.removeEventListener('keydown', h, true);
+  }, [onCancel]);
   return (
-    <>
-      {drillLedger && (
-        <LedgerDrillDown
-          ledger={drillLedger}
-          entries={getDrillEntries(drillLedger)}
-          onClose={() => setDrillLedger(null)}
-        />
-      )}
-
-      <div
-        ref={containerRef}
-        tabIndex={0}
-        onKeyDown={handleKeyDown}
-        style={{ display:'flex', flexDirection:'column', height:'100%', background:colors.bg, outline:'none', fontFamily:'monospace, "Courier New"', minHeight:'100vh' }}
-      >
-        {/* Top bar */}
-        <div style={{ background:colors.sidebar, color:'#fff', padding:'4px 16px', fontWeight:'bold', fontSize:12, textTransform:'uppercase', display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:10 }}>
-          <span>Balance Sheet</span>
-          <span style={{ color:colors.accent, fontSize:10, fontWeight:'normal' }}>
-            {companyName || (branchId ? `Branch: ${branchId}` : 'All Branches')}
-          </span>
-        </div>
-
-        {/* Loading */}
-        {loading && (
-          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <div style={{ textAlign:'center' }}>
-              <div style={{ color:colors.teal, fontWeight:'bold', animation:'pulse 1s infinite' }}>
-                ⏳ Loading Balance Sheet…
-              </div>
-              <div style={{ fontSize:10, color:'#9ca3af', marginTop:4 }}>
-                {branchId ? `branchId: ${branchId}` : 'Fetching all branches…'}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Error */}
-        {error && !loading && (
-          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', padding:32 }}>
-            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, padding:24, maxWidth:600, textAlign:'left', fontFamily:'monospace', fontSize:11 }}>
-              <div style={{ color:'#dc2626', fontWeight:'bold', fontSize:14, marginBottom:8 }}>⚠️ Failed to load Balance Sheet</div>
-              <div style={{ color:'#ef4444', marginBottom:12, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{error}</div>
-              
-              {fetchDetails && (
-                <>
-                  <div style={{ color:'#6b7280', fontWeight:'bold', marginTop:16, marginBottom:8 }}>📡 Fetch Details:</div>
-                  <div style={{ background:'#fef2f2', border:'1px solid #fde68a', padding:8, borderRadius:4, whiteSpace:'pre-wrap', wordBreak:'break-word', fontSize:10, color:'#92400e' }}>
-                    {fetchDetails}
-                  </div>
-                </>
-              )}
-
-              <div style={{ color:'#6b7280', fontSize:10, marginTop:16 }}>
-                <b>Troubleshooting:</b>
-                <ul style={{ marginTop:6, paddingLeft:20 }}>
-                  <li>✓ Check Network tab in DevTools (F12)</li>
-                  <li>✓ Verify API endpoints exist: /api/ledgers, /api/vouchers, /api/account-groups</li>
-                  <li>✓ Check CORS headers if APIs are on different domain</li>
-                  <li>✓ Ensure database has data with matching group_name/group</li>
-                </ul>
-              </div>
-
-              <button
-                onClick={() => window.location.reload()}
-                style={{ marginTop:16, padding:'6px 16px', background:colors.teal, color:'#fff', border:'none', borderRadius:4, cursor:'pointer', fontSize:11 }}
-              >
-                🔄 Retry
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Main content */}
-        {!loading && !error && (
-          <div style={{ flex:1, overflow:'auto', padding:16, paddingRight: 112 }}>
-            {/* Debug bar — shows data status */}
-            {debugInfo && (
-              <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:4, padding:'4px 12px', marginBottom:8, fontSize:9, color:'#92400e', fontFamily:'monospace' }}>
-                📊 {debugInfo}
-              </div>
-            )}
-
-            <div
-              id="balance-sheet-report"
-              style={{ maxWidth:900, margin:'0 auto', background:'#fff', border:`1px solid ${colors.teal}`, boxShadow:'0 2px 8px rgba(0,0,0,0.1)' }}
-            >
-              {/* Company header */}
-              <div style={{ textAlign:'center', padding:'12px 0', borderBottom:'1px solid #e5e7eb' }}>
-                <h1 style={{ margin:0, fontSize:15, fontWeight:900, textTransform:'uppercase', letterSpacing:'0.1em', color:'#1f2937' }}>
-                  {companyName || 'Balance Sheet'}
-                </h1>
-                <p style={{ margin:'2px 0 0', fontSize:10, fontWeight:'bold', color:'#4b5563' }}>Balance Sheet</p>
-                <p style={{ margin:'2px 0 0', fontSize:9, color:'#9ca3af' }}>As at {reportDate}</p>
-              </div>
-
-              {/* Two-column table */}
-              <div style={{ display:'flex', borderTop:'none', minHeight:400 }}>
-                {/* Liabilities */}
-                <div style={{ width:'50%', display:'flex', flexDirection:'column', borderRight:`1px solid ${colors.teal}` }}>
-                  <div style={{ background:colors.light, padding:'4px 12px', borderBottom:`1px solid ${colors.teal}`, display:'flex', justifyContent:'space-between', fontSize:10, fontWeight:'bold', textTransform:'uppercase', color:colors.teal }}>
-                    <span>Liabilities</span>
-                    <span style={{ fontWeight:'normal', color:'#6b7280', fontSize:9 }}>as at {reportDate}</span>
-                  </div>
-                  {renderSection('Liabilities', LIABILITY_GROUPS)}
-                </div>
-
-                {/* Assets */}
-                <div style={{ width:'50%', display:'flex', flexDirection:'column' }}>
-                  <div style={{ background:colors.light, padding:'4px 12px', borderBottom:`1px solid ${colors.teal}`, display:'flex', justifyContent:'space-between', fontSize:10, fontWeight:'bold', textTransform:'uppercase', color:colors.teal }}>
-                    <span>Assets</span>
-                    <span style={{ fontWeight:'normal', color:'#6b7280', fontSize:9 }}>as at {reportDate}</span>
-                  </div>
-                  {renderSection('Assets', ASSET_GROUPS)}
-                </div>
-              </div>
-
-              {/* Hint bar */}
-              <div style={{ background:'#f9fafb', borderTop:'1px solid #f3f4f6', padding:'4px 12px', display:'flex', gap:16, flexWrap:'wrap', fontSize:9, color:'#9ca3af' }}>
-                <span>▸/▾ Click group to expand</span>
-                <span>Click ledger name to view transactions</span>
-                <span>F1 Condense · Alt+P Print · Alt+E Export CSV · ESC Back</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Right hotkey panel */}
-        <div style={{ position:'fixed', right:0, top:32, bottom:0, width:96, background:colors.sidebar, display:'flex', flexDirection:'column', gap:2, padding:2, fontSize:10, color:'#fff', zIndex:20 }}>
+    <div style={{ position:'fixed', inset:0, zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.4)' }}>
+      <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:2, boxShadow:'0 8px 32px rgba(0,0,0,0.28)', width:340, overflow:'hidden', fontFamily:FONT }}>
+        <div style={{ background:HDR, color:'#fff', padding:'5px 12px', fontSize:12, fontWeight:700 }}>Add Comparison Period</div>
+        <div style={{ padding:'14px 16px', display:'flex', flexDirection:'column', gap:12 }}>
           {[
-            { label: 'F1: Condensed', fn: () => setExpandedGroups([]) },
-            { label: 'F2: Period',    fn: () => {} },
-            { label: 'F3: Company',   fn: () => {} },
-            { label: 'Alt+P: Print',  fn: printReport },
-            { label: 'Alt+E: Export', fn: handleExport },
-            { label: 'F12: Config',   fn: () => {} },
-            { label: 'ESC: Back',     fn: () => onBack?.() },
-          ].map(btn => (
-            <div
-              key={btn.label}
-              onClick={btn.fn}
-              style={{ height:40, background:colors.hotkey, display:'flex', alignItems:'center', padding:'0 8px', cursor:'pointer', fontSize:10 }}
-              onMouseEnter={e => { e.currentTarget.style.background = colors.accent; e.currentTarget.style.color = '#000'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = colors.hotkey; e.currentTarget.style.color = '#fff'; }}
-            >
-              {btn.label}
+            { lbl:'Label (optional):', val:label, set:setLabel, type:'text',  ph:'e.g. FY 2023-24' },
+            { lbl:'From Date :',       val:from,  set:setFrom,  type:'date',  ph:'' },
+            { lbl:'To Date :',         val:to,    set:setTo,    type:'date',  ph:'' },
+          ].map((row,i) => (
+            <div key={i} style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <label style={{ fontSize:12, color:'#555', fontStyle:'italic', width:110, flexShrink:0 }}>{row.lbl}</label>
+              <input autoFocus={i===0} type={row.type} value={row.val} placeholder={row.ph} onChange={e=>row.set(e.target.value)}
+                style={{ flex:1, border:'none', borderBottom:`2px solid ${HDR}`, outline:'none', fontSize:13, fontWeight:700, fontFamily:FONT, padding:'2px 4px', background:'#fffde0', color:'#1a1a1a' }} />
             </div>
           ))}
         </div>
+        <div style={{ padding:'8px 16px 12px', display:'flex', justifyContent:'flex-end', gap:10 }}>
+          <button onClick={()=>{ if(from&&to) onAdd(label||`${fmtDate(from)} – ${fmtDate(to)}`,from,to); }}
+            style={{ background:HDR, color:'#fff', border:'none', padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Add</button>
+          <button onClick={onCancel} style={{ background:'#f0f4f8', color:'#444', border:`1px solid ${BD}`, padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Cancel</button>
+        </div>
       </div>
-    </>
+    </div>
   );
 }
+
+// ─── Types ─────────────────────────────────────────────────────────────────────
+interface Period { label: string; from: string; to: string; }
+interface BSScreenProps { branchId?: string; }
+
+const FONT_    = `-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,sans-serif`;
+const HDR_BG   = '#1f4e79';
+const BORDER   = '#b8c4cc';
+const LIGHT    = '#f0f4f8';
+const ROW_BDR  = '#e0e6ee';
+const DARK     = '#1a2a3a';
+
+// Balance Sheet group definitions
+// Liabilities side (left): Credit-natured groups → stored as negative running
+// Assets side (right): Debit-natured groups → stored as positive running
+const LIABILITY_GROUPS = ['Capital Account', 'Reserves & Surplus', 'Loans (Liability)', 'Current Liabilities', 'Suspense Account'];
+const ASSET_GROUPS     = ['Fixed Assets', 'Investments', 'Current Assets', 'Misc. Expenses (Asset)'];
+
+// ─── Main BSScreen ─────────────────────────────────────────────────────────────
+export default function BalanceSheetScreen({ branchId }: BSScreenProps) {
+  const [ledgers, setLedgers]             = useState<any[]>([]);
+  const [allVouchers, setAllVouchers]     = useState<any[]>([]);
+  const [companyName, setCompanyName]     = useState('');
+  const [mainPeriod, setMainPeriod]       = useState({ from: '', to: '' });
+  const [extraPeriods, setExtraPeriods]   = useState<Period[]>([]);
+  const [showPeriod, setShowPeriod]       = useState(false);
+  const [showAddPeriod, setShowAddPeriod] = useState(false);
+  const [expanded, setExpanded]           = useState<Set<string>>(new Set());
+  const [drillLedger, setDrillLedger]     = useState<Ledger | null>(null);
+  const [loading, setLoading]             = useState(true);
+  const [showNettProfit, setShowNettProfit] = useState(true); // include P&L balance on liability side
+
+  // ── Fetch once ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const q = branchId ? `?branchId=${branchId}` : '';
+    setLoading(true);
+    Promise.all([
+      fetch(`/api/ledgers${q}`).then(r => r.json()),
+      fetch(`/api/vouchers${q}`).then(r => r.json()),
+      fetch('/api/branches').then(r => r.json()).catch(() => []),
+    ]).then(([l, v, b]) => {
+      setLedgers(Array.isArray(l) ? l : []);
+      const vArr = Array.isArray(v) ? v : [];
+      setAllVouchers(vArr);
+      if (vArr.length > 0) {
+        const dates = vArr.map((x:any) => x.date?.slice(0,10)).filter(Boolean).sort();
+        setMainPeriod({ from: dates[0], to: dates[dates.length-1] });
+      }
+      if (Array.isArray(b)) {
+        const br = branchId ? b.find((x:any)=>x.id===branchId) : b[0];
+        if (br) setCompanyName(br.name);
+      }
+    }).catch(()=>{}).finally(()=>setLoading(false));
+    fetch('/api/settings/company').then(r=>r.ok?r.json():null)
+      .then(d=>{if(d?.name)setCompanyName(d.name);}).catch(()=>{});
+  }, [branchId]);
+
+  // ── Balance calculation for a ledger within a period ────────────────
+  const calcBalanceForPeriod = useCallback((ledgerId: string, from: string, to: string) => {
+    const ledger  = ledgers.find(l => l.id === ledgerId);
+    const ob      = Number(ledger?.openingBalance || 0);
+    let running   = ledger?.balanceType === 'Cr' ? -ob : ob;
+    allVouchers.forEach(v => {
+      const vDate = v.date?.slice(0,10) || '';
+      if (from && vDate < from) return;
+      if (to   && vDate > to)   return;
+      (v.entries || []).forEach((e:any) => {
+        if (e.ledgerId === ledgerId) running += e.type === 'Dr' ? Number(e.amount) : -Number(e.amount);
+      });
+    });
+    return running;
+  }, [ledgers, allVouchers]);
+
+  const groupTotalForPeriod = useCallback((groupName: string, from: string, to: string) => {
+    return ledgers
+      .filter(l => l.group === groupName || l.group_name === groupName)
+      .reduce((acc, l) => acc + calcBalanceForPeriod(l.id, from, to), 0);
+  }, [ledgers, calcBalanceForPeriod]);
+
+  const groupLedgersNonZero = useCallback((groupName: string, from: string, to: string) => {
+    return ledgers
+      .filter(l => l.group === groupName || l.group_name === groupName)
+      .filter(l => calcBalanceForPeriod(l.id, from, to) !== 0);
+  }, [ledgers, calcBalanceForPeriod]);
+
+  // All periods
+  const allPeriods: Period[] = useMemo(() => [
+    { label: companyName || '…', from: mainPeriod.from, to: mainPeriod.to },
+    ...extraPeriods,
+  ], [mainPeriod, extraPeriods, companyName]);
+
+  // ── P&L net profit (to carry to Balance Sheet liabilities) ──────────
+  // Net profit = Income groups total − Expense groups total (positive = profit)
+  const PL_INCOME_GROUPS   = ['Sales Account', 'Direct Income', 'Indirect Income', 'Closing Stock'];
+  const PL_EXPENSE_GROUPS  = ['Opening Stock', 'Purchase Account', 'Direct Expenses', 'Indirect Expenses'];
+
+  const plNetForPeriod = useCallback((from: string, to: string) => {
+    const income  = PL_INCOME_GROUPS.reduce((a,g)  => a + Math.abs(groupTotalForPeriod(g, from, to)), 0);
+    const expense = PL_EXPENSE_GROUPS.reduce((a,g) => a + Math.abs(groupTotalForPeriod(g, from, to)), 0);
+    return income - expense; // positive = net profit, negative = net loss
+  }, [groupTotalForPeriod]);
+
+  // ── Per-period BS totals ─────────────────────────────────────────────
+  const periodTotals = useMemo(() => allPeriods.map(p => {
+    // Liabilities: Cr-natured → take abs of negative running totals
+    // For Capital/Loans/CL: the ledgers typically have Cr balances → running is negative
+    // We display abs value on liability side
+    const liabRaw = LIABILITY_GROUPS.reduce((a,g) => a + groupTotalForPeriod(g, p.from, p.to), 0);
+    // Assets: Dr-natured → running is positive
+    const assetRaw = ASSET_GROUPS.reduce((a,g) => a + groupTotalForPeriod(g, p.from, p.to), 0);
+    const plNet    = showNettProfit ? plNetForPeriod(p.from, p.to) : 0;
+
+    // Total liabilities (credit side) = abs(liabRaw) + P&L net profit (if profit, adds to equity)
+    const liabTotal  = Math.abs(liabRaw) + (plNet >= 0 ? plNet : 0);
+    // Total assets (debit side) = assetRaw + net loss (if loss, it's a debit balance under assets)
+    const assetTotal = Math.abs(assetRaw) + (plNet < 0 ? Math.abs(plNet) : 0);
+    const grand = Math.max(liabTotal, assetTotal);
+    const diff  = liabTotal - assetTotal; // should be 0 if balanced
+
+    return { liabRaw, assetRaw, plNet, liabTotal, assetTotal, grand, diff };
+  }), [allPeriods, groupTotalForPeriod, plNetForPeriod, showNettProfit]);
+
+  // ── Keyboard shortcuts ───────────────────────────────────────────────
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (drillLedger) return;
+
+      let handled = false;
+      if (e.key === 'F2') { setShowPeriod(p=>!p); handled = true; }
+      else if (e.key === 'F5') {
+        setExpanded(new Set([...LIABILITY_GROUPS, ...ASSET_GROUPS])); handled = true;
+      }
+      else if (e.key === 'Escape') { setExpanded(new Set()); handled = true; }
+      else if (e.altKey && e.key.toLowerCase() === 'p') { window.print(); handled = true; }
+      else if (e.altKey && e.key.toLowerCase() === 'n') { setShowAddPeriod(true); handled = true; }
+      else if (e.altKey && e.key.toLowerCase() === 'e') { handleExport(); handled = true; }
+
+      if (handled) { e.preventDefault(); e.stopPropagation(); }
+    };
+    window.addEventListener('keydown', h, true);
+    return () => window.removeEventListener('keydown', h, true);
+  }, [drillLedger]);
+
+  const toggleGroup = (name: string) => setExpanded(prev => {
+    const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n;
+  });
+
+  const periodLabel = (p: {from:string;to:string}) =>
+    p.from && p.to ? `${fmtDate(p.from)} to ${fmtDate(p.to)}` : '—';
+
+  const handleExport = () => {
+    const rows: any[] = [];
+    allPeriods.forEach(p => {
+      LIABILITY_GROUPS.forEach(g => rows.push({ Period: p.label, Side:'Liabilities', Group:g, Amount: Math.abs(groupTotalForPeriod(g, p.from, p.to)) }));
+      ASSET_GROUPS.forEach(g =>     rows.push({ Period: p.label, Side:'Assets',      Group:g, Amount: Math.abs(groupTotalForPeriod(g, p.from, p.to)) }));
+    });
+    exportToExcel(rows, 'Balance_Sheet');
+  };
+
+  // ── Drill-down view ───────────────────────────────────────────────────
+  if (drillLedger) {
+    return <LedgerDetail ledger={drillLedger} branchId={branchId} onBack={() => setDrillLedger(null)} />;
+  }
+
+  // ── Column header cells ──────────────────────────────────────────────
+  const ColHdrCells = () => (
+    <>
+      <th style={{ ...rs.th, textAlign:'left', width:'50%' }}>Particulars</th>
+      {allPeriods.map((p,i) => (
+        <th key={i} style={{ ...rs.th, textAlign:'right', width:`${50/allPeriods.length}%`, borderLeft: i===0?'none':'1px solid #ccd5dd' }}>
+          <div style={{ fontSize:11, fontWeight:800, color:'#1a1a1a', whiteSpace:'nowrap' }}>{p.label}</div>
+          <div style={{ fontSize:10, fontWeight:400, color:'#777', whiteSpace:'nowrap' }}>{periodLabel(p)}</div>
+        </th>
+      ))}
+    </>
+  );
+
+  // ── Group row renderer ────────────────────────────────────────────────
+  const renderGroupRow = (grpName: string) => {
+    const anyNonZero = allPeriods.some(p => groupTotalForPeriod(grpName, p.from, p.to) !== 0);
+    if (!anyNonZero) return null;
+
+    const isExp = expanded.has(grpName);
+
+    return (
+      <React.Fragment key={grpName}>
+        <tr style={{ ...rs.groupRow, cursor:'pointer' }} onClick={()=>toggleGroup(grpName)} className="bs-grp-row">
+          <td style={rs.tdName}>
+            <span style={rs.toggle}>{isExp ? '−' : '+'}</span>
+            <span style={rs.groupName}>{grpName}</span>
+          </td>
+          {allPeriods.map((p,i) => {
+            const raw = groupTotalForPeriod(grpName, p.from, p.to);
+            const abs = Math.abs(raw);
+            return (
+              <td key={i} style={{ ...rs.tdAmt, borderLeft: i===0?'none':'1px solid #dde4ec' }}>
+                {abs > 0 ? fmtAmtAbs(abs) : ''}
+              </td>
+            );
+          })}
+        </tr>
+        {isExp && groupLedgersNonZero(grpName, mainPeriod.from, mainPeriod.to).map(l => (
+          <tr key={l.id} style={rs.ledgerRow}>
+            <td style={{ ...rs.tdName, paddingLeft:28 }}>
+              <span
+                onClick={(e) => { e.stopPropagation(); setDrillLedger(l); }}
+                style={{ fontStyle:'italic', color:'#1a5fa8', cursor:'pointer', textDecoration:'underline', fontSize:11 }}
+                title="Click to view transactions"
+              >
+                {l.name}
+              </span>
+            </td>
+            {allPeriods.map((p,i) => {
+              const bal = calcBalanceForPeriod(l.id, p.from, p.to);
+              return (
+                <td key={i} style={{ ...rs.tdAmt, color:'#555', fontWeight:400, fontSize:11, borderLeft: i===0?'none':'1px solid #dde4ec' }}>
+                  {bal !== 0 ? fmtAmtAbs(bal) : ''}
+                </td>
+              );
+            })}
+          </tr>
+        ))}
+      </React.Fragment>
+    );
+  };
+
+  // ── Section separator (like Tally's italic heading) ──────────────────
+  const SectionHeader = ({ label }: { label: string }) => (
+    <tr style={{ background:'#fafbff' }}>
+      <td colSpan={1 + allPeriods.length}
+        style={{ padding:'6px 10px 2px', fontSize:12, fontStyle:'italic', fontWeight:600, color:'#444', letterSpacing:2, borderBottom:'none' }}>
+        {label}
+      </td>
+    </tr>
+  );
+
+  // ── P&L balance row on liabilities / assets side ─────────────────────
+  const renderPLRow = () => (
+    <tr style={{ ...rs.groupRow, background:'#fffbf0' }}>
+      <td style={{ ...rs.tdName, fontStyle:'italic', paddingLeft:16 }}>
+        {periodTotals[0]?.plNet >= 0 ? 'Profit & Loss A/c  (Net Profit)' : 'Profit & Loss A/c  (Net Loss)'}
+      </td>
+      {periodTotals.map((pt,i) => (
+        <td key={i} style={{ ...rs.tdAmt, color: pt.plNet >= 0 ? '#006b00' : '#7a0000', fontStyle:'italic', borderLeft: i===0?'none':'1px solid #dde4ec' }}>
+          {Math.abs(pt.plNet) > 0 ? fmtAmtAbs(pt.plNet) : ''}
+        </td>
+      ))}
+    </tr>
+  );
+
+  // ── Difference row (should be 0 if balanced) ──────────────────────────
+  const renderDiffRow = (side: 'liab'|'asset') => {
+    const anyDiff = periodTotals.some(pt => Math.abs(pt.diff) > 0.005);
+    if (!anyDiff) return null;
+    return (
+      <tr style={{ ...rs.groupRow, background:'#fff0f0' }}>
+        <td style={{ ...rs.tdName, fontStyle:'italic', color:'#7a0000', paddingLeft:16 }}>
+          {side === 'liab' ? 'Difference (Cr > Dr)' : 'Difference (Dr > Cr)'}
+        </td>
+        {periodTotals.map((pt,i) => {
+          const show = side === 'liab' ? pt.diff < 0 : pt.diff > 0;
+          return (
+            <td key={i} style={{ ...rs.tdAmt, color:'#7a0000', fontStyle:'italic', borderLeft: i===0?'none':'1px solid #dde4ec' }}>
+              {show ? fmtAmtAbs(pt.diff) : ''}
+            </td>
+          );
+        })}
+      </tr>
+    );
+  };
+
+  return (
+    <div style={s.root} id="bs-report">
+      <style>{`
+        @media print { .no-print { display:none!important; } }
+        .bs-grp-row:hover { background: #eef4fb !important; }
+      `}</style>
+
+      {/* Modals */}
+      {showPeriod && (
+        <PeriodModal from={mainPeriod.from} to={mainPeriod.to}
+          onAccept={(f,t) => { setMainPeriod({from:f,to:t}); setShowPeriod(false); }}
+          onCancel={() => setShowPeriod(false)} />
+      )}
+      {showAddPeriod && (
+        <AddPeriodModal
+          onAdd={(label,from,to) => { setExtraPeriods(p=>[...p,{label,from,to}]); setShowAddPeriod(false); }}
+          onCancel={() => setShowAddPeriod(false)} />
+      )}
+
+      {/* Title Bar */}
+      <div style={s.titleBar}>
+        <span style={{ flex:1, fontWeight:700 }}>Balance Sheet</span>
+        <span style={{ flex:2, textAlign:'center', fontWeight:800, fontSize:12 }}>{companyName||'…'}</span>
+        <span style={{ flex:1, textAlign:'right', opacity:0.7, fontSize:11 }}>{periodLabel(mainPeriod)}</span>
+      </div>
+
+      {/* Main Content */}
+      <div style={s.contentWrap}>
+        {loading ? (
+          <div style={{ padding:60, textAlign:'center', color:'#888', fontStyle:'italic', fontSize:13 }}>Loading…</div>
+        ) : (
+          <div style={s.twoCol}>
+
+            {/* ── LEFT: Liabilities ── */}
+            <div style={s.col}>
+              <table style={s.table}>
+                <thead>
+                  <tr style={{ background:LIGHT }}>
+                    <th colSpan={1 + allPeriods.length}
+                      style={{ ...rs.th, textAlign:'center', background:'#e8f0f7', letterSpacing:2, fontSize:12, fontWeight:800, color:'#1f4e79', borderBottom:'2px solid #b8c4cc' }}>
+                      LIABILITIES
+                    </th>
+                  </tr>
+                  <tr style={{ background:LIGHT }}><ColHdrCells /></tr>
+                </thead>
+                <tbody>
+                  <SectionHeader label="Share Capital & Reserves" />
+                  {renderGroupRow('Capital Account')}
+                  {renderGroupRow('Reserves & Surplus')}
+
+                  <SectionHeader label="Loan Funds" />
+                  {renderGroupRow('Loans (Liability)')}
+
+                  <SectionHeader label="Current Liabilities" />
+                  {renderGroupRow('Current Liabilities')}
+                  {renderGroupRow('Suspense Account')}
+
+                  {/* P&L Net Profit row on Liabilities side */}
+                  {showNettProfit && periodTotals[0]?.plNet >= 0 && renderPLRow()}
+                  {renderDiffRow('liab')}
+                </tbody>
+                <tfoot>
+                  <tr style={s.totalRow}>
+                    <td style={{ ...rs.tdName, fontWeight:900, fontSize:12, letterSpacing:1, paddingLeft:12 }}>Total</td>
+                    {periodTotals.map((pt,i) => (
+                      <td key={i} style={{ ...rs.tdAmt, fontWeight:900, fontSize:13, borderTop:'2px solid #555', borderLeft: i===0?'none':'1px solid #dde4ec' }}>
+                        {fmtAmtAbs(pt.grand)}
+                      </td>
+                    ))}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Column divider */}
+            <div style={s.divider} />
+
+            {/* ── RIGHT: Assets ── */}
+            <div style={s.col}>
+              <table style={s.table}>
+                <thead>
+                  <tr style={{ background:LIGHT }}>
+                    <th colSpan={1 + allPeriods.length}
+                      style={{ ...rs.th, textAlign:'center', background:'#e8f0f7', letterSpacing:2, fontSize:12, fontWeight:800, color:'#1f4e79', borderBottom:'2px solid #b8c4cc' }}>
+                      ASSETS
+                    </th>
+                  </tr>
+                  <tr style={{ background:LIGHT }}><ColHdrCells /></tr>
+                </thead>
+                <tbody>
+                  <SectionHeader label="Fixed Assets" />
+                  {renderGroupRow('Fixed Assets')}
+
+                  <SectionHeader label="Investments" />
+                  {renderGroupRow('Investments')}
+
+                  <SectionHeader label="Current Assets" />
+                  {renderGroupRow('Current Assets')}
+
+                  <SectionHeader label="Miscellaneous" />
+                  {renderGroupRow('Misc. Expenses (Asset)')}
+
+                  {/* P&L Net Loss row on Assets side */}
+                  {showNettProfit && periodTotals[0]?.plNet < 0 && renderPLRow()}
+                  {renderDiffRow('asset')}
+                </tbody>
+                <tfoot>
+                  <tr style={s.totalRow}>
+                    <td style={{ ...rs.tdName, fontWeight:900, fontSize:12, letterSpacing:1, paddingLeft:12 }}>Total</td>
+                    {periodTotals.map((pt,i) => (
+                      <td key={i} style={{ ...rs.tdAmt, fontWeight:900, fontSize:13, borderTop:'2px solid #555', borderLeft: i===0?'none':'1px solid #dde4ec' }}>
+                        {fmtAmtAbs(pt.grand)}
+                      </td>
+                    ))}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+          </div>
+        )}
+      </div>
+
+      {/* Right Function Buttons */}
+      <div style={s.rightPanel} className="no-print">
+        {[
+          { k:'F2',    l:'Period',        a:()=>setShowPeriod(true) },
+          { k:'F5',    l:'Expand All',    a:()=>setExpanded(new Set([...LIABILITY_GROUPS,...ASSET_GROUPS])) },
+          { k:'Esc',   l:'Collapse',      a:()=>setExpanded(new Set()) },
+          { k:'Alt+N', l:'Add Period',    a:()=>setShowAddPeriod(true) },
+          { k:'Alt+P', l:'Print',         a:()=>window.print() },
+          { k:'Alt+E', l:'Export Excel',  a:handleExport },
+          { k:'P&L',   l: showNettProfit ? 'Hide P&L\nBalance' : 'Show P&L\nBalance', a:()=>setShowNettProfit(p=>!p) },
+          { k:'',      l: extraPeriods.length > 0 ? `${extraPeriods.length} extra\nperiod(s)` : '', a:()=>{} },
+          { k:'✕ Clr', l:'Clear Periods', a:()=>setExtraPeriods([]) },
+          { k:'F12',   l:'Configure',     a:()=>{} },
+        ].map((b,i) => (
+          <button key={i} onClick={b.a} className="no-print" style={{
+            ...s.sideBtn,
+            background: b.k==='Alt+N' ? 'rgba(100,200,100,0.15)' : b.k==='✕ Clr' ? 'rgba(255,80,80,0.15)' : b.k==='P&L' ? 'rgba(255,200,50,0.12)' : 'none',
+            opacity: b.l ? 1 : 0.2,
+          }}>
+            <span style={s.sBtnKey}>{b.k}</span>
+            <span style={s.sBtnLabel}>{b.l}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Status Bar */}
+      <div style={s.statusBar} className="no-print">
+        <span style={{ color:'#aaa', fontSize:10 }}>
+          {periodTotals[0] && (() => {
+            const { liabTotal, assetTotal, plNet } = periodTotals[0];
+            const balanced = Math.abs(liabTotal - assetTotal) < 0.01;
+            return balanced
+              ? `Balance Sheet Balanced ✓  |  P&L: ${plNet >= 0 ? 'Net Profit' : 'Net Loss'} ₹ ${fmtAmtAbs(plNet)}`
+              : `⚠ Out of Balance by ₹ ${fmtAmtAbs(liabTotal - assetTotal)}`;
+          })()}
+          {extraPeriods.length > 0 && `  ·  Comparing ${allPeriods.length} periods`}
+        </span>
+        <span style={{ color:'#aaa', fontSize:10 }}>
+          F2: Period  |  F5: Expand  |  Alt+N: Add Comparison  |  Click ledger: Transactions  |  P&L: Toggle Net Profit
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Row styles ──────────────────────────────────────────────────────────────────
+const rs: Record<string, React.CSSProperties> = {
+  th:        { padding:'5px 10px', fontSize:11, fontWeight:700, color:'#333', borderBottom:`1px solid ${BORDER}`, background:LIGHT, whiteSpace:'nowrap' },
+  groupRow:  { borderBottom:`1px solid ${ROW_BDR}`, background:'#fff', transition:'background 0.07s' },
+  ledgerRow: { borderBottom:`1px solid ${ROW_BDR}`, background:'#fafbff' },
+  tdName:    { padding:'3px 8px', fontSize:12, verticalAlign:'middle', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' },
+  tdAmt:     { padding:'3px 10px', fontSize:12, fontWeight:700, textAlign:'right', verticalAlign:'middle', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' },
+  toggle:    { display:'inline-block', width:14, height:14, lineHeight:'14px', textAlign:'center', fontSize:11, fontWeight:900, border:`1px solid ${BORDER}`, background:LIGHT, color:'#555', marginRight:6, cursor:'pointer', flexShrink:0 },
+  groupName: { fontWeight:700, textTransform:'uppercase', fontSize:12, letterSpacing:0.3, color:'#1a1a1a' },
+};
+
+const s: Record<string, React.CSSProperties> = {
+  root:        { fontFamily:FONT_, fontSize:12, color:'#1a1a1a', background:'#fff', display:'flex', flexDirection:'column', height:'100%', border:`1px solid ${BORDER}`, borderRadius:2, overflow:'hidden', position:'relative' },
+  titleBar:    { background:HDR_BG, color:'#fff', display:'flex', alignItems:'center', padding:'3px 8px', fontSize:11, fontWeight:600, flexShrink:0 },
+  contentWrap: { flex:1, overflowY:'auto', paddingRight:90 },
+  twoCol:      { display:'flex', minHeight:'100%' },
+  col:         { flex:1, display:'flex', flexDirection:'column', minWidth:0 },
+  divider:     { width:2, background:BORDER, flexShrink:0 },
+  table:       { width:'100%', borderCollapse:'collapse', tableLayout:'fixed' },
+  totalRow:    { background:LIGHT, borderTop:`2px double #555`, position:'sticky', bottom:0 },
+  rightPanel:  { position:'absolute', top:26, right:0, bottom:24, width:88, background:DARK, display:'flex', flexDirection:'column', borderLeft:'1px solid #0d1a2a' },
+  sideBtn:     { border:'none', borderBottom:'1px solid rgba(255,255,255,0.07)', color:'#cdd5e0', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'flex-start', padding:'6px 8px', textAlign:'left', fontFamily:FONT_, flex:1, transition:'background 0.1s' },
+  sBtnKey:     { fontSize:9, color:'rgba(255,255,255,0.4)', fontWeight:700, lineHeight:1.3 },
+  sBtnLabel:   { fontSize:10, color:'#d0dae6', fontWeight:600, lineHeight:1.3, whiteSpace:'pre-line' },
+  statusBar:   { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'3px 100px 3px 8px', background:DARK, borderTop:'1px solid #0d1a2a', flexShrink:0, height:24 },
+};
