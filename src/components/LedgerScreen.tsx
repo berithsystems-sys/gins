@@ -17,42 +17,59 @@ export default function LedgerScreen({ branchId }: { branchId?: string }) {
   const [groups, setGroups] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch(`api/account-groups${branchId ? `?branchId=${branchId}` : ''}`)
-      .then(res => res.json())
+    fetch(`/api/account-groups${branchId ? `?branchId=${branchId}` : ''}`)
+      .then(res => {
+        if (!res.ok) throw new Error(`Failed to load groups: ${res.status}`);
+        return res.json();
+      })
       .then(data => {
         setGroups(data);
         if (data.length > 0) setGroupId(data[0].id);
-      });
+      })
+      .catch(err => console.error('Account groups fetch error:', err));
   }, [branchId]);
 
   const [methodAdjustment, setMethodAdjustment] = useState('On Account');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const response = await fetch('/api/ledgers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        name, 
-        groupId, 
-        group_name: groups.find(g => g.id === groupId)?.name,
-        openingBalance: Number(openingBalance), 
-        balanceType, 
-        gstType,
-        gstin,
-        email,
-        pan,
-        branchId,
-        methodAdjustment
-      }),
-    });
-    if (response.ok) {
-      alert('Ledger Created Successfully (ERP/GST Ready)');
-      setName('');
-      setOpeningBalance('0');
-      setGstin('');
-      setEmail('');
-      setPan('');
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      const response = await fetch('/api/ledgers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          name, 
+          groupId, 
+          group_name: groups.find(g => g.id === groupId)?.name,
+          openingBalance: Number(openingBalance), 
+          balanceType, 
+          gstType,
+          gstin,
+          email,
+          pan,
+          branchId,
+          methodAdjustment
+        }),
+      });
+      if (response.ok) {
+        alert('Ledger Created Successfully (ERP/GST Ready)');
+        setName('');
+        setOpeningBalance('0');
+        setGstin('');
+        setEmail('');
+        setPan('');
+      } else {
+        const errText = await response.text().catch(() => `HTTP ${response.status}`);
+        setSubmitError(`Save failed: ${errText || response.status}`);
+      }
+    } catch (err: any) {
+      setSubmitError(`Network error: ${err?.message ?? 'Could not reach server'}`);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -151,10 +168,21 @@ export default function LedgerScreen({ branchId }: { branchId?: string }) {
           </div>
 
           <div className="flex justify-end gap-4 pt-12">
+            {submitError && (
+              <div className="flex-1 bg-red-50 border border-red-300 text-red-700 text-[10px] font-bold px-3 py-2 uppercase">
+                {submitError}
+              </div>
+            )}
             <div className="bg-tally-light tally-border p-4 w-48 text-center tally-shadow">
                <p className="text-[10px] font-bold text-gray-400 mb-2 uppercase">Accept?</p>
                <div className="flex gap-4 justify-center">
-                  <button type="submit" className="bg-tally-teal text-white px-4 py-1 text-xs font-bold uppercase hover:bg-tally-header">Yes</button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="bg-tally-teal text-white px-4 py-1 text-xs font-bold uppercase hover:bg-tally-header disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {submitting ? '...' : 'Yes'}
+                  </button>
                   <button type="button" onClick={() => window.history.back()} className="bg-gray-200 px-4 py-1 text-xs font-bold uppercase hover:bg-gray-300">No</button>
                </div>
             </div>
