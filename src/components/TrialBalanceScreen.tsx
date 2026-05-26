@@ -58,7 +58,18 @@ function fmtDate(iso: string) {
 function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?: string; onBack: () => void }) {
   const [rows, setRows]     = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
+ // ← ADD THIS BLOCK
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onBack();
+      }
+    };
+    window.addEventListener('keydown', h, true);
+    return () => window.removeEventListener('keydown', h, true);
+  }, [onBack]);
   useEffect(() => {
     const q = branchId ? `?branchId=${branchId}` : '';
     fetch(`/api/vouchers/ledger/${ledger.id}${q}`)
