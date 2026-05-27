@@ -47,6 +47,16 @@ function VoucherRegister({ ledger, monthIdx, branchId, onBack }: any) {
       .catch(() => setVouchers([]));
   }, [ledger.id, monthIdx, branchId]);
 
+  useEffect(() => {
+    const handleKeys = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSelIdx(s => Math.min(vouchers.length - 1, s + 1)); }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setSelIdx(s => Math.max(0, s - 1)); }
+      if (e.key === 'Escape')    { e.preventDefault(); e.stopPropagation(); onBack(); }
+    };
+    window.addEventListener('keydown', handleKeys, true);
+    return () => window.removeEventListener('keydown', handleKeys, true);
+  }, [vouchers.length, onBack]);
+
   const totals = useMemo(() => {
     return vouchers.reduce((acc, v) => {
       if (v.entry_type === 'Dr') acc.dr += Number(v.entry_amount);
@@ -105,6 +115,17 @@ function LedgerMonthlySummary({ ledger, branchId, onBack, onDrill }: any) {
       });
   }, [ledger.id, branchId]);
 
+  useEffect(() => {
+    const handleKeys = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSelIdx(s => Math.min(11, s + 1)); }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setSelIdx(s => Math.max(0, s - 1)); }
+      if (e.key === 'Enter')     { e.preventDefault(); onDrill(data[selIdx]?.monthIdx); }
+      if (e.key === 'Escape')    { e.preventDefault(); e.stopPropagation(); onBack(); }
+    };
+    window.addEventListener('keydown', handleKeys, true);
+    return () => window.removeEventListener('keydown', handleKeys, true);
+  }, [selIdx, data, onBack, onDrill]);
+
   const totals = useMemo(() => {
     const dr = data.reduce((a, b) => a + b.dr, 0);
     const cr = data.reduce((a, b) => a + b.cr, 0);
@@ -135,7 +156,7 @@ function LedgerMonthlySummary({ ledger, branchId, onBack, onDrill }: any) {
             })}
           </tbody>
           <tfoot style={ds.tfoot}>
-            <tr>
+            <tr style={{borderTop: '2px solid #333'}}>
               <td style={ds.tdTotal}>Grand Total</td>
               <td style={{...ds.tdTotal, textAlign: 'right'}}>{fmtAmt(totals.dr)}</td>
               <td style={{...ds.tdTotal, textAlign: 'right'}}>{fmtAmt(totals.cr)}</td>
@@ -216,8 +237,27 @@ export default function TrialBalanceScreen({ branchId }: { branchId?: string }) 
     return list;
   }, [sortedGroups, expandedGroups, groupsData]);
 
-  // Key handlers (omitted for brevity, remains same as your original)
-  // ... (Include your Keyboard useEffect here)
+  // Restored Keyboard Handler
+  useEffect(() => {
+    if (viewLevel !== 'trial') return;
+    const handleKeys = (e: KeyboardEvent) => {
+      const idx = flatList.findIndex(x => x.key === selectedKey);
+      if (e.key === 'ArrowDown') { e.preventDefault(); const n = flatList[Math.min(flatList.length - 1, idx + 1)]; if (n) setSelectedKey(n.key); }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); const p = flatList[Math.max(0, idx - 1)];                  if (p) setSelectedKey(p.key); }
+      if (e.key === 'Enter') {
+        const curr = flatList[idx];
+        if (curr?.type === 'group') {
+          const n = new Set(expandedGroups);
+          n.has(curr.name) ? n.delete(curr.name) : n.add(curr.name);
+          setExpandedGroups(n);
+        } else if (curr?.type === 'ledger') {
+          setSelectedLedger(curr.ledger); setViewLevel('monthly');
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeys);
+    return () => window.removeEventListener('keydown', handleKeys);
+  }, [selectedKey, flatList, expandedGroups, viewLevel]);
 
   if (viewLevel === 'vouchers' && selectedLedger) {
     return <VoucherRegister ledger={selectedLedger} monthIdx={selectedMonthIdx} branchId={branchId} onBack={() => setViewLevel('monthly')} />;
@@ -254,7 +294,7 @@ export default function TrialBalanceScreen({ branchId }: { branchId?: string }) 
             ))}
           </tbody>
           <tfoot style={ds.tfoot}>
-            <tr>
+            <tr style={{borderTop: '2px solid #333'}}>
               <td style={s.colParticulars}><b>Grand Total</b></td>
               <td style={{...s.colDebit, fontWeight: 'bold'}}>{fmtAmt(grandTotals.dr)}</td>
               <td style={{...s.colCredit, fontWeight: 'bold'}}>{fmtAmt(grandTotals.cr)}</td>
@@ -276,8 +316,8 @@ const ds: Record<string, React.CSSProperties> = {
   thead:    { background: LIGHT, position: 'sticky', top: 0, zIndex: 10 },
   th:       { padding: '8px', borderBottom: `1px solid ${BORDER}`, textAlign: 'left', fontSize: 11, borderRight: `1px solid ${ROW_BDR}` },
   td:       { padding: '4px 8px', borderBottom: `1px solid ${ROW_BDR}`, fontSize: 12, borderRight: `1px solid ${ROW_BDR}`, whiteSpace: 'nowrap' },
-  tfoot:    { position: 'sticky', bottom: 0, background: '#fff', zIndex: 10, borderTop: `2px solid ${HDR_BG}` },
-  tdTotal:  { padding: '6px 8px', fontWeight: 'bold', borderTop: `1px solid ${BORDER}`, borderRight: `1px solid ${ROW_BDR}` },
+  tfoot:    { position: 'sticky', bottom: 0, background: '#fff', zIndex: 10 },
+  tdTotal:  { padding: '6px 8px', fontWeight: 'bold', borderRight: `1px solid ${ROW_BDR}`, background: '#f9f9f9' },
   tr:       { cursor: 'pointer' },
 };
 
