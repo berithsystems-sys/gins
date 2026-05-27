@@ -59,10 +59,12 @@ const fmtDate = (iso: string) => {
 const isVoided = (v: any): boolean =>
   v.voided === true || v.voided === 1 || v.voided === '1';
 
-// Normalize a raw ledger from the API so group is always a string
+// Normalize a raw ledger from the API so group is always a string.
+// NOTE: The DB "group" column stores the literal word "group" (a FK label),
+//       so we must use group_name which holds the real group name.
 const normalizeLedger = (raw: any): Ledger => ({
   ...raw,
-  group: (raw.group || raw.group_name || '').trim(),
+  group: (raw.group_name || raw.group || '').trim(),
 });
 
 // ── Static styles (module-level — never recreated on render) ─────────────────
@@ -341,6 +343,7 @@ function AddPeriodModal({ onAdd, onCancel }: {
 function BalanceSheetScreen({ branchId, onBack }: BSProps) {
   const [ledgers, setLedgers]             = useState<Ledger[]>([]);
   const [allVouchers, setAllVouchers]     = useState<any[]>([]);
+  const [allEntries, setAllEntries]       = useState<any[]>([]);
   const [companyName, setCompanyName]     = useState('');
   const [mainPeriod, setMainPeriod]       = useState({ from:'', to:'' });
   const [extraPeriods, setExtraPeriods]   = useState<Period[]>([]);
@@ -371,15 +374,27 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
     Promise.all([
       fetch(`/api/ledgers${q}`).then(r => { if (!r.ok) throw new Error(`Ledgers: ${r.status}`); return r.json(); }),
       fetch(`/api/vouchers${q}`).then(r => { if (!r.ok) throw new Error(`Vouchers: ${r.status}`); return r.json(); }),
+      fetch(`/api/voucher-entries${q}`).then(r => r.ok ? r.json() : []).catch(() => []),
       fetch('/api/branches').then(r => r.json()).catch(() => []),
     ])
-    .then(([l, v, b]) => {
-      // FIX #1 — normalize group field on load
+    .then(([l, v, ve, b]) => {
+      // Fix: use group_name (the "group" column = literal "group" label, not the name)
       const ledgerArr: Ledger[] = (Array.isArray(l) ? l : []).map(normalizeLedger);
       setLedgers(ledgerArr);
 
       const vArr = (Array.isArray(v) ? v : []).filter((x: any) => !isVoided(x));
       setAllVouchers(vArr);
+
+      // Build a voucherId→date map for quick lookup when processing entries
+      const voucherDateMap: Record<string, string> = {};
+      vArr.forEach((v: any) => { voucherDateMap[v.id] = v.date?.slice(0,10) || ''; });
+
+      // Attach date to each entry so calcBalanceForPeriod can filter by date
+      const entryArr = (Array.isArray(ve) ? ve : []).map((e: any) => ({
+        ...e,
+        _date: voucherDateMap[e.voucherId] || '',
+      }));
+      setAllEntries(entryArr);
 
       if (vArr.length > 0) {
         const dates = vArr.map((x: any) => x.date?.slice(0,10)).filter(Boolean).sort();
@@ -404,26 +419,22 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
   }, [branchId]);
 
   // ── Balance helpers ────────────────────────────────────────────────
-  // FIX #3 — opening balance only counted when no from-filter OR ledger has no dated OB
+  // Entries are a flat table (voucherId, ledgerId, amount, type) — NOT nested in vouchers.
+  // Each entry has _date pre-attached from the voucher date map on load.
   const calcBalanceForPeriod = useCallback((ledgerId: string, from: string, to: string): number => {
     const ledger = ledgers.find(l => l.id === ledgerId);
     if (!ledger) return 0;
-    const ob    = Number(ledger.openingBalance || 0);
-    // Opening balance represents balance before any vouchers, so always include it
-    // (it is the balance as of the start of records, not tied to a specific date)
-    let running = ledger.balanceType === 'Cr' ? -ob : ob;
-    allVouchers.forEach(v => {
-      const vDate = v.date?.slice(0,10) || '';
-      if (from && vDate < from) return;
-      if (to   && vDate > to)   return;
-      (v.entries || []).forEach((e: any) => {
-        if (e.ledgerId === ledgerId) {
-          running += e.type === 'Dr' ? Number(e.amount || 0) : -Number(e.amount || 0);
-        }
-      });
+    const ob     = Number(ledger.openingBalance || 0);
+    let running  = ledger.balanceType === 'Cr' ? -ob : ob;
+    allEntries.forEach((e: any) => {
+      if (e.ledgerId !== ledgerId) return;
+      const eDate = e._date || '';
+      if (from && eDate < from) return;
+      if (to   && eDate > to)   return;
+      running += e.type === 'Dr' ? Number(e.amount || 0) : -Number(e.amount || 0);
     });
     return running;
-  }, [ledgers, allVouchers]);
+  }, [ledgers, allEntries]);
 
   const groupTotalForPeriod = useCallback((groupName: string, from: string, to: string): number =>
     ledgers
