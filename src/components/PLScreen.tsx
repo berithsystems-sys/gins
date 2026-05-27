@@ -1,6 +1,6 @@
 /**
  * TallyPrime-style Profit & Loss A/c — v5
- * FIX: Physical ESC key now guaranteed to trigger onBack 
+ * FIX: Physical ESC ksey now guaranteed to trigger onBack 
  * (Dashboard navigation) when at the top level.
  */
 
