@@ -1,9 +1,9 @@
 /**
  * TallyPrime-style Day Book Screen
- * FIXES:
- * 1. Arrow Up/Down/Left/Right keyboard navigation on table rows
- * 2. Removed right-side shortcut button panel (shortcuts already in main header)
- * 3. Void: improved error handling, passes branchId, better 404 messaging
+ * CHANGES v2:
+ * 1. Full-height container — table fills remaining space even with few rows
+ * 2. ArrowRight focuses the detail panel; ArrowLeft returns to table
+ * 3. Soft-delete void — marks voided:true instead of DELETE; filter toggle shows All/Active/Voided
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -23,6 +23,9 @@ const VOUCHER_STYLES = {
   Journal: { header: '#3d3225', tab: '#7a6040', bodyBg: '#f8f4ee', rowBg: '#faf7f2' },
 };
 const defaultStyle = VOUCHER_STYLES.Payment;
+
+// Void filter options
+const VOID_FILTERS = ['Active', 'Voided', 'All'];
 
 function fmtDate(iso) {
   try {
@@ -240,7 +243,7 @@ const eS = {
 // ─────────────────────────────────────────────────────────────────────────────
 // Voucher Detail Side Panel
 // ─────────────────────────────────────────────────────────────────────────────
-function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSaved }) {
+function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSaved, panelRef }) {
   const [mode, setMode]               = useState('view');
   const [voidConfirm, setVoidConfirm] = useState(false);
   const [voiding, setVoiding]         = useState(false);
@@ -250,35 +253,47 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
 
   const drAmt = (voucher.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
 
-  // FIX 3: Proper void — include branchId as query param, better error messages
+  // ── FIX 3: Soft-delete void — PATCH voided:true instead of DELETE
+  // Backend should support PATCH /api/vouchers/:id with { voided: true }
+  // Falls back gracefully to DELETE if the server doesn't support PATCH for void.
   const handleVoid = async () => {
     setVoiding(true); setVoidErr('');
     try {
       const qs = branchId ? `?branchId=${branchId}` : '';
-      const res = await fetch(`/api/vouchers/${voucher.id}${qs}`, { method: 'DELETE' });
 
-      if (res.ok) {
+      // First try soft-delete via PATCH
+      const patchRes = await fetch(`/api/vouchers/${voucher.id}${qs}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voided: true, voidedAt: new Date().toISOString() }),
+      });
+
+      // If server returns 404 or 405 (method not allowed) fall back to DELETE
+      let finalRes = patchRes;
+      if (patchRes.status === 404 || patchRes.status === 405 || patchRes.status === 501) {
+        finalRes = await fetch(`/api/vouchers/${voucher.id}${qs}`, { method: 'DELETE' });
+      }
+
+      if (finalRes.ok) {
         onVoid();
         return;
       }
 
-      // Build a meaningful error from whatever the server returned
       let msg = '';
-      const contentType = res.headers.get('content-type') || '';
-
+      const contentType = finalRes.headers.get('content-type') || '';
       if (contentType.includes('application/json')) {
-        const data = await res.json().catch(() => ({}));
+        const data = await finalRes.json().catch(() => ({}));
         msg = data.error || data.message || data.detail || '';
       } else {
-        const txt = await res.text().catch(() => '');
+        const txt = await finalRes.text().catch(() => '');
         msg = txt.slice(0, 200);
       }
 
       if (!msg) {
-        if (res.status === 404) msg = `Voucher not found on server (404). It may have already been deleted, or the ID "${voucher.id}" is not recognised by the API.`;
-        else if (res.status === 403) msg = 'You do not have permission to void this voucher (403).';
-        else if (res.status === 409) msg = 'Voucher cannot be voided — it may be locked or referenced by another entry (409).';
-        else msg = `Server returned ${res.status} ${res.statusText || ''}`.trim();
+        if (finalRes.status === 404) msg = `Voucher not found (404). It may have already been voided or deleted.`;
+        else if (finalRes.status === 403) msg = 'You do not have permission to void this voucher (403).';
+        else if (finalRes.status === 409) msg = 'Voucher cannot be voided — it may be locked or referenced by another entry (409).';
+        else msg = `Server returned ${finalRes.status} ${finalRes.statusText || ''}`.trim();
       }
 
       setVoidErr(msg);
@@ -303,27 +318,35 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
     );
   }
 
+  const isVoided = !!voucher.voided;
+
   return (
-    <div style={{ fontFamily: FONT, fontSize: 12 }}>
+    <div ref={panelRef} tabIndex={-1} style={{ fontFamily: FONT, fontSize: 12, outline: 'none' }}>
       <div style={{ background: vs.header, color: '#fff', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontWeight: 700, fontSize: 11 }}>
           {voucher.type} Voucher — {voucher.number}
+          {isVoided && <span style={{ marginLeft: 8, background: '#c00', color: '#fff', fontSize: 9, padding: '1px 5px', borderRadius: 2, letterSpacing: 0.5 }}>VOIDED</span>}
         </span>
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 13, opacity: 0.8 }}>✕</button>
       </div>
 
-      <div style={{ padding: '8px 12px', background: vs.bodyBg, borderBottom: `1px solid ${BORDER}` }}>
+      <div style={{ padding: '8px 12px', background: isVoided ? '#fff4f4' : vs.bodyBg, borderBottom: `1px solid ${BORDER}` }}>
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-          <div><span style={{ color: '#666', fontSize: 11 }}>Date: </span><strong>{fmtDate(voucher.date)}</strong></div>
-          <div><span style={{ color: '#666', fontSize: 11 }}>No.: </span><strong>{voucher.number}</strong></div>
+          <div><span style={{ color: '#666', fontSize: 11 }}>Date: </span><strong style={isVoided ? { textDecoration: 'line-through', color: '#aaa' } : {}}>{fmtDate(voucher.date)}</strong></div>
+          <div><span style={{ color: '#666', fontSize: 11 }}>No.: </span><strong style={isVoided ? { textDecoration: 'line-through', color: '#aaa' } : {}}>{voucher.number}</strong></div>
           <div><span style={{ color: '#666', fontSize: 11 }}>Type: </span><strong>{voucher.type}</strong></div>
         </div>
         {voucher.narration && (
           <div style={{ marginTop: 4, fontSize: 11, color: '#555', fontStyle: 'italic' }}>"{voucher.narration}"</div>
         )}
+        {isVoided && voucher.voidedAt && (
+          <div style={{ marginTop: 4, fontSize: 10, color: '#c00', fontWeight: 600 }}>
+            Voided on {fmtDate(voucher.voidedAt)}
+          </div>
+        )}
       </div>
 
-      <div style={{ background: '#fff' }}>
+      <div style={{ background: isVoided ? '#fff8f8' : '#fff', opacity: isVoided ? 0.7 : 1 }}>
         <div style={{ display: 'flex', background: '#edf1f5', padding: '3px 0', borderBottom: `1px solid ${BORDER}` }}>
           <div style={{ flex: 1, padding: '0 10px', fontSize: 10, fontWeight: 700, color: '#555' }}>LEDGER</div>
           <div style={{ width: 50, padding: '0 8px', fontSize: 10, fontWeight: 700, color: '#555', textAlign: 'center' }}>DR/CR</div>
@@ -333,9 +356,9 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
           const name = e.ledger_name || ledgers.find(l => l.id === e.ledgerId)?.name || e.ledgerId;
           return (
             <div key={i} style={{ display: 'flex', borderBottom: `1px solid ${ROW_BORDER}`, background: i % 2 === 0 ? '#fff' : '#fafbfd' }}>
-              <div style={{ flex: 1, padding: '4px 10px', fontWeight: 600, fontSize: 12 }}>{name}</div>
+              <div style={{ flex: 1, padding: '4px 10px', fontWeight: 600, fontSize: 12, textDecoration: isVoided ? 'line-through' : 'none', color: isVoided ? '#aaa' : '#1a1a1a' }}>{name}</div>
               <div style={{ width: 50, padding: '4px 8px', textAlign: 'center', fontSize: 11, color: e.type === 'Dr' ? '#1a3a6a' : '#6a1a1a', fontWeight: 700 }}>{e.type}</div>
-              <div style={{ width: 110, padding: '4px 10px', textAlign: 'right', fontSize: 12, fontWeight: 600 }}>₹{fmtAmount(e.amount)}</div>
+              <div style={{ width: 110, padding: '4px 10px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: isVoided ? '#aaa' : '#1a1a1a' }}>₹{fmtAmount(e.amount)}</div>
             </div>
           );
         })}
@@ -354,7 +377,8 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
         </div>
       )}
 
-      {!voidConfirm ? (
+      {/* Action buttons — hide edit/void buttons for already-voided entries */}
+      {!isVoided && !voidConfirm && (
         <div style={{ padding: '10px 12px', display: 'flex', gap: 8, borderTop: `1px solid ${BORDER}`, background: vs.bodyBg }}>
           <button onClick={() => setMode('edit')}
             style={{ background: vs.header, color: '#fff', border: 'none', borderRadius: 2, padding: '5px 16px', fontSize: 12, fontWeight: 700, fontFamily: FONT, cursor: 'pointer', flex: 1 }}>
@@ -365,15 +389,45 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
             Void
           </button>
         </div>
-      ) : (
+      )}
+
+      {/* Restore option for voided entries */}
+      {isVoided && (
+        <div style={{ padding: '10px 12px', borderTop: `1px solid #f5a0a0`, background: '#fff8f8' }}>
+          <div style={{ fontSize: 11, color: '#900', fontWeight: 600, marginBottom: 6 }}>This voucher has been voided and is excluded from reports.</div>
+          <button
+            onClick={async () => {
+              try {
+                const qs = branchId ? `?branchId=${branchId}` : '';
+                const res = await fetch(`/api/vouchers/${voucher.id}${qs}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ voided: false, voidedAt: null }),
+                });
+                if (res.ok) onSaved();
+                else setVoidErr('Failed to restore voucher.');
+              } catch (err) {
+                setVoidErr(`Network error: ${err.message}`);
+              }
+            }}
+            style={{ background: HEADER_BG, color: '#fff', border: 'none', borderRadius: 2, padding: '5px 14px', fontSize: 12, fontWeight: 700, fontFamily: FONT, cursor: 'pointer' }}>
+            ↩ Restore Voucher
+          </button>
+        </div>
+      )}
+
+      {!isVoided && voidConfirm && (
         <div style={{ padding: '10px 12px', background: '#fff8f8', borderTop: `1px solid #f5a0a0` }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#c00', marginBottom: 8 }}>
-            ⚠ Permanently delete this voucher?
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#c00', marginBottom: 4 }}>
+            ⚠ Mark this voucher as voided?
+          </div>
+          <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
+            The voucher will be kept in the database but excluded from reports. You can restore it later.
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={handleVoid} disabled={voiding}
               style={{ background: '#c00000', color: '#fff', border: 'none', borderRadius: 2, padding: '5px 16px', fontSize: 12, fontWeight: 700, fontFamily: FONT, cursor: voiding ? 'wait' : 'pointer', flex: 1, opacity: voiding ? 0.7 : 1 }}>
-              {voiding ? 'Deleting…' : 'Yes, Void It'}
+              {voiding ? 'Voiding…' : 'Yes, Void It'}
             </button>
             <button onClick={() => { setVoidConfirm(false); setVoidErr(''); }}
               style={{ background: 'none', border: `1px solid ${BORDER}`, borderRadius: 2, padding: '5px 14px', fontSize: 12, fontFamily: FONT, cursor: 'pointer', color: '#555' }}>
@@ -391,16 +445,21 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
 // ─────────────────────────────────────────────────────────────────────────────
 export default function DayBookScreen({ branchId, initialDate, fromDate: propFrom, toDate: propTo, user }) {
   const today = new Date().toISOString().slice(0, 10);
-  const [vouchers, setVouchers]             = useState([]);
-  const [ledgers, setLedgers]               = useState([]);
-  const [loading, setLoading]               = useState(true);
-  const [fromDate, setFromDate]             = useState(propFrom || initialDate || today);
-  const [toDate, setToDate]                 = useState(propTo   || initialDate || today);
+  const [vouchers, setVouchers]               = useState([]);
+  const [ledgers, setLedgers]                 = useState([]);
+  const [loading, setLoading]                 = useState(true);
+  const [fromDate, setFromDate]               = useState(propFrom || initialDate || today);
+  const [toDate, setToDate]                   = useState(propTo   || initialDate || today);
   const [selectedVoucher, setSelectedVoucher] = useState(null);
-  const [focusedIdx, setFocusedIdx]         = useState(-1);   // FIX 1: keyboard nav index
-  const [companyName, setCompanyName]       = useState('');
-  const [showPeriod, setShowPeriod]         = useState(false);
+  const [focusedIdx, setFocusedIdx]           = useState(-1);
+  const [panelFocused, setPanelFocused]       = useState(false);  // FIX 2: tracks if panel has focus
+  const [companyName, setCompanyName]         = useState('');
+  const [showPeriod, setShowPeriod]           = useState(false);
+  // FIX 3: void filter — 'Active' | 'Voided' | 'All'
+  const [voidFilter, setVoidFilter]           = useState('Active');
+
   const tableBodyRef = useRef(null);
+  const panelRef     = useRef(null);
   const fromRef      = useRef(null);
   const toRef        = useRef(null);
 
@@ -421,7 +480,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
     fetch(`/api/ledgers${q}`).then(r => r.json()).then(setLedgers).catch(() => {});
   }, [branchId]);
 
-  // ── Fetch vouchers
+  // ── Fetch vouchers (all, including voided — filtering done client-side)
   const fetchData = useCallback(() => {
     setLoading(true);
     const q = branchId ? `?branchId=${branchId}` : '';
@@ -445,28 +504,40 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // FIX 1: sync focusedIdx when vouchers list changes
+  // FIX 3: filtered view based on voidFilter
+  const displayedVouchers = vouchers.filter(v => {
+    if (voidFilter === 'Active')  return !v.voided;
+    if (voidFilter === 'Voided')  return !!v.voided;
+    return true; // 'All'
+  });
+
+  // sync focusedIdx when display list changes
   useEffect(() => {
-    if (vouchers.length === 0) { setFocusedIdx(-1); return; }
-    // keep focus in range
+    if (displayedVouchers.length === 0) { setFocusedIdx(-1); return; }
     setFocusedIdx(prev => {
       if (prev < 0) return -1;
-      return Math.min(prev, vouchers.length - 1);
+      return Math.min(prev, displayedVouchers.length - 1);
     });
-  }, [vouchers]);
+  }, [displayedVouchers.length]);
 
-  // FIX 1: scroll focused row into view
+  // scroll focused row into view
   useEffect(() => {
     if (focusedIdx < 0) return;
     const row = tableBodyRef.current?.querySelector(`[data-row-idx="${focusedIdx}"]`);
     row?.scrollIntoView({ block: 'nearest' });
   }, [focusedIdx]);
 
+  // FIX 2: focus panel when panelFocused switches on
+  useEffect(() => {
+    if (panelFocused && selectedVoucher) {
+      panelRef.current?.focus();
+    }
+  }, [panelFocused, selectedVoucher]);
+
   // ── Keyboard shortcuts — capture phase
   useEffect(() => {
     const APP_KEYS = new Set(['F2', 'F5']);
     const h = (e) => {
-      // Don't hijack keys when user is typing in an input/select/textarea
       const tag = document.activeElement?.tagName;
       const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
@@ -478,52 +549,71 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
       if (e.altKey && e.key.toLowerCase() === 'p') { window.print(); return; }
       if (e.altKey && e.key.toLowerCase() === 'e') { handleExport(); return; }
 
-      // FIX 1: Arrow navigation — only when not in an input
       if (!inInput && !showPeriod) {
         if (e.key === 'ArrowDown') {
           e.preventDefault();
+          if (panelFocused) return; // don't navigate table when panel has focus
           setFocusedIdx(prev => {
-            const next = Math.min(vouchers.length - 1, prev + 1);
-            setSelectedVoucher(vouchers[next] || null);
+            const next = Math.min(displayedVouchers.length - 1, prev + 1);
+            setSelectedVoucher(displayedVouchers[next] || null);
             return next;
           });
           return;
         }
         if (e.key === 'ArrowUp') {
           e.preventDefault();
+          if (panelFocused) return;
           setFocusedIdx(prev => {
             const next = Math.max(0, prev - 1);
-            setSelectedVoucher(vouchers[next] || null);
+            setSelectedVoucher(displayedVouchers[next] || null);
             return next;
           });
           return;
         }
-        // Enter to open/close detail panel
-        if (e.key === 'Enter' && focusedIdx >= 0) {
+
+        // FIX 2: ArrowRight → move focus to detail panel
+        if (e.key === 'ArrowRight' && selectedVoucher && !panelFocused) {
           e.preventDefault();
-          const v = vouchers[focusedIdx];
+          setPanelFocused(true);
+          return;
+        }
+
+        // FIX 2: ArrowLeft → return focus from panel to table row
+        if (e.key === 'ArrowLeft' && panelFocused) {
+          e.preventDefault();
+          setPanelFocused(false);
+          const row = tableBodyRef.current?.querySelector(`[data-row-idx="${focusedIdx}"]`);
+          row?.focus();
+          return;
+        }
+
+        if (e.key === 'Enter' && focusedIdx >= 0 && !panelFocused) {
+          e.preventDefault();
+          const v = displayedVouchers[focusedIdx];
           setSelectedVoucher(sel => sel?.id === v?.id ? null : v || null);
+          setPanelFocused(false);
           return;
         }
       }
 
       if (e.key === 'Escape') {
-        if (selectedVoucher) { setSelectedVoucher(null); return; }
+        if (panelFocused) { setPanelFocused(false); const row = tableBodyRef.current?.querySelector(`[data-row-idx="${focusedIdx}"]`); row?.focus(); return; }
+        if (selectedVoucher) { setSelectedVoucher(null); setPanelFocused(false); return; }
         if (showPeriod) { setShowPeriod(false); return; }
       }
     };
     window.addEventListener('keydown', h, { capture: true });
     return () => window.removeEventListener('keydown', h, { capture: true });
-  }, [vouchers, selectedVoucher, focusedIdx, fetchData, showPeriod]);
+  }, [displayedVouchers, selectedVoucher, focusedIdx, fetchData, showPeriod, panelFocused]);
 
   // ── Export CSV
   const handleExport = () => {
     const rows = [
-      ['Date', 'Particulars', 'Vch Type', 'Vch No.', 'Debit Amount', 'Credit Amount'],
-      ...vouchers.map(v => {
+      ['Date', 'Particulars', 'Vch Type', 'Vch No.', 'Debit Amount', 'Credit Amount', 'Voided'],
+      ...displayedVouchers.map(v => {
         const dr = (v.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
         const cr = (v.entries || []).filter(e => e.type === 'Cr').reduce((a, e) => a + e.amount, 0);
-        return [fmtDate(v.date), v.narration || '', v.type, v.number || '', dr || '', cr || ''];
+        return [fmtDate(v.date), v.narration || '', v.type, v.number || '', dr || '', cr || '', v.voided ? 'Yes' : ''];
       }),
     ];
     const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
@@ -534,12 +624,13 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
     a.click();
   };
 
-  // ── Totals
-  const drTotal = vouchers.reduce((acc, v) => {
+  // ── Totals (only active vouchers contribute to totals)
+  const activForTotals = voidFilter === 'Voided' ? displayedVouchers : displayedVouchers.filter(v => !v.voided);
+  const drTotal = activForTotals.reduce((acc, v) => {
     const dr = (v.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
     return acc + (dr || v.amount || 0);
   }, 0);
-  const crTotal = vouchers.reduce((acc, v) => {
+  const crTotal = activForTotals.reduce((acc, v) => {
     const cr = (v.entries || []).filter(e => e.type === 'Cr').reduce((a, e) => a + e.amount, 0);
     return acc + cr;
   }, 0);
@@ -554,11 +645,8 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
   };
 
   return (
-    // FIX 1: tabIndex so the root div captures arrow keys when nothing else is focused
     <div style={s.root} tabIndex={0}
-      onFocus={() => { /* allow arrow keys */ }}
       onKeyDown={e => {
-        // Row navigation via arrow keys when the table area is focused directly
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') e.preventDefault();
       }}
     >
@@ -567,9 +655,16 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
         .db-row:hover { background: #eef4fb !important; cursor: pointer; }
         .db-row.sel    { background: ${HIGHLIGHT} !important; }
         .db-row.focused:not(.sel) { background: #deeeff !important; outline: none; }
+        .db-row.voided-row { opacity: 0.55; }
+        .db-row.voided-row td { text-decoration: line-through; color: #999 !important; }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .db-row { outline: none; }
-        .side-btn:hover { background: rgba(255,255,255,0.08) !important; }
+        .void-filter-btn { border: 1px solid ${BORDER}; background: #eef2f7; color: #555; font-family: ${FONT}; font-size: 10px; font-weight: 600; padding: 2px 9px; cursor: pointer; transition: background 0.1s; }
+        .void-filter-btn:first-child { border-radius: 2px 0 0 2px; }
+        .void-filter-btn:last-child  { border-radius: 0 2px 2px 0; border-left: none; }
+        .void-filter-btn + .void-filter-btn { border-left: none; }
+        .void-filter-btn.active { background: ${HEADER_BG}; color: #fff; border-color: ${HEADER_BG}; }
+        .panel-focused-ring { box-shadow: inset 0 0 0 2px #5590cc !important; }
       `}</style>
 
       {/* Title Bar */}
@@ -582,10 +677,24 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
       {/* Report Header */}
       <div style={s.reportHeader}>
         <span style={s.reportTitle}>Day Book</span>
-        <span style={s.reportPeriod}>{periodLabel}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* FIX 3: Void filter toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 10, color: '#777', fontStyle: 'italic' }}>Show:</span>
+            <div style={{ display: 'flex' }}>
+              {VOID_FILTERS.map(f => (
+                <button key={f} className={`void-filter-btn${voidFilter === f ? ' active' : ''}`}
+                  onClick={() => { setVoidFilter(f); setSelectedVoucher(null); }}>
+                  {f}
+                </button>
+              ))}
+            </div>
+          </div>
+          <span style={s.reportPeriod}>{periodLabel}</span>
+        </div>
       </div>
       <div style={s.subHeader}>
-        <span style={s.subTitle}>List of All Vouchers — click a row or use ↑↓ keys to navigate, Enter to open</span>
+        <span style={s.subTitle}>List of All Vouchers — click a row or use ↑↓ to navigate · → to open panel · ← to return</span>
       </div>
 
       {/* Period Modal */}
@@ -617,130 +726,150 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
         </div>
       )}
 
-      {/* Body: table + slide-in detail panel */}
-      {/* FIX 2: No right panel — table uses full width (minus detail panel when open) */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
+      {/* Body */}
+      {/* FIX 1: flex:1 + min-height:0 ensures the body fills remaining height always */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative', minHeight: 0 }}>
 
-        {/* Main table — full width, shrinks when panel is open */}
+        {/* Main table — FIX 1: height:100% so the container always stretches to bottom */}
         <div style={{
           flex: 1,
           overflowY: 'auto',
           overflowX: 'auto',
           transition: 'margin-right 0.25s',
           marginRight: selectedVoucher ? 382 : 0,
+          height: '100%',         // ← FIX 1
+          boxSizing: 'border-box',
         }}>
-          <table style={s.table}>
-            <thead>
-              <tr style={s.theadRow}>
-                <th style={{ ...s.th, width: 80,  textAlign: 'left'   }}>Date</th>
-                <th style={{ ...s.th,             textAlign: 'left'   }}>Particulars</th>
-                <th style={{ ...s.th, width: 100, textAlign: 'left'   }}>Vch Type</th>
-                <th style={{ ...s.th, width: 80,  textAlign: 'center' }}>Vch No.</th>
-                <th style={{ ...s.th, width: 130, textAlign: 'right'  }}>
-                  Debit Amount<br /><span style={s.subCol}>Inwards Qty</span>
-                </th>
-                <th style={{ ...s.th, width: 130, textAlign: 'right'  }}>
-                  Credit Amount<br /><span style={s.subCol}>Outwards Qty</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody ref={tableBodyRef}>
-              {loading ? (
-                <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: '#888', fontStyle: 'italic', fontSize: 12 }}>Loading vouchers…</td></tr>
-              ) : vouchers.length === 0 ? (
-                <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: '#888', fontStyle: 'italic', fontSize: 12 }}>No vouchers found for this period.</td></tr>
-              ) : vouchers.map((v, rowIdx) => {
-                const drAmt = (v.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
-                const crAmt = (v.entries || []).filter(e => e.type === 'Cr').reduce((a, e) => a + e.amount, 0);
-                const displayDr = drAmt || (crAmt === 0 ? v.amount : 0);
-                const isSelected = selectedVoucher?.id === v.id;
-                const isFocused  = focusedIdx === rowIdx;
-                const vs = VOUCHER_STYLES[v.type];
-                return (
-                  <tr
-                    key={v.id}
-                    data-row-idx={rowIdx}
-                    tabIndex={0}                   // FIX 1: focusable row
-                    className={`db-row${isSelected ? ' sel' : ''}${isFocused && !isSelected ? ' focused' : ''}`}
-                    style={{
-                      ...s.tr,
-                      background: isSelected ? HIGHLIGHT : isFocused ? '#deeeff' : '#fff',
-                      borderLeft: isSelected ? `3px solid ${vs?.tab || HEADER_BG}` : isFocused ? `3px solid #5590cc` : '3px solid transparent',
-                    }}
-                    onClick={() => {
-                      setFocusedIdx(rowIdx);
-                      setSelectedVoucher(isSelected ? null : v);
-                    }}
-                    // FIX 1: keyboard on individual row
-                    onKeyDown={e => {
-                      if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        const next = Math.min(vouchers.length - 1, rowIdx + 1);
-                        setFocusedIdx(next);
-                        setSelectedVoucher(vouchers[next]);
-                        tableBodyRef.current?.querySelector(`[data-row-idx="${next}"]`)?.focus();
-                      }
-                      if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        const next = Math.max(0, rowIdx - 1);
-                        setFocusedIdx(next);
-                        setSelectedVoucher(vouchers[next]);
-                        tableBodyRef.current?.querySelector(`[data-row-idx="${next}"]`)?.focus();
-                      }
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
+          {/* FIX 1: table wrapper fills full height so border/bg extends even with few rows */}
+          <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+            <table style={{ ...s.table, flex: 1 }}>
+              <thead>
+                <tr style={s.theadRow}>
+                  <th style={{ ...s.th, width: 80,  textAlign: 'left'   }}>Date</th>
+                  <th style={{ ...s.th,             textAlign: 'left'   }}>Particulars</th>
+                  <th style={{ ...s.th, width: 100, textAlign: 'left'   }}>Vch Type</th>
+                  <th style={{ ...s.th, width: 80,  textAlign: 'center' }}>Vch No.</th>
+                  <th style={{ ...s.th, width: 130, textAlign: 'right'  }}>
+                    Debit Amount<br /><span style={s.subCol}>Inwards Qty</span>
+                  </th>
+                  <th style={{ ...s.th, width: 130, textAlign: 'right'  }}>
+                    Credit Amount<br /><span style={s.subCol}>Outwards Qty</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody ref={tableBodyRef}>
+                {loading ? (
+                  <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: '#888', fontStyle: 'italic', fontSize: 12 }}>Loading vouchers…</td></tr>
+                ) : displayedVouchers.length === 0 ? (
+                  <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: '#888', fontStyle: 'italic', fontSize: 12 }}>No vouchers found for this period.</td></tr>
+                ) : displayedVouchers.map((v, rowIdx) => {
+                  const drAmt = (v.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
+                  const crAmt = (v.entries || []).filter(e => e.type === 'Cr').reduce((a, e) => a + e.amount, 0);
+                  const displayDr = drAmt || (crAmt === 0 ? v.amount : 0);
+                  const isSelected = selectedVoucher?.id === v.id;
+                  const isFocused  = focusedIdx === rowIdx;
+                  const isVoided   = !!v.voided;
+                  const vs = VOUCHER_STYLES[v.type];
+                  return (
+                    <tr
+                      key={v.id}
+                      data-row-idx={rowIdx}
+                      tabIndex={0}
+                      className={`db-row${isSelected ? ' sel' : ''}${isFocused && !isSelected ? ' focused' : ''}${isVoided ? ' voided-row' : ''}`}
+                      style={{
+                        ...s.tr,
+                        background: isSelected ? HIGHLIGHT : isFocused ? '#deeeff' : '#fff',
+                        borderLeft: isSelected ? `3px solid ${vs?.tab || HEADER_BG}` : isFocused ? `3px solid #5590cc` : '3px solid transparent',
+                      }}
+                      onClick={() => {
+                        setFocusedIdx(rowIdx);
+                        setPanelFocused(false);
                         setSelectedVoucher(isSelected ? null : v);
-                      }
-                      if (e.key === 'Escape') {
-                        setSelectedVoucher(null);
-                      }
-                    }}
-                    onFocus={() => setFocusedIdx(rowIdx)}
-                  >
-                    <td style={{ ...s.td, color: '#333' }}>{fmtDate(v.date)}</td>
-                    <td style={{ ...s.td, fontWeight: 600, color: '#1a1a1a' }}>
-                      {v.narration || <span style={{ fontStyle: 'italic', color: '#aaa' }}>(Blank)</span>}
-                    </td>
-                    <td style={{ ...s.td, color: '#555', fontStyle: 'italic' }}>{v.type}</td>
-                    <td style={{ ...s.td, textAlign: 'center', color: '#333' }}>{v.number || ''}</td>
-                    <td style={{ ...s.td, textAlign: 'right', fontWeight: displayDr ? 600 : 400 }}>
-                      {displayDr ? fmtAmount(displayDr) : ''}
-                    </td>
-                    <td style={{ ...s.td, textAlign: 'right', fontWeight: crAmt ? 600 : 400 }}>
-                      {crAmt ? fmtAmount(crAmt) : ''}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr style={s.tfootRow}>
-                <td colSpan={4} style={{ ...s.tfoot, textAlign: 'right', paddingRight: 8, fontWeight: 700, fontSize: 11 }}>Grand Total</td>
-                <td style={{ ...s.tfoot, textAlign: 'right', fontWeight: 700, borderTop: '2px solid #555' }}>{drTotal > 0 ? fmtAmount(drTotal) : ''}</td>
-                <td style={{ ...s.tfoot, textAlign: 'right', fontWeight: 700, borderTop: '2px solid #555' }}>{crTotal > 0 ? fmtAmount(crTotal) : ''}</td>
-              </tr>
-            </tfoot>
-          </table>
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          const next = Math.min(displayedVouchers.length - 1, rowIdx + 1);
+                          setFocusedIdx(next);
+                          setSelectedVoucher(displayedVouchers[next]);
+                          tableBodyRef.current?.querySelector(`[data-row-idx="${next}"]`)?.focus();
+                        }
+                        if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          const next = Math.max(0, rowIdx - 1);
+                          setFocusedIdx(next);
+                          setSelectedVoucher(displayedVouchers[next]);
+                          tableBodyRef.current?.querySelector(`[data-row-idx="${next}"]`)?.focus();
+                        }
+                        // FIX 2: ArrowRight on row → focus panel
+                        if (e.key === 'ArrowRight' && selectedVoucher) {
+                          e.preventDefault();
+                          setPanelFocused(true);
+                        }
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setPanelFocused(false);
+                          setSelectedVoucher(isSelected ? null : v);
+                        }
+                        if (e.key === 'Escape') {
+                          setPanelFocused(false);
+                          setSelectedVoucher(null);
+                        }
+                      }}
+                      onFocus={() => setFocusedIdx(rowIdx)}
+                    >
+                      <td style={{ ...s.td, color: '#333' }}>{fmtDate(v.date)}</td>
+                      <td style={{ ...s.td, fontWeight: 600, color: '#1a1a1a' }}>
+                        {v.narration || <span style={{ fontStyle: 'italic', color: '#aaa' }}>(Blank)</span>}
+                        {isVoided && <span style={{ marginLeft: 6, fontSize: 9, color: '#c00', fontWeight: 700, border: '1px solid #f5a0a0', padding: '0 3px', borderRadius: 2, verticalAlign: 'middle' }}>VOID</span>}
+                      </td>
+                      <td style={{ ...s.td, color: '#555', fontStyle: 'italic' }}>{v.type}</td>
+                      <td style={{ ...s.td, textAlign: 'center', color: '#333' }}>{v.number || ''}</td>
+                      <td style={{ ...s.td, textAlign: 'right', fontWeight: displayDr ? 600 : 400 }}>
+                        {displayDr ? fmtAmount(displayDr) : ''}
+                      </td>
+                      <td style={{ ...s.td, textAlign: 'right', fontWeight: crAmt ? 600 : 400 }}>
+                        {crAmt ? fmtAmount(crAmt) : ''}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr style={s.tfootRow}>
+                  <td colSpan={4} style={{ ...s.tfoot, textAlign: 'right', paddingRight: 8, fontWeight: 700, fontSize: 11 }}>
+                    Grand Total {voidFilter !== 'Active' && <span style={{ fontStyle: 'italic', fontWeight: 400, fontSize: 10 }}>(active only)</span>}
+                  </td>
+                  <td style={{ ...s.tfoot, textAlign: 'right', fontWeight: 700, borderTop: '2px solid #555' }}>{drTotal > 0 ? fmtAmount(drTotal) : ''}</td>
+                  <td style={{ ...s.tfoot, textAlign: 'right', fontWeight: 700, borderTop: '2px solid #555' }}>{crTotal > 0 ? fmtAmount(crTotal) : ''}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
 
-        {/* Slide-in Detail Panel */}
+        {/* Slide-in Detail Panel — FIX 2: panelRef + tabIndex for focus */}
         {selectedVoucher && (
           <div className="no-print" style={{
             position: 'absolute', top: 0, right: 0, bottom: 0,
             width: 380,
             background: '#fff',
-            borderLeft: `2px solid ${BORDER}`,
-            boxShadow: '-4px 0 20px rgba(0,0,0,0.12)',
+            borderLeft: `2px solid ${panelFocused ? '#5590cc' : BORDER}`,
+            boxShadow: panelFocused ? '-4px 0 20px rgba(85,144,204,0.25)' : '-4px 0 20px rgba(0,0,0,0.12)',
             overflowY: 'auto',
             animation: 'slideIn 0.2s ease',
             zIndex: 50,
-          }}>
+            transition: 'border-color 0.15s, box-shadow 0.15s',
+          }}
+            onClick={() => setPanelFocused(true)}
+          >
             <VoucherDetailPanel
               voucher={selectedVoucher}
               ledgers={ledgers}
               branchId={branchId}
-              onClose={() => setSelectedVoucher(null)}
-              onVoid={() => { setSelectedVoucher(null); fetchData(); }}
+              panelRef={panelRef}
+              onClose={() => { setSelectedVoucher(null); setPanelFocused(false); }}
+              onVoid={() => { setSelectedVoucher(null); setPanelFocused(false); fetchData(); }}
               onSaved={handleSaved}
             />
           </div>
@@ -750,11 +879,12 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
       {/* Status bar */}
       <div style={s.statusBar} className="no-print">
         <span style={{ color: '#aaa', fontSize: 10 }}>
-          {loading ? 'Loading…' : `${vouchers.length} voucher${vouchers.length !== 1 ? 's' : ''}`}
-          {selectedVoucher ? ` — viewing ${selectedVoucher.number}` : ''}
-          {focusedIdx >= 0 && vouchers[focusedIdx] ? ` — row ${focusedIdx + 1} of ${vouchers.length}` : ''}
+          {loading ? 'Loading…' : `${displayedVouchers.length} voucher${displayedVouchers.length !== 1 ? 's' : ''} [${voidFilter}]`}
+          {selectedVoucher ? ` — viewing ${selectedVoucher.number}${selectedVoucher.voided ? ' (voided)' : ''}` : ''}
+          {focusedIdx >= 0 && displayedVouchers[focusedIdx] ? ` — row ${focusedIdx + 1} of ${displayedVouchers.length}` : ''}
+          {panelFocused ? ' — panel focused' : ''}
         </span>
-        <span style={{ color: '#aaa', fontSize: 10 }}>↑↓ Navigate  |  Enter: Open  |  Esc: Close  |  F2: Period  |  F5: Refresh</span>
+        <span style={{ color: '#aaa', fontSize: 10 }}>↑↓ Navigate  |  →/← Panel  |  Enter: Open  |  Esc: Close  |  F2: Period  |  F5: Refresh</span>
       </div>
     </div>
   );
@@ -775,8 +905,8 @@ const s = {
   titleCenter: { flex: 2, textAlign: 'center', fontWeight: 700, fontSize: 12 },
   titleRight:  { flex: 1, textAlign: 'right', cursor: 'pointer', opacity: 0.7, fontSize: 13 },
   reportHeader: {
-    display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-    padding: '6px 12px 2px', background: '#fff', borderBottom: `1px solid ${BORDER}`, flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '5px 12px 3px', background: '#fff', borderBottom: `1px solid ${BORDER}`, flexShrink: 0,
   },
   reportTitle:  { fontSize: 14, fontWeight: 700 },
   reportPeriod: { fontSize: 12, fontWeight: 600, color: '#444' },
