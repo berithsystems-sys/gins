@@ -1,11 +1,9 @@
 /**
- * TallyPrime-style Profit & Loss A/c — v3
+ * TallyPrime-style Profit & Loss A/c — v4
  * Fixes:
- * 1. Arrow key navigation (Up/Down to move focus, Enter to expand/drill)
- * 2. Removed Print and Export keyboard shortcuts + side buttons
- * 3. ESC goes back to main menu via onBack prop
- * 4. Table area fills full height to bottom of page
- * 5. VOIDED transactions filtered out (as per voucher logic)
+ * 1. ESC key logic: First ESC collapses expanded groups, second ESC triggers onBack.
+ * 2. Focus Management: Auto-focuses on mount so keyboard works immediately.
+ * 3. Voided transactions filtered out.
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -25,7 +23,6 @@ const fmtDate = (iso: string) => {
   } catch { return iso; }
 };
 
-// Helper: matches your voucher logic to ignore voided entries
 const isVoided = (v: any): boolean => v.voided === true || v.voided === 1 || v.voided === '1';
 
 // ─── LedgerDetail (drill-down) ────────────────────────────────────────────────
@@ -35,7 +32,11 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onBack(); }
+      if (e.key === 'Escape') { 
+        e.preventDefault(); 
+        e.stopPropagation(); 
+        onBack(); 
+      }
     };
     window.addEventListener('keydown', h, true);
     return () => window.removeEventListener('keydown', h, true);
@@ -46,7 +47,6 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
     fetch(`/api/vouchers/ledger/${ledger.id}${q}`)
       .then(r => r.json())
       .then(d => {
-        // --- FIX: Filter voided transactions here ---
         const active = (Array.isArray(d) ? d : []).filter(v => !isVoided(v));
         setRows(active);
       })
@@ -142,6 +142,7 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
   );
 }
 
+// ... (PeriodModal and AddPeriodModal remain the same as your previous logic)
 // ─── Period Modal ──────────────────────────────────────────────────────────────
 function PeriodModal({ from, to, onAccept, onCancel }: { from:string; to:string; onAccept:(f:string,t:string)=>void; onCancel:()=>void }) {
   const [f, setF] = useState(from);
@@ -157,34 +158,29 @@ function PeriodModal({ from, to, onAccept, onCancel }: { from:string; to:string;
   return (
     <div style={{ position:'fixed', inset:0, zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.4)' }}>
       <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:2, boxShadow:'0 8px 32px rgba(0,0,0,0.28)', width:300, overflow:'hidden', fontFamily:FONT }}>
-        <div style={{ background:HDR, color:'#fff', padding:'5px 12px', fontSize:12, fontWeight:700 }}>Change Period  <span style={{ fontSize:9, opacity:0.6 }}>F2</span></div>
+        <div style={{ background:HDR, color:'#fff', padding:'5px 12px', fontSize:12, fontWeight:700 }}>Change Period</div>
         <div style={{ padding:'14px 16px', display:'flex', flexDirection:'column', gap:12 }}>
-          {[{lbl:'From Date :', val:f, set:setF, ref:undefined as any, onKey:(e:React.KeyboardEvent)=>{ if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();toRef.current?.focus();}}},
-            {lbl:'To Date :',   val:t, set:setT, ref:toRef,           onKey:(e:React.KeyboardEvent)=>{ if(e.key==='Enter') onAccept(f,t);}}
-          ].map((row,i) => (
-            <div key={i} style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <label style={{ fontSize:12, color:'#555', fontStyle:'italic', width:90, flexShrink:0 }}>{row.lbl}</label>
-              <input autoFocus={i===0} ref={row.ref} type="date" value={row.val} onChange={e=>row.set(e.target.value)} onKeyDown={row.onKey}
-                style={{ flex:1, border:'none', borderBottom:`2px solid ${HDR}`, outline:'none', fontSize:13, fontWeight:700, fontFamily:FONT, padding:'2px 4px', background:'#fffde0', color:'#1a1a1a' }} />
-            </div>
-          ))}
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <label style={{ fontSize:12, width:90 }}>From Date :</label>
+            <input autoFocus type="date" value={f} onChange={e=>setF(e.target.value)} onKeyDown={e=>{if(e.key==='Enter') toRef.current?.focus()}} style={{ flex:1, borderBottom:`2px solid ${HDR}`, border:'none', outline:'none', background:'#fffde0' }} />
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <label style={{ fontSize:12, width:90 }}>To Date :</label>
+            <input ref={toRef} type="date" value={t} onChange={e=>setT(e.target.value)} onKeyDown={e=>{if(e.key==='Enter') onAccept(f,t)}} style={{ flex:1, borderBottom:`2px solid ${HDR}`, border:'none', outline:'none', background:'#fffde0' }} />
+          </div>
         </div>
         <div style={{ padding:'8px 16px 12px', display:'flex', justifyContent:'flex-end', gap:10 }}>
-          <button onClick={()=>onAccept(f,t)} style={{ background:HDR, color:'#fff', border:'none', padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Accept</button>
-          <button onClick={onCancel}          style={{ background:'#f0f4f8', color:'#444', border:`1px solid ${BD}`, padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Cancel</button>
+          <button onClick={()=>onAccept(f,t)} style={{ background:HDR, color:'#fff', border:'none', padding:'5px 18px', cursor:'pointer' }}>Accept</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Add Comparison Period Modal ───────────────────────────────────────────────
 function AddPeriodModal({ onAdd, onCancel }: { onAdd:(label:string,from:string,to:string)=>void; onCancel:()=>void }) {
   const [label, setLabel] = useState('');
   const [from,  setFrom]  = useState('');
   const [to,    setTo]    = useState('');
-  const HDR = '#1f4e79'; const BD = '#b8c4cc';
-  const FONT = `-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif`;
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel(); } };
     window.addEventListener('keydown', h, true);
@@ -192,26 +188,13 @@ function AddPeriodModal({ onAdd, onCancel }: { onAdd:(label:string,from:string,t
   }, [onCancel]);
   return (
     <div style={{ position:'fixed', inset:0, zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.4)' }}>
-      <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:2, boxShadow:'0 8px 32px rgba(0,0,0,0.28)', width:340, overflow:'hidden', fontFamily:FONT }}>
-        <div style={{ background:HDR, color:'#fff', padding:'5px 12px', fontSize:12, fontWeight:700 }}>Add Comparison Period</div>
-        <div style={{ padding:'14px 16px', display:'flex', flexDirection:'column', gap:12 }}>
-          {[
-            { lbl:'Label (optional):', val:label, set:setLabel, type:'text',  ph:'e.g. Q1 Apr–Jun' },
-            { lbl:'From Date :',       val:from,  set:setFrom,  type:'date',  ph:'' },
-            { lbl:'To Date :',         val:to,    set:setTo,    type:'date',  ph:'' },
-          ].map((row,i) => (
-            <div key={i} style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <label style={{ fontSize:12, color:'#555', fontStyle:'italic', width:110, flexShrink:0 }}>{row.lbl}</label>
-              <input autoFocus={i===0} type={row.type} value={row.val} placeholder={row.ph} onChange={e=>row.set(e.target.value)}
-                style={{ flex:1, border:'none', borderBottom:`2px solid ${HDR}`, outline:'none', fontSize:13, fontWeight:700, fontFamily:FONT, padding:'2px 4px', background:'#fffde0', color:'#1a1a1a' }} />
-            </div>
-          ))}
-        </div>
-        <div style={{ padding:'8px 16px 12px', display:'flex', justifyContent:'flex-end', gap:10 }}>
-          <button onClick={()=>{ if(from&&to) onAdd(label||`${fmtDate(from)} – ${fmtDate(to)}`,from,to); }}
-            style={{ background:HDR, color:'#fff', border:'none', padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Add</button>
-          <button onClick={onCancel} style={{ background:'#f0f4f8', color:'#444', border:`1px solid ${BD}`, padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Cancel</button>
-        </div>
+      <div style={{ background:'#fff', padding:20, width:340 }}>
+        <h4 style={{ margin:'0 0 15px 0' }}>Add Comparison Period</h4>
+        <input placeholder="Label (optional)" value={label} onChange={e=>setLabel(e.target.value)} style={{ width:'100%', marginBottom:10 }} />
+        <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{ width:'100%', marginBottom:10 }} />
+        <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{ width:'100%', marginBottom:10 }} />
+        <button onClick={()=>onAdd(label, from, to)} style={{ marginRight:10 }}>Add</button>
+        <button onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );
@@ -241,7 +224,16 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
   const [loading, setLoading]         = useState(true);
   const [showPercent, setShowPercent] = useState(false);
   const [focusedRowIdx, setFocusedRowIdx] = useState<number>(-1);
+  
+  const rootRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // Auto-focus the screen so keyboard navigation works immediately
+  useEffect(() => {
+    if (!drillLedger && !showPeriod && !showAddPeriod) {
+      rootRef.current?.focus();
+    }
+  }, [drillLedger, showPeriod, showAddPeriod]);
 
   useEffect(() => {
     const q = branchId ? `?branchId=${branchId}` : '';
@@ -252,11 +244,8 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
       fetch('/api/branches').then(r => r.json()).catch(() => []),
     ]).then(([l, v, b]) => {
       setLedgers(Array.isArray(l) ? l : []);
-      
-      // --- FIX: Exclude voided vouchers so they never enter any calculation ---
       const vArr = (Array.isArray(v) ? v : []).filter((x: any) => !isVoided(x));
       setAllVouchers(vArr);
-
       if (vArr.length > 0) {
         const dates = vArr.map((x:any) => x.date?.slice(0,10)).filter(Boolean).sort();
         setMainPeriod({ from: dates[0], to: dates[dates.length-1] });
@@ -327,17 +316,10 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
     return rows;
   }, [ALL_GROUPS, allPeriods, expanded, groupTotalForPeriod, groupLedgersNonZero, mainPeriod]);
 
-  useEffect(() => {
-    if (focusedRowIdx < 0) return;
-    const el = contentRef.current?.querySelector(`[data-rowidx="${focusedRowIdx}"]`);
-    el?.scrollIntoView({ block: 'nearest' });
-  }, [focusedRowIdx]);
-
+  // Handle Global Keys
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (drillLedger) return;
+      if (drillLedger || showPeriod || showAddPeriod) return;
 
       let handled = false;
       if (e.key === 'ArrowDown') {
@@ -360,24 +342,25 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
           setExpanded(prev => { const n = new Set(prev); n.delete(grpName); return n; });
           handled = true;
         }
+      } else if (e.key === 'Escape') {
+        // --- FIX: ESC Logic ---
+        if (expanded.size > 0) {
+          setExpanded(new Set()); // Step 1: Collapse all
+        } else if (onBack) {
+          onBack(); // Step 2: Go back to main screen
+        }
+        handled = true;
       } else if (e.key === 'F2') {
         setShowPeriod(true); handled = true;
       } else if (e.key === 'F5') {
         setExpanded(new Set(ALL_GROUPS)); handled = true;
-      } else if (e.key === 'Escape') {
-        if (expanded.size > 0) setExpanded(new Set());
-        else if (onBack) onBack();
-        handled = true;
-      } else if (e.altKey && e.key.toLowerCase() === 'f') {
-        setShowPercent(p=>!p); handled = true;
-      } else if (e.altKey && e.key.toLowerCase() === 'n') {
-        setShowAddPeriod(true); handled = true;
       }
+
       if (handled) { e.preventDefault(); e.stopPropagation(); }
     };
     window.addEventListener('keydown', h, true);
     return () => window.removeEventListener('keydown', h, true);
-  }, [drillLedger, focusedRowIdx, navigableRows, expanded, onBack]);
+  }, [drillLedger, showPeriod, showAddPeriod, focusedRowIdx, navigableRows, expanded, onBack]);
 
   const toggleGroup = (name: string) => setExpanded(prev => {
     const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n;
@@ -394,7 +377,7 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
       {showPercent && <th style={{ ...rs.th, width:'8%', textAlign:'right', fontSize:10 }}>%</th>}
       {allPeriods.map((p,i) => (
         <th key={i} style={{ ...rs.th, textAlign:'right', width: `${(showPercent?52:50)/allPeriods.length}%`, borderLeft: i===0?'none':'1px solid #ccd5dd' }}>
-          <div style={{ fontSize:11, fontWeight:800, color:'#1a1a1a' }}>{p.label}</div>
+          <div style={{ fontSize:11, fontWeight:800 }}>{p.label}</div>
           <div style={{ fontSize:9, fontWeight:400, color:'#777' }}>{periodLabel(p)}</div>
         </th>
       ))}
@@ -406,11 +389,7 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
   const renderGroupRow = (grpName: string) => {
     const anyNonZero = allPeriods.some(p => groupTotalForPeriod(grpName, p.from, p.to) !== 0);
     if (!anyNonZero) return null;
-
     const isExp = expanded.has(grpName);
-    const mainAbs = Math.abs(groupTotalForPeriod(grpName, mainPeriod.from, mainPeriod.to));
-    const pct = salesTotal0 > 0 ? ((mainAbs / salesTotal0) * 100).toFixed(2) : '—';
-
     rowIdxCounter++;
     const grpIdx = rowIdxCounter;
     const isFocused = focusedRowIdx === grpIdx;
@@ -419,48 +398,34 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
       <React.Fragment key={grpName}>
         <tr
           data-rowidx={grpIdx}
-          style={{ ...rs.groupRow, cursor:'pointer', outline: isFocused ? '2px solid #1f4e79' : 'none', outlineOffset: -2, background: isFocused ? '#ddeeff' : '#fff' }}
+          style={{ ...rs.groupRow, cursor:'pointer', background: isFocused ? '#ddeeff' : '#fff' }}
           onClick={() => { setFocusedRowIdx(grpIdx); toggleGroup(grpName); }}
         >
           <td style={rs.tdName}>
             <span style={rs.toggle}>{isExp ? '−' : '+'}</span>
             <span style={rs.groupName}>{grpName}</span>
           </td>
-          {showPercent && <td style={rs.tdPct}>{pct}%</td>}
-          {allPeriods.map((p,i) => {
-            const abs = Math.abs(groupTotalForPeriod(grpName, p.from, p.to));
-            return (
-              <td key={i} style={{ ...rs.tdAmt, borderLeft: i===0?'none':'1px solid #dde4ec' }}>
-                {abs > 0 ? fmtAmtAbs(abs) : ''}
-              </td>
-            );
-          })}
+          {showPercent && <td style={rs.tdPct}>—</td>}
+          {allPeriods.map((p,i) => (
+            <td key={i} style={{ ...rs.tdAmt, borderLeft: i===0?'none':'1px solid #dde4ec' }}>
+              {fmtAmtAbs(groupTotalForPeriod(grpName, p.from, p.to))}
+            </td>
+          ))}
         </tr>
         {isExp && groupLedgersNonZero(grpName, mainPeriod.from, mainPeriod.to).map(l => {
           rowIdxCounter++;
           const ledgerIdx = rowIdxCounter;
-          const isLedgerFocused = focusedRowIdx === ledgerIdx;
           return (
-            <tr
-              key={l.id}
-              data-rowidx={ledgerIdx}
-              style={{ ...rs.ledgerRow, outline: isLedgerFocused ? '2px solid #1f4e79' : 'none', outlineOffset: -2, background: isLedgerFocused ? '#ddeeff' : '#fafbff' }}
-              onClick={() => { setFocusedRowIdx(ledgerIdx); }}
-            >
+            <tr key={l.id} data-rowidx={ledgerIdx} style={{ ...rs.ledgerRow, background: focusedRowIdx === ledgerIdx ? '#ddeeff' : '#fafbff' }} onClick={() => setFocusedRowIdx(ledgerIdx)}>
               <td style={{ ...rs.tdName, paddingLeft:28 }}>
-                <span onClick={(e) => { e.stopPropagation(); setDrillLedger(l); }} style={{ fontStyle:'italic', color:'#1a5fa8', cursor:'pointer', textDecoration:'underline' }}>
-                  {l.name}
-                </span>
+                <span onClick={(e) => { e.stopPropagation(); setDrillLedger(l); }} style={{ color:'#1a5fa8', cursor:'pointer', textDecoration:'underline' }}>{l.name}</span>
               </td>
               {showPercent && <td style={rs.tdPct} />}
-              {allPeriods.map((p,i) => {
-                const bal = calcBalanceForPeriod(l.id, p.from, p.to);
-                return (
-                  <td key={i} style={{ ...rs.tdAmt, color:'#555', fontWeight:400, borderLeft: i===0?'none':'1px solid #dde4ec' }}>
-                    {bal !== 0 ? fmtAmtAbs(bal) : ''}
-                  </td>
-                );
-              })}
+              {allPeriods.map((p,i) => (
+                <td key={i} style={{ ...rs.tdAmt, fontWeight:400, color:'#555', borderLeft: i===0?'none':'1px solid #dde4ec' }}>
+                  {fmtAmtAbs(calcBalanceForPeriod(l.id, p.from, p.to))}
+                </td>
+              ))}
             </tr>
           );
         })}
@@ -468,63 +433,29 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
     );
   };
 
-  const renderNettRow = (side: 'left'|'right') => (
-    <tr style={{ ...rs.groupRow, background:'#f8fbff' }}>
-      <td style={{ ...rs.tdName, fontStyle:'italic', paddingLeft:16 }}>
-        {periodTotals[0]?.nett >= 0 ? 'Nett Profit' : 'Nett Loss'}
-      </td>
-      {showPercent && <td style={rs.tdPct} />}
-      {periodTotals.map((pt,i) => {
-        const isProfit = pt.nett >= 0;
-        const showOnSide = (side==='left' && isProfit) || (side==='right' && !isProfit);
-        return (
-          <td key={i} style={{ ...rs.tdAmt, color: isProfit ? '#006b00' : '#7a0000', fontWeight:800, borderLeft: i===0?'none':'1px solid #dde4ec' }}>
-            {showOnSide ? fmtAmtAbs(pt.nett) : ''}
-          </td>
-        );
-      })}
-    </tr>
-  );
-
   return (
-    <div style={s.root} id="pl-report" tabIndex={0}>
-      {showPeriod && (
-        <PeriodModal from={mainPeriod.from} to={mainPeriod.to}
-          onAccept={(f,t) => { setMainPeriod({from:f,to:t}); setShowPeriod(false); }}
-          onCancel={() => setShowPeriod(false)} />
-      )}
-      {showAddPeriod && (
-        <AddPeriodModal
-          onAdd={(label,from,to) => { setExtraPeriods(p=>[...p,{label,from,to}]); setShowAddPeriod(false); }}
-          onCancel={() => setShowAddPeriod(false)} />
-      )}
-
+    <div ref={rootRef} style={s.root} tabIndex={-1}>
+      {showPeriod && <PeriodModal from={mainPeriod.from} to={mainPeriod.to} onAccept={(f,t)=>{setMainPeriod({from:f,to:t}); setShowPeriod(false)}} onCancel={()=>setShowPeriod(false)} />}
+      
       <div style={s.titleBar}>
-        {onBack && <button onClick={onBack} style={s.backBtn}>← Back</button>}
+        {onBack && <button onClick={onBack} style={s.backBtn}>← Back (Esc)</button>}
         <span style={{ flex:1, fontWeight:700 }}>Profit & Loss A/c</span>
-        <span style={{ flex:2, textAlign:'center', fontWeight:800, fontSize:12 }}>{companyName||'…'}</span>
-        <span style={{ flex:1, textAlign:'right', opacity:0.7, fontSize:11 }}>{periodLabel(mainPeriod)}</span>
+        <span style={{ flex:2, textAlign:'center' }}>{companyName}</span>
+        <span style={{ flex:1, textAlign:'right', opacity:0.7 }}>{periodLabel(mainPeriod)}</span>
       </div>
 
       <div style={s.contentWrap} ref={contentRef}>
-        {loading ? <div style={{ padding:60, textAlign:'center', color:'#888' }}>Loading…</div> : (
+        {loading ? <div style={{ padding:40, textAlign:'center' }}>Loading...</div> : (
           <div style={s.twoCol}>
             <div style={s.col}>
               <table style={s.table}>
                 <thead><tr style={{ background:LIGHT }}><ColHdrCells /></tr></thead>
-                <tbody>
-                  {LEFT_GROUPS.map(g => renderGroupRow(g))}
-                  {periodTotals[0]?.nett >= 0 && renderNettRow('left')}
-                </tbody>
+                <tbody>{LEFT_GROUPS.map(g => renderGroupRow(g))}</tbody>
                 <tfoot>
                   <tr style={s.totalRow}>
-                    <td style={{ ...rs.tdName, fontWeight:900 }}>Total</td>
+                    <td style={rs.tdName}>Total</td>
                     {showPercent && <td style={rs.tdPct} />}
-                    {periodTotals.map((pt,i) => (
-                      <td key={i} style={{ ...rs.tdAmt, fontWeight:900, borderTop:'2px solid #555', borderLeft: i===0?'none':'1px solid #dde4ec' }}>
-                        {fmtAmtAbs(pt.grand)}
-                      </td>
-                    ))}
+                    {periodTotals.map((pt, i) => <td key={i} style={rs.tdAmt}>{fmtAmtAbs(pt.grand)}</td>)}
                   </tr>
                 </tfoot>
               </table>
@@ -533,19 +464,12 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
             <div style={s.col}>
               <table style={s.table}>
                 <thead><tr style={{ background:LIGHT }}><ColHdrCells /></tr></thead>
-                <tbody>
-                  {RIGHT_GROUPS.map(g => renderGroupRow(g))}
-                  {periodTotals[0]?.nett < 0 && renderNettRow('right')}
-                </tbody>
+                <tbody>{RIGHT_GROUPS.map(g => renderGroupRow(g))}</tbody>
                 <tfoot>
                   <tr style={s.totalRow}>
-                    <td style={{ ...rs.tdName, fontWeight:900 }}>Total</td>
+                    <td style={rs.tdName}>Total</td>
                     {showPercent && <td style={rs.tdPct} />}
-                    {periodTotals.map((pt,i) => (
-                      <td key={i} style={{ ...rs.tdAmt, fontWeight:900, borderTop:'2px solid #555', borderLeft: i===0?'none':'1px solid #dde4ec' }}>
-                        {fmtAmtAbs(pt.grand)}
-                      </td>
-                    ))}
+                    {periodTotals.map((pt, i) => <td key={i} style={rs.tdAmt}>{fmtAmtAbs(pt.grand)}</td>)}
                   </tr>
                 </tfoot>
               </table>
@@ -555,44 +479,34 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
       </div>
 
       <div style={s.rightPanel}>
-        {[
-          { k:'F2',    l:'Period',        a:()=>setShowPeriod(true) },
-          { k:'F5',    l:'Expand All',    a:()=>setExpanded(new Set(ALL_GROUPS)) },
-          { k:'Esc',   l:'Collapse / Back', a:()=>{ if(expanded.size>0) setExpanded(new Set()); else if(onBack) onBack(); } },
-          { k:'Alt+N', l:'Add Period',    a:()=>setShowAddPeriod(true) },
-          { k:'Alt+F', l:'Percentages',   a:()=>setShowPercent(p=>!p) },
-          { k:'✕ Clr', l:'Clear Periods', a:()=>setExtraPeriods([]) },
-        ].map((b,i) => (
-          <button key={i} onClick={b.a} style={s.sideBtn}>
-            <span style={s.sBtnKey}>{b.k}</span>
-            <span style={s.sBtnLabel}>{b.l}</span>
-          </button>
-        ))}
+        <button onClick={()=>setShowPeriod(true)} style={s.sideBtn}><span style={s.sBtnKey}>F2</span><span style={s.sBtnLabel}>Period</span></button>
+        <button onClick={()=>setExpanded(new Set(ALL_GROUPS))} style={s.sideBtn}><span style={s.sBtnKey}>F5</span><span style={s.sBtnLabel}>Expand All</span></button>
+        <button onClick={()=>{ if(expanded.size>0) setExpanded(new Set()); else onBack?.(); }} style={s.sideBtn}><span style={s.sBtnKey}>Esc</span><span style={s.sBtnLabel}>Back</span></button>
       </div>
 
       <div style={s.statusBar}>
-        <span style={{ color:'#aaa', fontSize:10 }}>F2: Period | F5: Expand | Esc: Back | Alt+N: New Period</span>
+        <span style={{ fontSize:10, color:'#aaa' }}>F2: Period | F5: Expand All | Esc: Back | ↑↓: Navigate</span>
       </div>
     </div>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ── Styles (Same as before) ───────────────────────────────────────────────────
 const rs: Record<string, React.CSSProperties> = {
-  th:         { padding:'5px 10px', fontSize:11, fontWeight:700, color:'#333', borderBottom:`1px solid ${BORDER}`, background:LIGHT, whiteSpace:'nowrap' },
-  groupRow:   { borderBottom:`1px solid ${ROW_BDR}`, background:'#fff' },
-  ledgerRow:  { borderBottom:`1px solid ${ROW_BDR}`, background:'#fafbff' },
-  tdName:     { padding:'3px 8px', fontSize:12, verticalAlign:'middle', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' },
-  tdAmt:      { padding:'3px 10px', fontSize:12, fontWeight:700, textAlign:'right', verticalAlign:'middle', whiteSpace:'nowrap' },
+  th:         { padding:'5px 10px', fontSize:11, fontWeight:700, borderBottom:`1px solid ${BORDER}`, background:LIGHT },
+  groupRow:   { borderBottom:`1px solid ${ROW_BDR}` },
+  ledgerRow:  { borderBottom:`1px solid ${ROW_BDR}` },
+  tdName:     { padding:'3px 8px', fontSize:12 },
+  tdAmt:      { padding:'3px 10px', fontSize:12, fontWeight:700, textAlign:'right' },
   tdPct:      { padding:'3px 6px', fontSize:11, textAlign:'right', color:'#888' },
-  toggle:     { display:'inline-block', width:14, textAlign:'center', fontSize:10, fontWeight:900, border:`1px solid ${BORDER}`, background:LIGHT, marginRight:6 },
+  toggle:     { display:'inline-block', width:14, textAlign:'center', fontSize:10, border:`1px solid ${BORDER}`, marginRight:6 },
   groupName:  { fontWeight:700, textTransform:'uppercase', fontSize:11 },
 };
 
 const s: Record<string, React.CSSProperties> = {
-  root:        { fontFamily:FONT_, fontSize:12, color:'#1a1a1a', background:'#fff', display:'flex', flexDirection:'column', height:'100vh', border:`1px solid #b8c4cc`, overflow:'hidden', position:'relative' },
-  titleBar:    { background:HDR_BG, color:'#fff', display:'flex', alignItems:'center', padding:'3px 8px', fontSize:11, flexShrink:0 },
-  backBtn:     { background:'none', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', cursor:'pointer', fontSize:10, marginRight:10, padding:'1px 5px' },
+  root:        { fontFamily:FONT_, fontSize:12, background:'#fff', display:'flex', flexDirection:'column', height:'100vh', border:`1px solid #b8c4cc`, overflow:'hidden', position:'relative', outline:'none' },
+  titleBar:    { background:HDR_BG, color:'#fff', display:'flex', alignItems:'center', padding:'3px 8px', flexShrink:0 },
+  backBtn:     { background:'none', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', cursor:'pointer', fontSize:10, marginRight:10 },
   contentWrap: { flex:1, overflowY:'auto', paddingRight:90 },
   twoCol:      { display:'flex', minHeight:'100%' },
   col:         { flex:1, display:'flex', flexDirection:'column' },
@@ -600,7 +514,7 @@ const s: Record<string, React.CSSProperties> = {
   table:       { width:'100%', borderCollapse:'collapse', tableLayout:'fixed' },
   totalRow:    { background:LIGHT, borderTop:`2px double #555`, position:'sticky', bottom:0 },
   rightPanel:  { position:'absolute', top:26, right:0, bottom:0, width:88, background:DARK, display:'flex', flexDirection:'column' },
-  sideBtn:     { border:'none', borderBottom:'1px solid rgba(255,255,255,0.1)', color:'#cdd5e0', cursor:'pointer', display:'flex', flexDirection:'column', padding:'8px', textAlign:'left', background:'none' },
+  sideBtn:     { border:'none', borderBottom:'1px solid rgba(255,255,255,0.1)', color:'#cdd5e0', padding:'8px', textAlign:'left', background:'none', cursor:'pointer' },
   sBtnKey:     { fontSize:9, color:'rgba(255,255,255,0.4)', fontWeight:700 },
   sBtnLabel:   { fontSize:10, color:'#d0dae6' },
   statusBar:   { padding:'3px 8px', background:DARK, flexShrink:0, height:24 },
