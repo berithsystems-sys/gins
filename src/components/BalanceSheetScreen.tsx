@@ -1,17 +1,15 @@
 /**
- * TallyPrime-style Balance Sheet A/c
- * Features:
- * 1. Two-column layout: Liabilities (left) | Assets (right)
- * 2. Groups: Capital Account, Loans (Liability), Current Liabilities | Fixed Assets, Investments, Current Assets, Suspense
- * 3. Click ledger name → LedgerDetail drill-down (same as P&L / Trial Balance)
- * 4. Keyboard shortcuts scoped (F2 period, F5 expand, Esc collapse, Alt+P print, Alt+E export)
- * 5. Comparison mode: add extra periods (Alt+N)
- * 6. Zero-balance groups/ledgers hidden
- * 7. Nett difference row (should balance to zero)
+ * TallyPrime-style Balance Sheet A/c — v4
+ * Fixes:
+ * 1. Fixed "printReport" import crash (causing the blank screen).
+ * 2. Voided transactions filtered out (as per P&L / vouchers).
+ * 3. Physical ESC key triggers onBack to go back to the main dashboard.
+ * 4. Added Unified Keyboard Arrow Key Navigation across both columns.
+ * 5. Full-height layout to fit your container.
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { exportToExcel, printReport } from '../lib/ReportUtils';
+import { exportToExcel } from '../lib/ReportUtils';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 interface Ledger {
@@ -19,16 +17,17 @@ interface Ledger {
   openingBalance?: number; balanceType?: 'Dr' | 'Cr';
 }
 
-function fmtAmtAbs(n: number) {
-  return Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-}
-function fmtDate(iso: string) {
+const fmtAmtAbs = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const fmtDate = (iso: string) => {
   try {
     const d = new Date(iso);
     const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return `${d.getDate()}-${M[d.getMonth()]}-${d.getFullYear()}`;
   } catch { return iso; }
-}
+};
+
+// Voided voucher helper
+const isVoided = (v: any): boolean => v.voided === true || v.voided === 1 || v.voided === '1';
 
 // ─── LedgerDetail (drill-down, identical to P&L) ─────────────────────────────
 function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?: string; onBack: () => void }) {
@@ -46,7 +45,12 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
   useEffect(() => {
     const q = branchId ? `?branchId=${branchId}` : '';
     fetch(`/api/vouchers/ledger/${ledger.id}${q}`)
-      .then(r => r.json()).then(d => setRows(Array.isArray(d) ? d : []))
+      .then(r => r.json())
+      .then(d => {
+        // Exclude voided vouchers in detail view
+        const active = (Array.isArray(d) ? d : []).filter(v => !isVoided(v));
+        setRows(active);
+      })
       .catch(() => setRows([])).finally(() => setLoading(false));
   }, [ledger.id, branchId]);
 
@@ -69,7 +73,7 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
   return (
     <div style={{ fontFamily: FONT, fontSize: 12, display:'flex', flexDirection:'column', height:'100%', background:'#fff', border:'1px solid #b8c4cc', borderRadius:2, overflow:'hidden' }}>
       <div style={{ background: HDR, color:'#fff', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'3px 10px', fontSize:12, fontWeight:700, flexShrink:0 }}>
-        <button onClick={onBack} style={{ background:'none', border:'1px solid rgba(255,255,255,0.4)', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:FONT, padding:'1px 10px', borderRadius:2 }}>← Back</button>
+        <button onClick={onBack} style={{ background:'none', border:'1px solid rgba(255,255,255,0.4)', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:FONT, padding:'1px 10px', borderRadius:2 }}>← Back (Esc)</button>
         <span style={{ flex:2, textAlign:'center', fontWeight:800, fontSize:13 }}>{ledger.name}</span>
         <span />
       </div>
@@ -216,7 +220,7 @@ function AddPeriodModal({ onAdd, onCancel }: { onAdd:(label:string,from:string,t
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 interface Period { label: string; from: string; to: string; }
-interface BSScreenProps { branchId?: string; }
+interface BSScreenProps { branchId?: string; onBack?: () => void; }
 
 const FONT_    = `-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,sans-serif`;
 const HDR_BG   = '#1f4e79';
@@ -225,14 +229,11 @@ const LIGHT    = '#f0f4f8';
 const ROW_BDR  = '#e0e6ee';
 const DARK     = '#1a2a3a';
 
-// Balance Sheet group definitions
-// Liabilities side (left): Credit-natured groups → stored as negative running
-// Assets side (right): Debit-natured groups → stored as positive running
 const LIABILITY_GROUPS = ['Capital Account', 'Reserves & Surplus', 'Loans (Liability)', 'Current Liabilities', 'Suspense Account'];
 const ASSET_GROUPS     = ['Fixed Assets', 'Investments', 'Current Assets', 'Misc. Expenses (Asset)'];
 
 // ─── Main BSScreen ─────────────────────────────────────────────────────────────
-export default function BalanceSheetScreen({ branchId }: BSScreenProps) {
+export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) {
   const [ledgers, setLedgers]             = useState<any[]>([]);
   const [allVouchers, setAllVouchers]     = useState<any[]>([]);
   const [companyName, setCompanyName]     = useState('');
@@ -243,7 +244,19 @@ export default function BalanceSheetScreen({ branchId }: BSScreenProps) {
   const [expanded, setExpanded]           = useState<Set<string>>(new Set());
   const [drillLedger, setDrillLedger]     = useState<Ledger | null>(null);
   const [loading, setLoading]             = useState(true);
-  const [showNettProfit, setShowNettProfit] = useState(true); // include P&L balance on liability side
+  const [showNettProfit, setShowNettProfit] = useState(true);
+  
+  // Unified Keyboard Row Focus
+  const [focusedRowIdx, setFocusedRowIdx] = useState<number>(-1);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Auto-focus the component container on mount or when returning from sub-views
+  useEffect(() => {
+    if (!drillLedger && !showPeriod && !showAddPeriod) {
+      rootRef.current?.focus();
+    }
+  }, [drillLedger, showPeriod, showAddPeriod]);
 
   // ── Fetch once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -255,8 +268,11 @@ export default function BalanceSheetScreen({ branchId }: BSScreenProps) {
       fetch('/api/branches').then(r => r.json()).catch(() => []),
     ]).then(([l, v, b]) => {
       setLedgers(Array.isArray(l) ? l : []);
-      const vArr = Array.isArray(v) ? v : [];
+      
+      // Filter out voided vouchers upon load
+      const vArr = (Array.isArray(v) ? v : []).filter((x: any) => !isVoided(x));
       setAllVouchers(vArr);
+      
       if (vArr.length > 0) {
         const dates = vArr.map((x:any) => x.date?.slice(0,10)).filter(Boolean).sort();
         setMainPeriod({ from: dates[0], to: dates[dates.length-1] });
@@ -304,36 +320,52 @@ export default function BalanceSheetScreen({ branchId }: BSScreenProps) {
     ...extraPeriods,
   ], [mainPeriod, extraPeriods, companyName]);
 
-  // ── P&L net profit (to carry to Balance Sheet liabilities) ──────────
-  // Net profit = Income groups total − Expense groups total (positive = profit)
+  // Net Profit Carry calculations
   const PL_INCOME_GROUPS   = ['Sales Account', 'Direct Income', 'Indirect Income', 'Closing Stock'];
   const PL_EXPENSE_GROUPS  = ['Opening Stock', 'Purchase Account', 'Direct Expenses', 'Indirect Expenses'];
 
   const plNetForPeriod = useCallback((from: string, to: string) => {
     const income  = PL_INCOME_GROUPS.reduce((a,g)  => a + Math.abs(groupTotalForPeriod(g, from, to)), 0);
     const expense = PL_EXPENSE_GROUPS.reduce((a,g) => a + Math.abs(groupTotalForPeriod(g, from, to)), 0);
-    return income - expense; // positive = net profit, negative = net loss
+    return income - expense;
   }, [groupTotalForPeriod]);
 
-  // ── Per-period BS totals ─────────────────────────────────────────────
   const periodTotals = useMemo(() => allPeriods.map(p => {
-    // Liabilities: Cr-natured → take abs of negative running totals
-    // For Capital/Loans/CL: the ledgers typically have Cr balances → running is negative
-    // We display abs value on liability side
     const liabRaw = LIABILITY_GROUPS.reduce((a,g) => a + groupTotalForPeriod(g, p.from, p.to), 0);
-    // Assets: Dr-natured → running is positive
     const assetRaw = ASSET_GROUPS.reduce((a,g) => a + groupTotalForPeriod(g, p.from, p.to), 0);
     const plNet    = showNettProfit ? plNetForPeriod(p.from, p.to) : 0;
 
-    // Total liabilities (credit side) = abs(liabRaw) + P&L net profit (if profit, adds to equity)
     const liabTotal  = Math.abs(liabRaw) + (plNet >= 0 ? plNet : 0);
-    // Total assets (debit side) = assetRaw + net loss (if loss, it's a debit balance under assets)
     const assetTotal = Math.abs(assetRaw) + (plNet < 0 ? Math.abs(plNet) : 0);
     const grand = Math.max(liabTotal, assetTotal);
-    const diff  = liabTotal - assetTotal; // should be 0 if balanced
+    const diff  = liabTotal - assetTotal;
 
     return { liabRaw, assetRaw, plNet, liabTotal, assetTotal, grand, diff };
   }), [allPeriods, groupTotalForPeriod, plNetForPeriod, showNettProfit]);
+
+  // Define flat navigable row representation for unified arrow key traversal
+  const ALL_GROUPS = [...LIABILITY_GROUPS, ...ASSET_GROUPS];
+  const navigableRows = useMemo(() => {
+    const rows: Array<{ type: 'group'; name: string } | { type: 'ledger'; ledger: any; groupName: string }> = [];
+    ALL_GROUPS.forEach(grpName => {
+      const anyNonZero = allPeriods.some(p => groupTotalForPeriod(grpName, p.from, p.to) !== 0);
+      if (!anyNonZero) return;
+      rows.push({ type: 'group', name: grpName });
+      if (expanded.has(grpName)) {
+        groupLedgersNonZero(grpName, mainPeriod.from, mainPeriod.to).forEach(l => {
+          rows.push({ type: 'ledger', ledger: l, groupName: grpName });
+        });
+      }
+    });
+    return rows;
+  }, [allPeriods, expanded, groupTotalForPeriod, groupLedgersNonZero, mainPeriod]);
+
+  // Keep focused row scrolled into view dynamically
+  useEffect(() => {
+    if (focusedRowIdx < 0) return;
+    const el = contentRef.current?.querySelector(`[data-rowidx="${focusedRowIdx}"]`);
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [focusedRowIdx]);
 
   // ── Keyboard shortcuts ───────────────────────────────────────────────
   useEffect(() => {
@@ -343,20 +375,50 @@ export default function BalanceSheetScreen({ branchId }: BSScreenProps) {
       if (drillLedger) return;
 
       let handled = false;
-      if (e.key === 'F2') { setShowPeriod(p=>!p); handled = true; }
-      else if (e.key === 'F5') {
+      if (e.key === 'ArrowDown') {
+        setFocusedRowIdx(prev => Math.min(prev + 1, navigableRows.length - 1));
+        handled = true;
+      } else if (e.key === 'ArrowUp') {
+        setFocusedRowIdx(prev => Math.max(prev - 1, 0));
+        handled = true;
+      } else if (e.key === 'Enter' || e.key === 'ArrowRight') {
+        if (focusedRowIdx >= 0 && focusedRowIdx < navigableRows.length) {
+          const row = navigableRows[focusedRowIdx];
+          if (row.type === 'group') toggleGroup(row.name);
+          else if (row.type === 'ledger') setDrillLedger(row.ledger);
+          handled = true;
+        }
+      } else if (e.key === 'ArrowLeft') {
+        if (focusedRowIdx >= 0 && focusedRowIdx < navigableRows.length) {
+          const row = navigableRows[focusedRowIdx];
+          const grpName = row.type === 'group' ? row.name : row.groupName;
+          setExpanded(prev => { const n = new Set(prev); n.delete(grpName); return n; });
+          handled = true;
+        }
+      } else if (e.key === 'F2') { 
+        setShowPeriod(true); handled = true; 
+      } else if (e.key === 'F5') {
         setExpanded(new Set([...LIABILITY_GROUPS, ...ASSET_GROUPS])); handled = true;
+      } else if (e.key === 'Escape') { 
+        if (expanded.size > 0) {
+          setExpanded(new Set());
+        } else if (onBack) {
+          onBack(); // Esc triggers dashboard back
+        }
+        handled = true; 
+      } else if (e.altKey && e.key.toLowerCase() === 'p') { 
+        window.print(); handled = true; 
+      } else if (e.altKey && e.key.toLowerCase() === 'n') { 
+        setShowAddPeriod(true); handled = true; 
+      } else if (e.altKey && e.key.toLowerCase() === 'e') { 
+        handleExport(); handled = true; 
       }
-      else if (e.key === 'Escape') { setExpanded(new Set()); handled = true; }
-      else if (e.altKey && e.key.toLowerCase() === 'p') { window.print(); handled = true; }
-      else if (e.altKey && e.key.toLowerCase() === 'n') { setShowAddPeriod(true); handled = true; }
-      else if (e.altKey && e.key.toLowerCase() === 'e') { handleExport(); handled = true; }
 
       if (handled) { e.preventDefault(); e.stopPropagation(); }
     };
     window.addEventListener('keydown', h, true);
     return () => window.removeEventListener('keydown', h, true);
-  }, [drillLedger]);
+  }, [drillLedger, navigableRows, focusedRowIdx, expanded, onBack]);
 
   const toggleGroup = (name: string) => setExpanded(prev => {
     const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n;
@@ -374,12 +436,10 @@ export default function BalanceSheetScreen({ branchId }: BSScreenProps) {
     exportToExcel(rows, 'Balance_Sheet');
   };
 
-  // ── Drill-down view ───────────────────────────────────────────────────
   if (drillLedger) {
     return <LedgerDetail ledger={drillLedger} branchId={branchId} onBack={() => setDrillLedger(null)} />;
   }
 
-  // ── Column header cells ──────────────────────────────────────────────
   const ColHdrCells = () => (
     <>
       <th style={{ ...rs.th, textAlign:'left', width:'50%' }}>Particulars</th>
@@ -392,16 +452,24 @@ export default function BalanceSheetScreen({ branchId }: BSScreenProps) {
     </>
   );
 
-  // ── Group row renderer ────────────────────────────────────────────────
   const renderGroupRow = (grpName: string) => {
     const anyNonZero = allPeriods.some(p => groupTotalForPeriod(grpName, p.from, p.to) !== 0);
     if (!anyNonZero) return null;
 
     const isExp = expanded.has(grpName);
+    
+    // Determine static focus index lookup
+    const grpIdx = navigableRows.findIndex(r => r.type === 'group' && r.name === grpName);
+    const isFocused = focusedRowIdx === grpIdx;
 
     return (
       <React.Fragment key={grpName}>
-        <tr style={{ ...rs.groupRow, cursor:'pointer' }} onClick={()=>toggleGroup(grpName)} className="bs-grp-row">
+        <tr 
+          data-rowidx={grpIdx}
+          style={{ ...rs.groupRow, cursor:'pointer', background: isFocused ? '#ffd966' : '#fff' }} 
+          onClick={() => { setFocusedRowIdx(grpIdx); toggleGroup(grpName); }} 
+          className="bs-grp-row"
+        >
           <td style={rs.tdName}>
             <span style={rs.toggle}>{isExp ? '−' : '+'}</span>
             <span style={rs.groupName}>{grpName}</span>
@@ -416,32 +484,41 @@ export default function BalanceSheetScreen({ branchId }: BSScreenProps) {
             );
           })}
         </tr>
-        {isExp && groupLedgersNonZero(grpName, mainPeriod.from, mainPeriod.to).map(l => (
-          <tr key={l.id} style={rs.ledgerRow}>
-            <td style={{ ...rs.tdName, paddingLeft:28 }}>
-              <span
-                onClick={(e) => { e.stopPropagation(); setDrillLedger(l); }}
-                style={{ fontStyle:'italic', color:'#1a5fa8', cursor:'pointer', textDecoration:'underline', fontSize:11 }}
-                title="Click to view transactions"
-              >
-                {l.name}
-              </span>
-            </td>
-            {allPeriods.map((p,i) => {
-              const bal = calcBalanceForPeriod(l.id, p.from, p.to);
-              return (
-                <td key={i} style={{ ...rs.tdAmt, color:'#555', fontWeight:400, fontSize:11, borderLeft: i===0?'none':'1px solid #dde4ec' }}>
-                  {bal !== 0 ? fmtAmtAbs(bal) : ''}
-                </td>
-              );
-            })}
-          </tr>
-        ))}
+        {isExp && groupLedgersNonZero(grpName, mainPeriod.from, mainPeriod.to).map(l => {
+          const ledgerIdx = navigableRows.findIndex(r => r.type === 'ledger' && r.ledger.id === l.id);
+          const isLedgerFocused = focusedRowIdx === ledgerIdx;
+          
+          return (
+            <tr 
+              key={l.id} 
+              data-rowidx={ledgerIdx}
+              style={{ ...rs.ledgerRow, background: isLedgerFocused ? '#ddeeff' : '#fafbff' }}
+              onClick={() => setFocusedRowIdx(ledgerIdx)}
+            >
+              <td style={{ ...rs.tdName, paddingLeft:28 }}>
+                <span
+                  onClick={(e) => { e.stopPropagation(); setDrillLedger(l); }}
+                  style={{ fontStyle:'italic', color:'#1a5fa8', cursor:'pointer', textDecoration:'underline', fontSize:11 }}
+                  title="Click to view transactions"
+                >
+                  {l.name}
+                </span>
+              </td>
+              {allPeriods.map((p,i) => {
+                const bal = calcBalanceForPeriod(l.id, p.from, p.to);
+                return (
+                  <td key={i} style={{ ...rs.tdAmt, color:'#555', fontWeight:400, fontSize:11, borderLeft: i===0?'none':'1px solid #dde4ec' }}>
+                    {bal !== 0 ? fmtAmtAbs(bal) : ''}
+                  </td>
+                );
+              })}
+            </tr>
+          );
+        })}
       </React.Fragment>
     );
   };
 
-  // ── Section separator (like Tally's italic heading) ──────────────────
   const SectionHeader = ({ label }: { label: string }) => (
     <tr style={{ background:'#fafbff' }}>
       <td colSpan={1 + allPeriods.length}
@@ -451,7 +528,6 @@ export default function BalanceSheetScreen({ branchId }: BSScreenProps) {
     </tr>
   );
 
-  // ── P&L balance row on liabilities / assets side ─────────────────────
   const renderPLRow = () => (
     <tr style={{ ...rs.groupRow, background:'#fffbf0' }}>
       <td style={{ ...rs.tdName, fontStyle:'italic', paddingLeft:16 }}>
@@ -465,7 +541,6 @@ export default function BalanceSheetScreen({ branchId }: BSScreenProps) {
     </tr>
   );
 
-  // ── Difference row (should be 0 if balanced) ──────────────────────────
   const renderDiffRow = (side: 'liab'|'asset') => {
     const anyDiff = periodTotals.some(pt => Math.abs(pt.diff) > 0.005);
     if (!anyDiff) return null;
@@ -487,10 +562,11 @@ export default function BalanceSheetScreen({ branchId }: BSScreenProps) {
   };
 
   return (
-    <div style={s.root} id="bs-report">
+    <div ref={rootRef} style={s.root} id="bs-report" tabIndex={0}>
       <style>{`
         @media print { .no-print { display:none!important; } }
         .bs-grp-row:hover { background: #eef4fb !important; }
+        #bs-report:focus { outline: none; }
       `}</style>
 
       {/* Modals */}
@@ -507,13 +583,18 @@ export default function BalanceSheetScreen({ branchId }: BSScreenProps) {
 
       {/* Title Bar */}
       <div style={s.titleBar}>
+        {onBack && (
+          <button onClick={onBack} className="no-print" style={s.backBtn}>
+            ← Back (Esc)
+          </button>
+        )}
         <span style={{ flex:1, fontWeight:700 }}>Balance Sheet</span>
         <span style={{ flex:2, textAlign:'center', fontWeight:800, fontSize:12 }}>{companyName||'…'}</span>
         <span style={{ flex:1, textAlign:'right', opacity:0.7, fontSize:11 }}>{periodLabel(mainPeriod)}</span>
       </div>
 
       {/* Main Content */}
-      <div style={s.contentWrap}>
+      <div style={s.contentWrap} ref={contentRef}>
         {loading ? (
           <div style={{ padding:60, textAlign:'center', color:'#888', fontStyle:'italic', fontSize:13 }}>Loading…</div>
         ) : (
@@ -543,7 +624,6 @@ export default function BalanceSheetScreen({ branchId }: BSScreenProps) {
                   {renderGroupRow('Current Liabilities')}
                   {renderGroupRow('Suspense Account')}
 
-                  {/* P&L Net Profit row on Liabilities side */}
                   {showNettProfit && periodTotals[0]?.plNet >= 0 && renderPLRow()}
                   {renderDiffRow('liab')}
                 </tbody>
@@ -588,7 +668,6 @@ export default function BalanceSheetScreen({ branchId }: BSScreenProps) {
                   <SectionHeader label="Miscellaneous" />
                   {renderGroupRow('Misc. Expenses (Asset)')}
 
-                  {/* P&L Net Loss row on Assets side */}
                   {showNettProfit && periodTotals[0]?.plNet < 0 && renderPLRow()}
                   {renderDiffRow('asset')}
                 </tbody>
@@ -614,7 +693,7 @@ export default function BalanceSheetScreen({ branchId }: BSScreenProps) {
         {[
           { k:'F2',    l:'Period',        a:()=>setShowPeriod(true) },
           { k:'F5',    l:'Expand All',    a:()=>setExpanded(new Set([...LIABILITY_GROUPS,...ASSET_GROUPS])) },
-          { k:'Esc',   l:'Collapse',      a:()=>setExpanded(new Set()) },
+          { k:'Esc',   l:'Collapse / Back', a:()=>{ if(expanded.size>0){setExpanded(new Set());}else if(onBack){onBack();} } },
           { k:'Alt+N', l:'Add Period',    a:()=>setShowAddPeriod(true) },
           { k:'Alt+P', l:'Print',         a:()=>window.print() },
           { k:'Alt+E', l:'Export Excel',  a:handleExport },
@@ -666,8 +745,9 @@ const rs: Record<string, React.CSSProperties> = {
 };
 
 const s: Record<string, React.CSSProperties> = {
-  root:        { fontFamily:FONT_, fontSize:12, color:'#1a1a1a', background:'#fff', display:'flex', flexDirection:'column', height:'100%', border:`1px solid ${BORDER}`, borderRadius:2, overflow:'hidden', position:'relative' },
+  root:        { fontFamily:FONT_, fontSize:12, color:'#1a1a1a', background:'#fff', display:'flex', flexDirection:'column', height:'100%', border:`1px solid ${BORDER}`, borderRadius:2, overflow:'hidden', position:'relative', outline:'none' },
   titleBar:    { background:HDR_BG, color:'#fff', display:'flex', alignItems:'center', padding:'3px 8px', fontSize:11, fontWeight:600, flexShrink:0 },
+  backBtn:     { background:'none', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', cursor:'pointer', fontSize:10, marginRight:10, padding:'1px 5px' },
   contentWrap: { flex:1, overflowY:'auto', paddingRight:90 },
   twoCol:      { display:'flex', minHeight:'100%' },
   col:         { flex:1, display:'flex', flexDirection:'column', minWidth:0 },
