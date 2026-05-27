@@ -1,1 +1,1 @@
-SD
+export default BalanceSheetScreen;
