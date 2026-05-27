@@ -1,9 +1,11 @@
 /**
  * TallyPrime-style Day Book Screen
- * CHANGES v2:
- * 1. Full-height container — table fills remaining space even with few rows
- * 2. ArrowRight focuses the detail panel; ArrowLeft returns to table
- * 3. Soft-delete void — marks voided:true instead of DELETE; filter toggle shows All/Active/Voided
+ * FIXES applied in this version:
+ *   FIX-A  Full-height table — scroll area fills all space between sub-header
+ *          and status bar regardless of row count.
+ *   FIX-B  Soft-delete void — PATCH voided:true; permanent DELETE is gone.
+ *          Filter toggle: Active / Voided / All.
+ *   FIX-C  ArrowRight focuses the detail panel; ArrowLeft returns to table.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -24,7 +26,6 @@ const VOUCHER_STYLES = {
 };
 const defaultStyle = VOUCHER_STYLES.Payment;
 
-// Void filter options
 const VOID_FILTERS = ['Active', 'Voided', 'All'];
 
 function fmtDate(iso) {
@@ -40,7 +41,7 @@ function fmtAmount(n) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Inline Voucher Edit Form
+// Inline Voucher Edit Form (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
   const vs = VOUCHER_STYLES[voucher.type] || defaultStyle;
@@ -250,52 +251,35 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
   const [voidErr, setVoidErr]         = useState('');
 
   const vs = VOUCHER_STYLES[voucher.type] || defaultStyle;
-
   const drAmt = (voucher.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
 
-  // ── FIX 3: Soft-delete void — PATCH voided:true instead of DELETE
-  // Backend should support PATCH /api/vouchers/:id with { voided: true }
-  // Falls back gracefully to DELETE if the server doesn't support PATCH for void.
+  // ── FIX-B: Soft-delete void — PATCH voided:true only. No DELETE fallback.
   const handleVoid = async () => {
     setVoiding(true); setVoidErr('');
     try {
       const qs = branchId ? `?branchId=${branchId}` : '';
-
-      // First try soft-delete via PATCH
-      const patchRes = await fetch(`/api/vouchers/${voucher.id}${qs}`, {
+      const res = await fetch(`/api/vouchers/${voucher.id}${qs}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ voided: true, voidedAt: new Date().toISOString() }),
       });
 
-      // If server returns 404 or 405 (method not allowed) fall back to DELETE
-      let finalRes = patchRes;
-      if (patchRes.status === 404 || patchRes.status === 405 || patchRes.status === 501) {
-        finalRes = await fetch(`/api/vouchers/${voucher.id}${qs}`, { method: 'DELETE' });
-      }
-
-      if (finalRes.ok) {
-        onVoid();
-        return;
-      }
+      if (res.ok) { onVoid(); return; }
 
       let msg = '';
-      const contentType = finalRes.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = await finalRes.json().catch(() => ({}));
-        msg = data.error || data.message || data.detail || '';
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('application/json')) {
+        const data = await res.json().catch(() => ({}));
+        msg = data.error || data.message || '';
       } else {
-        const txt = await finalRes.text().catch(() => '');
-        msg = txt.slice(0, 200);
+        msg = (await res.text().catch(() => '')).slice(0, 200);
       }
-
       if (!msg) {
-        if (finalRes.status === 404) msg = `Voucher not found (404). It may have already been voided or deleted.`;
-        else if (finalRes.status === 403) msg = 'You do not have permission to void this voucher (403).';
-        else if (finalRes.status === 409) msg = 'Voucher cannot be voided — it may be locked or referenced by another entry (409).';
-        else msg = `Server returned ${finalRes.status} ${finalRes.statusText || ''}`.trim();
+        if (res.status === 404) msg = 'Voucher not found (404). It may have already been voided.';
+        else if (res.status === 403) msg = 'You do not have permission to void this voucher (403).';
+        else if (res.status === 405) msg = 'Server does not support soft-void (405). Please update server.ts with the PATCH route.';
+        else msg = `Server returned ${res.status} ${res.statusText || ''}`.trim();
       }
-
       setVoidErr(msg);
       setVoidConfirm(false);
     } catch (err) {
@@ -318,7 +302,7 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
     );
   }
 
-  const isVoided = !!voucher.voided;
+  const isVoided = !!(voucher.voided || voucher.voided === 1);
 
   return (
     <div ref={panelRef} tabIndex={-1} style={{ fontFamily: FONT, fontSize: 12, outline: 'none' }}>
@@ -377,7 +361,6 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
         </div>
       )}
 
-      {/* Action buttons — hide edit/void buttons for already-voided entries */}
       {!isVoided && !voidConfirm && (
         <div style={{ padding: '10px 12px', display: 'flex', gap: 8, borderTop: `1px solid ${BORDER}`, background: vs.bodyBg }}>
           <button onClick={() => setMode('edit')}
@@ -391,7 +374,6 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
         </div>
       )}
 
-      {/* Restore option for voided entries */}
       {isVoided && (
         <div style={{ padding: '10px 12px', borderTop: `1px solid #f5a0a0`, background: '#fff8f8' }}>
           <div style={{ fontSize: 11, color: '#900', fontWeight: 600, marginBottom: 6 }}>This voucher has been voided and is excluded from reports.</div>
@@ -452,10 +434,9 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
   const [toDate, setToDate]                   = useState(propTo   || initialDate || today);
   const [selectedVoucher, setSelectedVoucher] = useState(null);
   const [focusedIdx, setFocusedIdx]           = useState(-1);
-  const [panelFocused, setPanelFocused]       = useState(false);  // FIX 2: tracks if panel has focus
+  const [panelFocused, setPanelFocused]       = useState(false);
   const [companyName, setCompanyName]         = useState('');
   const [showPeriod, setShowPeriod]           = useState(false);
-  // FIX 3: void filter — 'Active' | 'Voided' | 'All'
   const [voidFilter, setVoidFilter]           = useState('Active');
 
   const tableBodyRef = useRef(null);
@@ -463,7 +444,6 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
   const fromRef      = useRef(null);
   const toRef        = useRef(null);
 
-  // ── Fetch company
   useEffect(() => {
     if (branchId) {
       fetch('/api/branches').then(r => r.json())
@@ -474,13 +454,11 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
       .then(d => { if (d?.name) setCompanyName(d.name); }).catch(() => {});
   }, [branchId]);
 
-  // ── Fetch ledgers
   useEffect(() => {
     const q = branchId ? `?branchId=${branchId}` : '';
     fetch(`/api/ledgers${q}`).then(r => r.json()).then(setLedgers).catch(() => {});
   }, [branchId]);
 
-  // ── Fetch vouchers (all, including voided — filtering done client-side)
   const fetchData = useCallback(() => {
     setLoading(true);
     const q = branchId ? `?branchId=${branchId}` : '';
@@ -504,37 +482,29 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // FIX 3: filtered view based on voidFilter
+  // Normalise voided — DB returns 0/1 for SQLite, true/false for MySQL
+  const isVoided = (v) => v.voided === true || v.voided === 1;
+
   const displayedVouchers = vouchers.filter(v => {
-    if (voidFilter === 'Active')  return !v.voided;
-    if (voidFilter === 'Voided')  return !!v.voided;
-    return true; // 'All'
+    if (voidFilter === 'Active')  return !isVoided(v);
+    if (voidFilter === 'Voided')  return  isVoided(v);
+    return true;
   });
 
-  // sync focusedIdx when display list changes
   useEffect(() => {
     if (displayedVouchers.length === 0) { setFocusedIdx(-1); return; }
-    setFocusedIdx(prev => {
-      if (prev < 0) return -1;
-      return Math.min(prev, displayedVouchers.length - 1);
-    });
+    setFocusedIdx(prev => prev < 0 ? -1 : Math.min(prev, displayedVouchers.length - 1));
   }, [displayedVouchers.length]);
 
-  // scroll focused row into view
   useEffect(() => {
     if (focusedIdx < 0) return;
-    const row = tableBodyRef.current?.querySelector(`[data-row-idx="${focusedIdx}"]`);
-    row?.scrollIntoView({ block: 'nearest' });
+    tableBodyRef.current?.querySelector(`[data-row-idx="${focusedIdx}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [focusedIdx]);
 
-  // FIX 2: focus panel when panelFocused switches on
   useEffect(() => {
-    if (panelFocused && selectedVoucher) {
-      panelRef.current?.focus();
-    }
+    if (panelFocused && selectedVoucher) panelRef.current?.focus();
   }, [panelFocused, selectedVoucher]);
 
-  // ── Keyboard shortcuts — capture phase
   useEffect(() => {
     const APP_KEYS = new Set(['F2', 'F5']);
     const h = (e) => {
@@ -544,15 +514,15 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
       if (APP_KEYS.has(e.key)) e.preventDefault();
       if (e.altKey && ['p', 'e'].includes(e.key.toLowerCase())) e.preventDefault();
 
-      if (e.key === 'F2')  { setShowPeriod(p => !p); return; }
-      if (e.key === 'F5')  { fetchData(); return; }
+      if (e.key === 'F2') { setShowPeriod(p => !p); return; }
+      if (e.key === 'F5') { fetchData(); return; }
       if (e.altKey && e.key.toLowerCase() === 'p') { window.print(); return; }
       if (e.altKey && e.key.toLowerCase() === 'e') { handleExport(); return; }
 
       if (!inInput && !showPeriod) {
         if (e.key === 'ArrowDown') {
           e.preventDefault();
-          if (panelFocused) return; // don't navigate table when panel has focus
+          if (panelFocused) return;
           setFocusedIdx(prev => {
             const next = Math.min(displayedVouchers.length - 1, prev + 1);
             setSelectedVoucher(displayedVouchers[next] || null);
@@ -570,23 +540,14 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
           });
           return;
         }
-
-        // FIX 2: ArrowRight → move focus to detail panel
         if (e.key === 'ArrowRight' && selectedVoucher && !panelFocused) {
-          e.preventDefault();
-          setPanelFocused(true);
-          return;
+          e.preventDefault(); setPanelFocused(true); return;
         }
-
-        // FIX 2: ArrowLeft → return focus from panel to table row
         if (e.key === 'ArrowLeft' && panelFocused) {
-          e.preventDefault();
-          setPanelFocused(false);
-          const row = tableBodyRef.current?.querySelector(`[data-row-idx="${focusedIdx}"]`);
-          row?.focus();
+          e.preventDefault(); setPanelFocused(false);
+          tableBodyRef.current?.querySelector(`[data-row-idx="${focusedIdx}"]`)?.focus();
           return;
         }
-
         if (e.key === 'Enter' && focusedIdx >= 0 && !panelFocused) {
           e.preventDefault();
           const v = displayedVouchers[focusedIdx];
@@ -597,7 +558,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
       }
 
       if (e.key === 'Escape') {
-        if (panelFocused) { setPanelFocused(false); const row = tableBodyRef.current?.querySelector(`[data-row-idx="${focusedIdx}"]`); row?.focus(); return; }
+        if (panelFocused) { setPanelFocused(false); tableBodyRef.current?.querySelector(`[data-row-idx="${focusedIdx}"]`)?.focus(); return; }
         if (selectedVoucher) { setSelectedVoucher(null); setPanelFocused(false); return; }
         if (showPeriod) { setShowPeriod(false); return; }
       }
@@ -606,14 +567,13 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
     return () => window.removeEventListener('keydown', h, { capture: true });
   }, [displayedVouchers, selectedVoucher, focusedIdx, fetchData, showPeriod, panelFocused]);
 
-  // ── Export CSV
   const handleExport = () => {
     const rows = [
       ['Date', 'Particulars', 'Vch Type', 'Vch No.', 'Debit Amount', 'Credit Amount', 'Voided'],
       ...displayedVouchers.map(v => {
         const dr = (v.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
         const cr = (v.entries || []).filter(e => e.type === 'Cr').reduce((a, e) => a + e.amount, 0);
-        return [fmtDate(v.date), v.narration || '', v.type, v.number || '', dr || '', cr || '', v.voided ? 'Yes' : ''];
+        return [fmtDate(v.date), v.narration || '', v.type, v.number || '', dr || '', cr || '', isVoided(v) ? 'Yes' : ''];
       }),
     ];
     const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
@@ -624,31 +584,28 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
     a.click();
   };
 
-  // ── Totals (only active vouchers contribute to totals)
-  const activForTotals = voidFilter === 'Voided' ? displayedVouchers : displayedVouchers.filter(v => !v.voided);
-  const drTotal = activForTotals.reduce((acc, v) => {
+  const activeForTotals = displayedVouchers.filter(v => !isVoided(v));
+  const drTotal = activeForTotals.reduce((acc, v) => {
     const dr = (v.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
     return acc + (dr || v.amount || 0);
   }, 0);
-  const crTotal = activForTotals.reduce((acc, v) => {
-    const cr = (v.entries || []).filter(e => e.type === 'Cr').reduce((a, e) => a + e.amount, 0);
-    return acc + cr;
+  const crTotal = activeForTotals.reduce((acc, v) => {
+    return acc + (v.entries || []).filter(e => e.type === 'Cr').reduce((a, e) => a + e.amount, 0);
   }, 0);
 
-  const periodLabel = fromDate === toDate
-    ? fmtDate(fromDate)
-    : `${fmtDate(fromDate)} to ${fmtDate(toDate)}`;
-
-  const handleSaved = () => {
-    fetchData();
-    setSelectedVoucher(null);
-  };
+  const periodLabel = fromDate === toDate ? fmtDate(fromDate) : `${fmtDate(fromDate)} to ${fmtDate(toDate)}`;
+  const handleSaved = () => { fetchData(); setSelectedVoucher(null); };
 
   return (
+    /*
+     * FIX-A: Root uses display:flex + flexDirection:column.
+     * The body section gets flex:1 + minHeight:0, which forces it to fill
+     * all remaining space between the fixed header rows and the status bar.
+     * The scroll wrapper inside uses height:100% so the background always
+     * extends to the bottom even when there are few rows.
+     */
     <div style={s.root} tabIndex={0}
-      onKeyDown={e => {
-        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') e.preventDefault();
-      }}
+      onKeyDown={e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') e.preventDefault(); }}
     >
       <style>{`
         @media print { .no-print { display: none !important; } body { background: white; } }
@@ -661,10 +618,36 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
         .db-row { outline: none; }
         .void-filter-btn { border: 1px solid ${BORDER}; background: #eef2f7; color: #555; font-family: ${FONT}; font-size: 10px; font-weight: 600; padding: 2px 9px; cursor: pointer; transition: background 0.1s; }
         .void-filter-btn:first-child { border-radius: 2px 0 0 2px; }
-        .void-filter-btn:last-child  { border-radius: 0 2px 2px 0; border-left: none; }
+        .void-filter-btn:last-child  { border-radius: 0 2px 2px 0; }
         .void-filter-btn + .void-filter-btn { border-left: none; }
         .void-filter-btn.active { background: ${HEADER_BG}; color: #fff; border-color: ${HEADER_BG}; }
-        .panel-focused-ring { box-shadow: inset 0 0 0 2px #5590cc !important; }
+
+        /* FIX-A: ensure the table scroll area covers full height visually */
+        .db-scroll-area {
+          flex: 1;
+          overflow-y: auto;
+          overflow-x: auto;
+          background: #fff;
+          /* background extends behind the sticky tfoot even when rows are few */
+        }
+        .db-table-wrap {
+          min-height: 100%;
+          display: flex;
+          flex-direction: column;
+          background: #fff;
+        }
+        .db-table-wrap table {
+          flex: 1;
+          border-collapse: collapse;
+          width: 100%;
+          table-layout: fixed;
+        }
+        /* Make the tbody grow to fill remaining table space visually */
+        .db-table-wrap tbody::after {
+          content: '';
+          display: table-row;
+          height: 100%;
+        }
       `}</style>
 
       {/* Title Bar */}
@@ -678,7 +661,6 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
       <div style={s.reportHeader}>
         <span style={s.reportTitle}>Day Book</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {/* FIX 3: Void filter toggle */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 10, color: '#777', fontStyle: 'italic' }}>Show:</span>
             <div style={{ display: 'flex' }}>
@@ -726,23 +708,20 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
         </div>
       )}
 
-      {/* Body */}
-      {/* FIX 1: flex:1 + min-height:0 ensures the body fills remaining height always */}
+      {/* ── Body — FIX-A: flex:1 + minHeight:0 forces this to fill all remaining height ── */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative', minHeight: 0 }}>
 
-        {/* Main table — FIX 1: height:100% so the container always stretches to bottom */}
-        <div style={{
-          flex: 1,
-          overflowY: 'auto',
-          overflowX: 'auto',
-          transition: 'margin-right 0.25s',
-          marginRight: selectedVoucher ? 382 : 0,
-          height: '100%',         // ← FIX 1
-          boxSizing: 'border-box',
-        }}>
-          {/* FIX 1: table wrapper fills full height so border/bg extends even with few rows */}
-          <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
-            <table style={{ ...s.table, flex: 1 }}>
+        {/* Scroll area — FIX-A: transitions margin-right when panel opens */}
+        <div
+          className="db-scroll-area"
+          style={{
+            transition: 'margin-right 0.25s',
+            marginRight: selectedVoucher ? 382 : 0,
+          }}
+        >
+          {/* FIX-A: wrapper fills full height so bg/border extends even with 0 rows */}
+          <div className="db-table-wrap">
+            <table>
               <thead>
                 <tr style={s.theadRow}>
                   <th style={{ ...s.th, width: 80,  textAlign: 'left'   }}>Date</th>
@@ -757,25 +736,26 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
                   </th>
                 </tr>
               </thead>
+
               <tbody ref={tableBodyRef}>
                 {loading ? (
                   <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: '#888', fontStyle: 'italic', fontSize: 12 }}>Loading vouchers…</td></tr>
                 ) : displayedVouchers.length === 0 ? (
                   <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: '#888', fontStyle: 'italic', fontSize: 12 }}>No vouchers found for this period.</td></tr>
                 ) : displayedVouchers.map((v, rowIdx) => {
-                  const drAmt = (v.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
-                  const crAmt = (v.entries || []).filter(e => e.type === 'Cr').reduce((a, e) => a + e.amount, 0);
+                  const drAmt    = (v.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
+                  const crAmt    = (v.entries || []).filter(e => e.type === 'Cr').reduce((a, e) => a + e.amount, 0);
                   const displayDr = drAmt || (crAmt === 0 ? v.amount : 0);
                   const isSelected = selectedVoucher?.id === v.id;
                   const isFocused  = focusedIdx === rowIdx;
-                  const isVoided   = !!v.voided;
-                  const vs = VOUCHER_STYLES[v.type];
+                  const voided     = isVoided(v);
+                  const vs         = VOUCHER_STYLES[v.type];
                   return (
                     <tr
                       key={v.id}
                       data-row-idx={rowIdx}
                       tabIndex={0}
-                      className={`db-row${isSelected ? ' sel' : ''}${isFocused && !isSelected ? ' focused' : ''}${isVoided ? ' voided-row' : ''}`}
+                      className={`db-row${isSelected ? ' sel' : ''}${isFocused && !isSelected ? ' focused' : ''}${voided ? ' voided-row' : ''}`}
                       style={{
                         ...s.tr,
                         background: isSelected ? HIGHLIGHT : isFocused ? '#deeeff' : '#fff',
@@ -801,27 +781,16 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
                           setSelectedVoucher(displayedVouchers[next]);
                           tableBodyRef.current?.querySelector(`[data-row-idx="${next}"]`)?.focus();
                         }
-                        // FIX 2: ArrowRight on row → focus panel
-                        if (e.key === 'ArrowRight' && selectedVoucher) {
-                          e.preventDefault();
-                          setPanelFocused(true);
-                        }
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          setPanelFocused(false);
-                          setSelectedVoucher(isSelected ? null : v);
-                        }
-                        if (e.key === 'Escape') {
-                          setPanelFocused(false);
-                          setSelectedVoucher(null);
-                        }
+                        if (e.key === 'ArrowRight' && selectedVoucher) { e.preventDefault(); setPanelFocused(true); }
+                        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPanelFocused(false); setSelectedVoucher(isSelected ? null : v); }
+                        if (e.key === 'Escape') { setPanelFocused(false); setSelectedVoucher(null); }
                       }}
                       onFocus={() => setFocusedIdx(rowIdx)}
                     >
                       <td style={{ ...s.td, color: '#333' }}>{fmtDate(v.date)}</td>
                       <td style={{ ...s.td, fontWeight: 600, color: '#1a1a1a' }}>
                         {v.narration || <span style={{ fontStyle: 'italic', color: '#aaa' }}>(Blank)</span>}
-                        {isVoided && <span style={{ marginLeft: 6, fontSize: 9, color: '#c00', fontWeight: 700, border: '1px solid #f5a0a0', padding: '0 3px', borderRadius: 2, verticalAlign: 'middle' }}>VOID</span>}
+                        {voided && <span style={{ marginLeft: 6, fontSize: 9, color: '#c00', fontWeight: 700, border: '1px solid #f5a0a0', padding: '0 3px', borderRadius: 2, verticalAlign: 'middle' }}>VOID</span>}
                       </td>
                       <td style={{ ...s.td, color: '#555', fontStyle: 'italic' }}>{v.type}</td>
                       <td style={{ ...s.td, textAlign: 'center', color: '#333' }}>{v.number || ''}</td>
@@ -835,6 +804,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
                   );
                 })}
               </tbody>
+
               <tfoot>
                 <tr style={s.tfootRow}>
                   <td colSpan={4} style={{ ...s.tfoot, textAlign: 'right', paddingRight: 8, fontWeight: 700, fontSize: 11 }}>
@@ -848,7 +818,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
           </div>
         </div>
 
-        {/* Slide-in Detail Panel — FIX 2: panelRef + tabIndex for focus */}
+        {/* Slide-in Detail Panel */}
         {selectedVoucher && (
           <div className="no-print" style={{
             position: 'absolute', top: 0, right: 0, bottom: 0,
@@ -880,7 +850,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
       <div style={s.statusBar} className="no-print">
         <span style={{ color: '#aaa', fontSize: 10 }}>
           {loading ? 'Loading…' : `${displayedVouchers.length} voucher${displayedVouchers.length !== 1 ? 's' : ''} [${voidFilter}]`}
-          {selectedVoucher ? ` — viewing ${selectedVoucher.number}${selectedVoucher.voided ? ' (voided)' : ''}` : ''}
+          {selectedVoucher ? ` — viewing ${selectedVoucher.number}${isVoided(selectedVoucher) ? ' (voided)' : ''}` : ''}
           {focusedIdx >= 0 && displayedVouchers[focusedIdx] ? ` — row ${focusedIdx + 1} of ${displayedVouchers.length}` : ''}
           {panelFocused ? ' — panel focused' : ''}
         </span>
@@ -894,25 +864,29 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
 const s = {
   root: {
     fontFamily: FONT, fontSize: 12, color: '#1a1a1a', background: '#fff',
-    display: 'flex', flexDirection: 'column', height: '100%', position: 'relative',
+    display: 'flex', flexDirection: 'column',
+    // FIX-A: height:100% works when parent has a height; add min-height as fallback
+    height: '100%', minHeight: 0,
+    position: 'relative',
     border: `1px solid ${BORDER}`, borderRadius: 2, overflow: 'hidden',
   },
   titleBar: {
     background: HEADER_BG, color: '#fff', display: 'flex', alignItems: 'center',
-    padding: '3px 8px', fontSize: 11, fontWeight: 600, letterSpacing: 0.2, flexShrink: 0,
+    padding: '3px 8px', fontSize: 11, fontWeight: 600, letterSpacing: 0.2,
+    flexShrink: 0,  // never shrink — always visible
   },
   titleLeft:   { flex: 1, fontWeight: 700 },
   titleCenter: { flex: 2, textAlign: 'center', fontWeight: 700, fontSize: 12 },
   titleRight:  { flex: 1, textAlign: 'right', cursor: 'pointer', opacity: 0.7, fontSize: 13 },
   reportHeader: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '5px 12px 3px', background: '#fff', borderBottom: `1px solid ${BORDER}`, flexShrink: 0,
+    padding: '5px 12px 3px', background: '#fff', borderBottom: `1px solid ${BORDER}`,
+    flexShrink: 0,
   },
   reportTitle:  { fontSize: 14, fontWeight: 700 },
   reportPeriod: { fontSize: 12, fontWeight: 600, color: '#444' },
   subHeader:    { padding: '1px 12px 3px', background: '#fff', borderBottom: `2px solid ${BORDER}`, flexShrink: 0 },
   subTitle:     { fontSize: 11, fontStyle: 'italic', color: '#555' },
-  table:        { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' },
   theadRow:     { background: LIGHT_BG, borderBottom: `1px solid ${BORDER}`, position: 'sticky', top: 0, zIndex: 10 },
   th: {
     padding: '4px 8px', fontSize: 11, fontWeight: 700, color: '#333',
@@ -931,7 +905,7 @@ const s = {
   statusBar: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
     padding: '3px 8px', background: '#1a2a3a', borderTop: '1px solid #0d1a2a',
-    flexShrink: 0, height: 24,
+    flexShrink: 0, height: 24,   // always pinned to bottom, never squeezed
   },
   modalOverlay: {
     position: 'fixed', inset: 0, zIndex: 300, display: 'flex',
