@@ -711,8 +711,7 @@ export default function App() {
                 {currentScreen === 'LEDGER' && <MastersDashboard branchId={selectedBranchId} />}
                 {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} onSelectLedger={(id) => { setSelectedLedgerId(id); setCurrentScreen('LEDGER_DETAIL'); }} />}
                 {currentScreen === 'CHART' && <ChartOfAccountsScreen branchId={selectedBranchId} />}
-{currentScreen === 'BALANCE_SHEET' && <BalanceSheetScreen branchId={selectedBranchId} />}  
-{currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} />}
+                {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} />}
                 {currentScreen === 'TRIAL_BALANCE' && <TrialBalanceScreen branchId={selectedBranchId} />}
                 {currentScreen === 'CASH_BANK_BOOK' && <CashBankBookScreen branchId={selectedBranchId} />}
                 {currentScreen === 'RATIO' && <RatioAnalysisScreen onBack={handleBack} branchId={selectedBranchId} />}
