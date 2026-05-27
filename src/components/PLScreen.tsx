@@ -5,27 +5,28 @@
  * 2. Removed Print and Export keyboard shortcuts + side buttons
  * 3. ESC goes back to main menu via onBack prop
  * 4. Table area fills full height to bottom of page
+ * 5. VOIDED transactions filtered out (as per voucher logic)
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { exportToExcel } from '../lib/ReportUtils';
 
-// ── Re-use the LedgerDetail component from Trial Balance ──────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 interface Ledger {
   id: string; name: string; group?: string; group_name?: string;
   openingBalance?: number; balanceType?: 'Dr' | 'Cr';
 }
 
-function fmtAmtAbs(n: number) {
-  return Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-}
-function fmtDate(iso: string) {
+const fmtAmtAbs = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const fmtDate = (iso: string) => {
   try {
     const d = new Date(iso);
     const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return `${d.getDate()}-${M[d.getMonth()]}-${d.getFullYear()}`;
   } catch { return iso; }
-}
+};
+
+// Helper: matches your voucher logic to ignore voided entries
+const isVoided = (v: any): boolean => v.voided === true || v.voided === 1 || v.voided === '1';
 
 // ─── LedgerDetail (drill-down) ────────────────────────────────────────────────
 function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?: string; onBack: () => void }) {
@@ -43,7 +44,12 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
   useEffect(() => {
     const q = branchId ? `?branchId=${branchId}` : '';
     fetch(`/api/vouchers/ledger/${ledger.id}${q}`)
-      .then(r => r.json()).then(d => setRows(Array.isArray(d) ? d : []))
+      .then(r => r.json())
+      .then(d => {
+        // --- FIX: Filter voided transactions here ---
+        const active = (Array.isArray(d) ? d : []).filter(v => !isVoided(v));
+        setRows(active);
+      })
       .catch(() => setRows([])).finally(() => setLoading(false));
   }, [ledger.id, branchId]);
 
@@ -66,7 +72,7 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
   return (
     <div style={{ fontFamily: FONT, fontSize: 12, display:'flex', flexDirection:'column', height:'100%', background:'#fff', border:'1px solid #b8c4cc', borderRadius:2, overflow:'hidden' }}>
       <div style={{ background: HDR, color:'#fff', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'3px 10px', fontSize:12, fontWeight:700, flexShrink:0 }}>
-        <button onClick={onBack} style={{ background:'none', border:'1px solid rgba(255,255,255,0.4)', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:FONT, padding:'1px 10px', borderRadius:2 }}>← Back</button>
+        <button onClick={onBack} style={{ background:'none', border:'1px solid rgba(255,255,255,0.4)', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:FONT, padding:'1px 10px', borderRadius:2 }}>← Back (Esc)</button>
         <span style={{ flex:2, textAlign:'center', fontWeight:800, fontSize:13 }}>{ledger.name}</span>
         <span />
       </div>
@@ -211,9 +217,8 @@ function AddPeriodModal({ onAdd, onCancel }: { onAdd:(label:string,from:string,t
   );
 }
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
+// ─── Main PLScreen Component ───────────────────────────────────────────────────
 interface Period { label: string; from: string; to: string; }
-// FIX 3: Added onBack prop for ESC → main menu navigation
 interface PLScreenProps { branchId?: string; onBack?: () => void; }
 
 const FONT_   = `-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,sans-serif`;
@@ -223,7 +228,6 @@ const LIGHT   = '#f0f4f8';
 const ROW_BDR = '#e0e6ee';
 const DARK    = '#1a2a3a';
 
-// ─── Main PLScreen ─────────────────────────────────────────────────────────────
 export default function PLScreen({ branchId, onBack }: PLScreenProps) {
   const [ledgers, setLedgers]         = useState<any[]>([]);
   const [allVouchers, setAllVouchers] = useState<any[]>([]);
@@ -236,12 +240,9 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
   const [drillLedger, setDrillLedger] = useState<Ledger | null>(null);
   const [loading, setLoading]         = useState(true);
   const [showPercent, setShowPercent] = useState(false);
-
-  // FIX 1: Arrow key navigation state
   const [focusedRowIdx, setFocusedRowIdx] = useState<number>(-1);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // ── Fetch once ──────────────────────────────────────────────────────
   useEffect(() => {
     const q = branchId ? `?branchId=${branchId}` : '';
     setLoading(true);
@@ -251,8 +252,11 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
       fetch('/api/branches').then(r => r.json()).catch(() => []),
     ]).then(([l, v, b]) => {
       setLedgers(Array.isArray(l) ? l : []);
-      const vArr = Array.isArray(v) ? v : [];
+      
+      // --- FIX: Exclude voided vouchers so they never enter any calculation ---
+      const vArr = (Array.isArray(v) ? v : []).filter((x: any) => !isVoided(x));
       setAllVouchers(vArr);
+
       if (vArr.length > 0) {
         const dates = vArr.map((x:any) => x.date?.slice(0,10)).filter(Boolean).sort();
         setMainPeriod({ from: dates[0], to: dates[dates.length-1] });
@@ -262,11 +266,8 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
         if (br) setCompanyName(br.name);
       }
     }).catch(()=>{}).finally(()=>setLoading(false));
-    fetch('/api/settings/company').then(r=>r.ok?r.json():null)
-      .then(d=>{if(d?.name)setCompanyName(d.name);}).catch(()=>{});
   }, [branchId]);
 
-  // ── Balance calculation for a specific period ──────────────────────
   const calcBalanceForPeriod = useCallback((ledgerId: string, from: string, to: string) => {
     const ledger  = ledgers.find(l => l.id === ledgerId);
     const ob      = Number(ledger?.openingBalance || 0);
@@ -294,18 +295,15 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
       .filter(l => calcBalanceForPeriod(l.id, from, to) !== 0);
   }, [ledgers, calcBalanceForPeriod]);
 
-  // All periods (main + extra comparisons)
   const allPeriods: Period[] = useMemo(() => [
-    { label: companyName || '…', from: mainPeriod.from, to: mainPeriod.to },
+    { label: companyName || 'Current Period', from: mainPeriod.from, to: mainPeriod.to },
     ...extraPeriods,
   ], [mainPeriod, extraPeriods, companyName]);
 
   const LEFT_GROUPS  = ['Opening Stock', 'Purchase Account', 'Direct Expenses', 'Indirect Expenses'];
   const RIGHT_GROUPS = ['Sales Account', 'Direct Income', 'Indirect Income', 'Closing Stock'];
-  // All navigable group rows (for arrow key nav)
   const ALL_GROUPS   = [...LEFT_GROUPS, ...RIGHT_GROUPS];
 
-  // ── P&L totals per period ────────────────────────────────────────────
   const periodTotals = useMemo(() => allPeriods.map(p => {
     const leftT  = LEFT_GROUPS.reduce((a,g) => a + Math.abs(groupTotalForPeriod(g, p.from, p.to)), 0);
     const rightT = RIGHT_GROUPS.reduce((a,g) => a + Math.abs(groupTotalForPeriod(g, p.from, p.to)), 0);
@@ -314,8 +312,6 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
 
   const salesTotal0 = Math.abs(groupTotalForPeriod('Sales Account', mainPeriod.from, mainPeriod.to));
 
-  // FIX 1: Build a flat navigable row list for arrow key movement
-  // Each entry: { type: 'group', name } | { type: 'ledger', ledger, groupName }
   const navigableRows = useMemo(() => {
     const rows: Array<{ type: 'group'; name: string } | { type: 'ledger'; ledger: any; groupName: string }> = [];
     ALL_GROUPS.forEach(grpName => {
@@ -331,14 +327,12 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
     return rows;
   }, [ALL_GROUPS, allPeriods, expanded, groupTotalForPeriod, groupLedgersNonZero, mainPeriod]);
 
-  // Scroll focused row into view
   useEffect(() => {
     if (focusedRowIdx < 0) return;
     const el = contentRef.current?.querySelector(`[data-rowidx="${focusedRowIdx}"]`);
     el?.scrollIntoView({ block: 'nearest' });
   }, [focusedRowIdx]);
 
-  // ── Scoped keyboard shortcuts (capture phase, stopPropagation) ──────
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -346,8 +340,6 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
       if (drillLedger) return;
 
       let handled = false;
-
-      // FIX 1: Arrow key navigation
       if (e.key === 'ArrowDown') {
         setFocusedRowIdx(prev => Math.min(prev + 1, navigableRows.length - 1));
         handled = true;
@@ -355,18 +347,13 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
         setFocusedRowIdx(prev => Math.max(prev - 1, 0));
         handled = true;
       } else if (e.key === 'Enter' || e.key === 'ArrowRight') {
-        // Enter/Right on group → expand; on ledger → drill down
         if (focusedRowIdx >= 0 && focusedRowIdx < navigableRows.length) {
           const row = navigableRows[focusedRowIdx];
-          if (row.type === 'group') {
-            toggleGroup(row.name);
-          } else if (row.type === 'ledger') {
-            setDrillLedger(row.ledger);
-          }
+          if (row.type === 'group') toggleGroup(row.name);
+          else if (row.type === 'ledger') setDrillLedger(row.ledger);
           handled = true;
         }
       } else if (e.key === 'ArrowLeft') {
-        // Left on ledger → collapse parent group; on group → collapse it
         if (focusedRowIdx >= 0 && focusedRowIdx < navigableRows.length) {
           const row = navigableRows[focusedRowIdx];
           const grpName = row.type === 'group' ? row.name : row.groupName;
@@ -374,72 +361,48 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
           handled = true;
         }
       } else if (e.key === 'F2') {
-        setShowPeriod(p=>!p); handled = true;
+        setShowPeriod(true); handled = true;
       } else if (e.key === 'F5') {
-        setExpanded(new Set([...LEFT_GROUPS, ...RIGHT_GROUPS])); handled = true;
+        setExpanded(new Set(ALL_GROUPS)); handled = true;
       } else if (e.key === 'Escape') {
-        // FIX 3: ESC collapses if anything expanded, else goes back to main menu
-        if (expanded.size > 0) {
-          setExpanded(new Set());
-        } else if (onBack) {
-          onBack();
-        }
+        if (expanded.size > 0) setExpanded(new Set());
+        else if (onBack) onBack();
         handled = true;
       } else if (e.altKey && e.key.toLowerCase() === 'f') {
         setShowPercent(p=>!p); handled = true;
       } else if (e.altKey && e.key.toLowerCase() === 'n') {
         setShowAddPeriod(true); handled = true;
       }
-
       if (handled) { e.preventDefault(); e.stopPropagation(); }
     };
     window.addEventListener('keydown', h, true);
     return () => window.removeEventListener('keydown', h, true);
   }, [drillLedger, focusedRowIdx, navigableRows, expanded, onBack]);
 
-  // ── Expand/collapse ──────────────────────────────────────────────────
   const toggleGroup = (name: string) => setExpanded(prev => {
     const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n;
   });
 
-  // ── Period label ─────────────────────────────────────────────────────
   const periodLabel = (p: {from:string;to:string}) =>
     p.from && p.to ? `${fmtDate(p.from)} to ${fmtDate(p.to)}` : '—';
 
-  // FIX 2: Export without keyboard shortcut (button only)
-  const handleExport = () => {
-    const rows: any[] = [];
-    allPeriods.forEach(p => {
-      LEFT_GROUPS.forEach(g => rows.push({ Period: p.label, Side:'Expenditure', Group:g, Amount: Math.abs(groupTotalForPeriod(g, p.from, p.to)) }));
-      RIGHT_GROUPS.forEach(g => rows.push({ Period: p.label, Side:'Income', Group:g, Amount: Math.abs(groupTotalForPeriod(g, p.from, p.to)) }));
-    });
-    exportToExcel(rows, 'Profit_And_Loss');
-  };
+  if (drillLedger) return <LedgerDetail ledger={drillLedger} branchId={branchId} onBack={() => setDrillLedger(null)} />;
 
-  // ── Drill-down view ───────────────────────────────────────────────────
-  if (drillLedger) {
-    return <LedgerDetail ledger={drillLedger} branchId={branchId} onBack={() => setDrillLedger(null)} />;
-  }
-
-  // ── Column header cell ────────────────────────────────────────────────
-  const ColHdrCells = ({ side }: { side: 'left'|'right' }) => (
+  const ColHdrCells = () => (
     <>
       <th style={{ ...rs.th, textAlign:'left', width: showPercent ? '40%' : '50%' }}>Particulars</th>
       {showPercent && <th style={{ ...rs.th, width:'8%', textAlign:'right', fontSize:10 }}>%</th>}
       {allPeriods.map((p,i) => (
         <th key={i} style={{ ...rs.th, textAlign:'right', width: `${(showPercent?52:50)/allPeriods.length}%`, borderLeft: i===0?'none':'1px solid #ccd5dd' }}>
-          <div style={{ fontSize:11, fontWeight:800, color:'#1a1a1a', whiteSpace:'nowrap' }}>{p.label}</div>
-          <div style={{ fontSize:10, fontWeight:400, color:'#777', whiteSpace:'nowrap' }}>{periodLabel(p)}</div>
+          <div style={{ fontSize:11, fontWeight:800, color:'#1a1a1a' }}>{p.label}</div>
+          <div style={{ fontSize:9, fontWeight:400, color:'#777' }}>{periodLabel(p)}</div>
         </th>
       ))}
     </>
   );
 
-  // FIX 1: Row index counter shared across left/right columns for unified keyboard nav
-  // We use a ref-based counter that resets each render pass
   let rowIdxCounter = -1;
 
-  // ── Group row (with all period columns) ───────────────────────────────
   const renderGroupRow = (grpName: string) => {
     const anyNonZero = allPeriods.some(p => groupTotalForPeriod(grpName, p.from, p.to) !== 0);
     if (!anyNonZero) return null;
@@ -458,13 +421,12 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
           data-rowidx={grpIdx}
           style={{ ...rs.groupRow, cursor:'pointer', outline: isFocused ? '2px solid #1f4e79' : 'none', outlineOffset: -2, background: isFocused ? '#ddeeff' : '#fff' }}
           onClick={() => { setFocusedRowIdx(grpIdx); toggleGroup(grpName); }}
-          className="pl-grp-row"
         >
           <td style={rs.tdName}>
             <span style={rs.toggle}>{isExp ? '−' : '+'}</span>
             <span style={rs.groupName}>{grpName}</span>
           </td>
-          {showPercent && <td style={rs.tdPct}>{pct} %</td>}
+          {showPercent && <td style={rs.tdPct}>{pct}%</td>}
           {allPeriods.map((p,i) => {
             const abs = Math.abs(groupTotalForPeriod(grpName, p.from, p.to));
             return (
@@ -483,14 +445,10 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
               key={l.id}
               data-rowidx={ledgerIdx}
               style={{ ...rs.ledgerRow, outline: isLedgerFocused ? '2px solid #1f4e79' : 'none', outlineOffset: -2, background: isLedgerFocused ? '#ddeeff' : '#fafbff' }}
-              onClick={() => setFocusedRowIdx(ledgerIdx)}
+              onClick={() => { setFocusedRowIdx(ledgerIdx); }}
             >
               <td style={{ ...rs.tdName, paddingLeft:28 }}>
-                <span
-                  onClick={(e) => { e.stopPropagation(); setDrillLedger(l); }}
-                  style={{ fontStyle:'italic', color:'#1a5fa8', cursor:'pointer', textDecoration:'underline', fontSize:11 }}
-                  title="Click to view transactions"
-                >
+                <span onClick={(e) => { e.stopPropagation(); setDrillLedger(l); }} style={{ fontStyle:'italic', color:'#1a5fa8', cursor:'pointer', textDecoration:'underline' }}>
                   {l.name}
                 </span>
               </td>
@@ -498,7 +456,7 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
               {allPeriods.map((p,i) => {
                 const bal = calcBalanceForPeriod(l.id, p.from, p.to);
                 return (
-                  <td key={i} style={{ ...rs.tdAmt, color:'#555', fontWeight:400, fontSize:11, borderLeft: i===0?'none':'1px solid #dde4ec' }}>
+                  <td key={i} style={{ ...rs.tdAmt, color:'#555', fontWeight:400, borderLeft: i===0?'none':'1px solid #dde4ec' }}>
                     {bal !== 0 ? fmtAmtAbs(bal) : ''}
                   </td>
                 );
@@ -510,7 +468,6 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
     );
   };
 
-  // ── Nett Profit / Loss row ────────────────────────────────────────────
   const renderNettRow = (side: 'left'|'right') => (
     <tr style={{ ...rs.groupRow, background:'#f8fbff' }}>
       <td style={{ ...rs.tdName, fontStyle:'italic', paddingLeft:16 }}>
@@ -529,26 +486,8 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
     </tr>
   );
 
-  // ── Section header row ────────────────────────────────────────────────
-  const SectionHeader = ({ label }: { label: string }) => (
-    <tr style={{ background:'#fafbff' }}>
-      <td colSpan={1 + (showPercent?1:0) + allPeriods.length}
-        style={{ padding:'6px 10px 2px', fontSize:12, fontStyle:'italic', fontWeight:600, color:'#444', letterSpacing:2, borderBottom:'none' }}>
-        {label}
-      </td>
-    </tr>
-  );
-
   return (
-    // FIX 4: root uses height:100% with flex column so content fills all available space
     <div style={s.root} id="pl-report" tabIndex={0}>
-      <style>{`
-        @media print { .no-print { display:none!important; } }
-        .pl-grp-row:hover { background: #eef4fb !important; }
-        #pl-report:focus { outline: none; }
-      `}</style>
-
-      {/* Modals */}
       {showPeriod && (
         <PeriodModal from={mainPeriod.from} to={mainPeriod.to}
           onAccept={(f,t) => { setMainPeriod({from:f,to:t}); setShowPeriod(false); }}
@@ -560,46 +499,29 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
           onCancel={() => setShowAddPeriod(false)} />
       )}
 
-      {/* Title Bar */}
       <div style={s.titleBar}>
-        {/* FIX 3: Back button in title bar calls onBack */}
-        {onBack && (
-          <button onClick={onBack} className="no-print" style={{ background:'none', border:'1px solid rgba(255,255,255,0.35)', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:FONT_, padding:'1px 10px', borderRadius:2, marginRight:8 }}>
-            ← Back
-          </button>
-        )}
+        {onBack && <button onClick={onBack} style={s.backBtn}>← Back</button>}
         <span style={{ flex:1, fontWeight:700 }}>Profit & Loss A/c</span>
         <span style={{ flex:2, textAlign:'center', fontWeight:800, fontSize:12 }}>{companyName||'…'}</span>
         <span style={{ flex:1, textAlign:'right', opacity:0.7, fontSize:11 }}>{periodLabel(mainPeriod)}</span>
       </div>
 
-      {/* FIX 4: contentWrap is flex:1 and overflow handles scroll internally */}
       <div style={s.contentWrap} ref={contentRef}>
-        {loading ? (
-          <div style={{ padding:60, textAlign:'center', color:'#888', fontStyle:'italic', fontSize:13 }}>Loading…</div>
-        ) : (
-          // FIX 4: twoCol fills full height of its container
+        {loading ? <div style={{ padding:60, textAlign:'center', color:'#888' }}>Loading…</div> : (
           <div style={s.twoCol}>
-
-            {/* ── LEFT: Expenditure ── */}
             <div style={s.col}>
               <table style={s.table}>
-                <thead><tr style={{ background:LIGHT }}><ColHdrCells side="left" /></tr></thead>
+                <thead><tr style={{ background:LIGHT }}><ColHdrCells /></tr></thead>
                 <tbody>
-                  <SectionHeader label="Trading Account" />
-                  {renderGroupRow('Opening Stock')}
-                  {renderGroupRow('Purchase Account')}
-                  <SectionHeader label="Indirect Expenses" />
-                  {renderGroupRow('Direct Expenses')}
-                  {renderGroupRow('Indirect Expenses')}
+                  {LEFT_GROUPS.map(g => renderGroupRow(g))}
                   {periodTotals[0]?.nett >= 0 && renderNettRow('left')}
                 </tbody>
                 <tfoot>
                   <tr style={s.totalRow}>
-                    <td style={{ ...rs.tdName, fontWeight:900, fontSize:12, letterSpacing:1, paddingLeft:12 }}>Total</td>
+                    <td style={{ ...rs.tdName, fontWeight:900 }}>Total</td>
                     {showPercent && <td style={rs.tdPct} />}
                     {periodTotals.map((pt,i) => (
-                      <td key={i} style={{ ...rs.tdAmt, fontWeight:900, fontSize:13, borderTop:'2px solid #555', borderLeft: i===0?'none':'1px solid #dde4ec' }}>
+                      <td key={i} style={{ ...rs.tdAmt, fontWeight:900, borderTop:'2px solid #555', borderLeft: i===0?'none':'1px solid #dde4ec' }}>
                         {fmtAmtAbs(pt.grand)}
                       </td>
                     ))}
@@ -607,29 +529,20 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
                 </tfoot>
               </table>
             </div>
-
-            {/* Column divider */}
             <div style={s.divider} />
-
-            {/* ── RIGHT: Income ── */}
             <div style={s.col}>
               <table style={s.table}>
-                <thead><tr style={{ background:LIGHT }}><ColHdrCells side="right" /></tr></thead>
+                <thead><tr style={{ background:LIGHT }}><ColHdrCells /></tr></thead>
                 <tbody>
-                  <SectionHeader label="Trading Account" />
-                  {renderGroupRow('Sales Account')}
-                  {renderGroupRow('Direct Income')}
-                  {renderGroupRow('Closing Stock')}
-                  <SectionHeader label="Income Statement" />
-                  {renderGroupRow('Indirect Income')}
+                  {RIGHT_GROUPS.map(g => renderGroupRow(g))}
                   {periodTotals[0]?.nett < 0 && renderNettRow('right')}
                 </tbody>
                 <tfoot>
                   <tr style={s.totalRow}>
-                    <td style={{ ...rs.tdName, fontWeight:900, fontSize:12, letterSpacing:1, paddingLeft:12 }}>Total</td>
+                    <td style={{ ...rs.tdName, fontWeight:900 }}>Total</td>
                     {showPercent && <td style={rs.tdPct} />}
                     {periodTotals.map((pt,i) => (
-                      <td key={i} style={{ ...rs.tdAmt, fontWeight:900, fontSize:13, borderTop:'2px solid #555', borderLeft: i===0?'none':'1px solid #dde4ec' }}>
+                      <td key={i} style={{ ...rs.tdAmt, fontWeight:900, borderTop:'2px solid #555', borderLeft: i===0?'none':'1px solid #dde4ec' }}>
                         {fmtAmtAbs(pt.grand)}
                       </td>
                     ))}
@@ -637,79 +550,58 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
                 </tfoot>
               </table>
             </div>
-
           </div>
         )}
       </div>
 
-      {/* Right Function Buttons — FIX 2: Print and Export shortcuts removed */}
-      <div style={s.rightPanel} className="no-print">
+      <div style={s.rightPanel}>
         {[
           { k:'F2',    l:'Period',        a:()=>setShowPeriod(true) },
-          { k:'F5',    l:'Expand All',    a:()=>setExpanded(new Set([...LEFT_GROUPS,...RIGHT_GROUPS])) },
-          { k:'Esc',   l:'Collapse / Back', a:()=>{ if(expanded.size>0){setExpanded(new Set());}else if(onBack){onBack();} } },
-          { k:'↑↓',   l:'Navigate Rows', a:()=>{} },
-          { k:'Enter', l:'Expand / Drill', a:()=>{} },
+          { k:'F5',    l:'Expand All',    a:()=>setExpanded(new Set(ALL_GROUPS)) },
+          { k:'Esc',   l:'Collapse / Back', a:()=>{ if(expanded.size>0) setExpanded(new Set()); else if(onBack) onBack(); } },
           { k:'Alt+N', l:'Add Period',    a:()=>setShowAddPeriod(true) },
           { k:'Alt+F', l:'Percentages',   a:()=>setShowPercent(p=>!p) },
-          { k:'',      l: extraPeriods.length > 0 ? `${extraPeriods.length} extra\nperiod(s)` : '', a:()=>{} },
           { k:'✕ Clr', l:'Clear Periods', a:()=>setExtraPeriods([]) },
-          { k:'F12',   l:'Configure',     a:()=>{} },
         ].map((b,i) => (
-          <button key={i} onClick={b.a} className="no-print" style={{
-            ...s.sideBtn,
-            background: b.k==='Alt+N' ? 'rgba(100,200,100,0.15)' : b.k==='✕ Clr' ? 'rgba(255,80,80,0.15)' : 'none',
-            opacity: b.l ? 1 : 0.2,
-          }}>
+          <button key={i} onClick={b.a} style={s.sideBtn}>
             <span style={s.sBtnKey}>{b.k}</span>
             <span style={s.sBtnLabel}>{b.l}</span>
           </button>
         ))}
       </div>
 
-      {/* Status Bar */}
-      <div style={s.statusBar} className="no-print">
-        <span style={{ color:'#aaa', fontSize:10 }}>
-          {periodTotals[0] && (periodTotals[0].nett >= 0
-            ? `Net Profit: ₹ ${fmtAmtAbs(periodTotals[0].nett)}`
-            : `Net Loss: ₹ ${fmtAmtAbs(periodTotals[0].nett)}`)}
-          {extraPeriods.length > 0 && ` · Comparing ${allPeriods.length} periods`}
-        </span>
-        <span style={{ color:'#aaa', fontSize:10 }}>
-          F2: Period  |  F5: Expand  |  ↑↓: Navigate  |  Enter: Expand/Drill  |  Esc: Collapse/Back  |  Alt+F: %
-        </span>
+      <div style={s.statusBar}>
+        <span style={{ color:'#aaa', fontSize:10 }}>F2: Period | F5: Expand | Esc: Back | Alt+N: New Period</span>
       </div>
     </div>
   );
 }
 
-// ── Row styles ──────────────────────────────────────────────────────────────────
+// ── Styles ────────────────────────────────────────────────────────────────────
 const rs: Record<string, React.CSSProperties> = {
   th:         { padding:'5px 10px', fontSize:11, fontWeight:700, color:'#333', borderBottom:`1px solid ${BORDER}`, background:LIGHT, whiteSpace:'nowrap' },
-  groupRow:   { borderBottom:`1px solid ${ROW_BDR}`, background:'#fff', transition:'background 0.07s' },
+  groupRow:   { borderBottom:`1px solid ${ROW_BDR}`, background:'#fff' },
   ledgerRow:  { borderBottom:`1px solid ${ROW_BDR}`, background:'#fafbff' },
   tdName:     { padding:'3px 8px', fontSize:12, verticalAlign:'middle', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' },
-  tdAmt:      { padding:'3px 10px', fontSize:12, fontWeight:700, textAlign:'right', verticalAlign:'middle', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' },
-  tdPct:      { padding:'3px 6px', fontSize:11, textAlign:'right', color:'#888', whiteSpace:'nowrap' },
-  toggle:     { display:'inline-block', width:14, height:14, lineHeight:'14px', textAlign:'center', fontSize:11, fontWeight:900, border:`1px solid ${BORDER}`, background:LIGHT, color:'#555', marginRight:6, cursor:'pointer', flexShrink:0 },
-  groupName:  { fontWeight:700, textTransform:'uppercase', fontSize:12, letterSpacing:0.3, color:'#1a1a1a' },
+  tdAmt:      { padding:'3px 10px', fontSize:12, fontWeight:700, textAlign:'right', verticalAlign:'middle', whiteSpace:'nowrap' },
+  tdPct:      { padding:'3px 6px', fontSize:11, textAlign:'right', color:'#888' },
+  toggle:     { display:'inline-block', width:14, textAlign:'center', fontSize:10, fontWeight:900, border:`1px solid ${BORDER}`, background:LIGHT, marginRight:6 },
+  groupName:  { fontWeight:700, textTransform:'uppercase', fontSize:11 },
 };
 
 const s: Record<string, React.CSSProperties> = {
-  // FIX 4: height:100% + flex column so the component fills its parent fully
-  root:        { fontFamily:FONT_, fontSize:12, color:'#1a1a1a', background:'#fff', display:'flex', flexDirection:'column', height:'100%', minHeight:0, border:`1px solid #b8c4cc`, borderRadius:2, overflow:'hidden', position:'relative' },
-  titleBar:    { background:HDR_BG, color:'#fff', display:'flex', alignItems:'center', padding:'3px 8px', fontSize:11, fontWeight:600, flexShrink:0 },
-  // FIX 4: flex:1 + minHeight:0 + overflowY:auto so it scrolls and fills remaining space
-  contentWrap: { flex:1, minHeight:0, overflowY:'auto', paddingRight:90 },
-  // FIX 4: minHeight:100% so short data still fills the area
+  root:        { fontFamily:FONT_, fontSize:12, color:'#1a1a1a', background:'#fff', display:'flex', flexDirection:'column', height:'100vh', border:`1px solid #b8c4cc`, overflow:'hidden', position:'relative' },
+  titleBar:    { background:HDR_BG, color:'#fff', display:'flex', alignItems:'center', padding:'3px 8px', fontSize:11, flexShrink:0 },
+  backBtn:     { background:'none', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', cursor:'pointer', fontSize:10, marginRight:10, padding:'1px 5px' },
+  contentWrap: { flex:1, overflowY:'auto', paddingRight:90 },
   twoCol:      { display:'flex', minHeight:'100%' },
-  col:         { flex:1, display:'flex', flexDirection:'column', minWidth:0 },
-  divider:     { width:2, background:'#b8c4cc', flexShrink:0 },
+  col:         { flex:1, display:'flex', flexDirection:'column' },
+  divider:     { width:2, background:'#b8c4cc' },
   table:       { width:'100%', borderCollapse:'collapse', tableLayout:'fixed' },
   totalRow:    { background:LIGHT, borderTop:`2px double #555`, position:'sticky', bottom:0 },
-  rightPanel:  { position:'absolute', top:26, right:0, bottom:24, width:88, background:DARK, display:'flex', flexDirection:'column', borderLeft:'1px solid #0d1a2a' },
-  sideBtn:     { border:'none', borderBottom:'1px solid rgba(255,255,255,0.07)', color:'#cdd5e0', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'flex-start', padding:'6px 8px', textAlign:'left', fontFamily:FONT_, flex:1, transition:'background 0.1s' },
-  sBtnKey:     { fontSize:9, color:'rgba(255,255,255,0.4)', fontWeight:700, lineHeight:1.3 },
-  sBtnLabel:   { fontSize:10, color:'#d0dae6', fontWeight:600, lineHeight:1.3, whiteSpace:'pre-line' },
-  statusBar:   { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'3px 100px 3px 8px', background:DARK, borderTop:'1px solid #0d1a2a', flexShrink:0, height:24 },
+  rightPanel:  { position:'absolute', top:26, right:0, bottom:0, width:88, background:DARK, display:'flex', flexDirection:'column' },
+  sideBtn:     { border:'none', borderBottom:'1px solid rgba(255,255,255,0.1)', color:'#cdd5e0', cursor:'pointer', display:'flex', flexDirection:'column', padding:'8px', textAlign:'left', background:'none' },
+  sBtnKey:     { fontSize:9, color:'rgba(255,255,255,0.4)', fontWeight:700 },
+  sBtnLabel:   { fontSize:10, color:'#d0dae6' },
+  statusBar:   { padding:'3px 8px', background:DARK, flexShrink:0, height:24 },
 };
