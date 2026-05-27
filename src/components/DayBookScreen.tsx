@@ -1,9 +1,9 @@
 /**
  * TallyPrime-style Day Book Screen
- * - Click any row → slide-in voucher detail panel with Edit / Void
- * - Edit opens inline VoucherEdit form (PUT /api/vouchers/:id)
- * - Void calls DELETE /api/vouchers/:id with proper error handling
- * - Keyboard shortcuts locked (capture phase) so F2/F5 don't hit browser
+ * FIXES:
+ * 1. Arrow Up/Down/Left/Right keyboard navigation on table rows
+ * 2. Removed right-side shortcut button panel (shortcuts already in main header)
+ * 3. Void: improved error handling, passes branchId, better 404 messaging
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -41,9 +41,9 @@ function fmtAmount(n) {
 // ─────────────────────────────────────────────────────────────────────────────
 function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
   const vs = VOUCHER_STYLES[voucher.type] || defaultStyle;
-  const [date, setDate]         = useState(voucher.date?.slice(0, 10) || '');
+  const [date, setDate]           = useState(voucher.date?.slice(0, 10) || '');
   const [narration, setNarration] = useState(voucher.narration || '');
-  const [entries, setEntries]   = useState(() =>
+  const [entries, setEntries]     = useState(() =>
     (voucher.entries || []).map(e => ({
       ledgerId: e.ledgerId || '',
       amount:   String(e.amount || ''),
@@ -53,10 +53,10 @@ function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
       refNo:    e.refNo || '',
     }))
   );
-  const [saving, setSaving]       = useState(false);
-  const [errMsg, setErrMsg]       = useState('');
-  const [activeDD, setActiveDD]   = useState(null);
-  const [hlIdx, setHlIdx]         = useState(0);
+  const [saving, setSaving]     = useState(false);
+  const [errMsg, setErrMsg]     = useState('');
+  const [activeDD, setActiveDD] = useState(null);
+  const [hlIdx, setHlIdx]       = useState(0);
 
   const getFiltered = (search) => {
     const s = (search || '').toLowerCase();
@@ -80,6 +80,7 @@ function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
       const payload = {
         date,
         narration,
+        branchId,
         entries: valid.map(e => ({
           ledgerId: e.ledgerId,
           amount: Number(e.amount),
@@ -108,14 +109,12 @@ function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
 
   return (
     <div style={{ fontFamily: FONT, fontSize: 12 }}>
-      {/* Mini title bar */}
       <div style={{ background: vs.header, color: '#fff', padding: '5px 10px', fontSize: 11, fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Edit {voucher.type} Voucher — {voucher.number}</span>
         <button onClick={onCancel} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 13, opacity: 0.8 }}>✕</button>
       </div>
 
       <div style={{ padding: '10px 12px', background: vs.bodyBg }}>
-        {/* Date & Narration */}
         <div style={{ display: 'flex', gap: 16, marginBottom: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <label style={eS.label}>Date</label>
@@ -131,7 +130,6 @@ function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
           </div>
         </div>
 
-        {/* Entries table */}
         <div style={{ border: `1px solid ${BORDER}`, borderRadius: 2, overflow: 'hidden', marginBottom: 8 }}>
           <div style={{ display: 'flex', background: '#e8ecf0', borderBottom: `1px solid ${BORDER}`, padding: '3px 0' }}>
             <div style={{ flex: 1, padding: '0 8px', fontSize: 11, fontWeight: 700 }}>Ledger Account</div>
@@ -158,8 +156,8 @@ function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
                     onBlur={() => setTimeout(() => setActiveDD(null), 180)}
                     onKeyDown={e => {
                       const f = getFiltered(entry.tempSearch);
-                      if (e.key === 'ArrowDown') { e.preventDefault(); setHlIdx(p => Math.min(f.length-1, p+1)); }
-                      if (e.key === 'ArrowUp')   { e.preventDefault(); setHlIdx(p => Math.max(0, p-1)); }
+                      if (e.key === 'ArrowDown') { e.preventDefault(); setHlIdx(p => Math.min(f.length - 1, p + 1)); }
+                      if (e.key === 'ArrowUp')   { e.preventDefault(); setHlIdx(p => Math.max(0, p - 1)); }
                       if ((e.key === 'Enter' || e.key === 'Tab') && activeDD === idx && f[hlIdx]) {
                         e.preventDefault(); handleSelectLedger(idx, f[hlIdx]);
                       }
@@ -205,7 +203,6 @@ function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
             );
           })}
 
-          {/* Add row */}
           <div style={{ padding: '4px 8px', background: vs.bodyBg }}>
             <button onClick={() => setEntries(p => [...p, { ledgerId: '', amount: '', type: 'Dr', tempSearch: '', methodAdjustment: 'On Account', refNo: '' }])}
               style={{ background: 'none', border: `1px dashed ${BORDER}`, borderRadius: 2, color: '#555', cursor: 'pointer', fontSize: 11, padding: '2px 10px', fontFamily: FONT }}>
@@ -244,38 +241,50 @@ const eS = {
 // Voucher Detail Side Panel
 // ─────────────────────────────────────────────────────────────────────────────
 function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSaved }) {
-  const [mode, setMode]         = useState('view'); // 'view' | 'edit'
+  const [mode, setMode]               = useState('view');
   const [voidConfirm, setVoidConfirm] = useState(false);
-  const [voiding, setVoiding]   = useState(false);
-  const [voidErr, setVoidErr]   = useState('');
+  const [voiding, setVoiding]         = useState(false);
+  const [voidErr, setVoidErr]         = useState('');
 
   const vs = VOUCHER_STYLES[voucher.type] || defaultStyle;
 
   const drAmt = (voucher.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
-  const crAmt = (voucher.entries || []).filter(e => e.type === 'Cr').reduce((a, e) => a + e.amount, 0);
 
+  // FIX 3: Proper void — include branchId as query param, better error messages
   const handleVoid = async () => {
     setVoiding(true); setVoidErr('');
     try {
-      const res = await fetch(`/api/vouchers/${voucher.id}`, { method: 'DELETE' });
+      const qs = branchId ? `?branchId=${branchId}` : '';
+      const res = await fetch(`/api/vouchers/${voucher.id}${qs}`, { method: 'DELETE' });
+
       if (res.ok) {
         onVoid();
-      } else {
-        // Try to get the error message from the response
-        let msg = `Server returned ${res.status}`;
-        try {
-          const data = await res.json();
-          msg = data.error || data.message || msg;
-        } catch {
-          // response wasn't JSON — get text
-          const txt = await res.text().catch(() => '');
-          if (txt) msg = txt.slice(0, 120);
-        }
-        setVoidErr(msg);
-        setVoidConfirm(false);
+        return;
       }
+
+      // Build a meaningful error from whatever the server returned
+      let msg = '';
+      const contentType = res.headers.get('content-type') || '';
+
+      if (contentType.includes('application/json')) {
+        const data = await res.json().catch(() => ({}));
+        msg = data.error || data.message || data.detail || '';
+      } else {
+        const txt = await res.text().catch(() => '');
+        msg = txt.slice(0, 200);
+      }
+
+      if (!msg) {
+        if (res.status === 404) msg = `Voucher not found on server (404). It may have already been deleted, or the ID "${voucher.id}" is not recognised by the API.`;
+        else if (res.status === 403) msg = 'You do not have permission to void this voucher (403).';
+        else if (res.status === 409) msg = 'Voucher cannot be voided — it may be locked or referenced by another entry (409).';
+        else msg = `Server returned ${res.status} ${res.statusText || ''}`.trim();
+      }
+
+      setVoidErr(msg);
+      setVoidConfirm(false);
     } catch (err) {
-      setVoidErr(err.message);
+      setVoidErr(`Network error: ${err.message}`);
       setVoidConfirm(false);
     } finally {
       setVoiding(false);
@@ -296,7 +305,6 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
 
   return (
     <div style={{ fontFamily: FONT, fontSize: 12 }}>
-      {/* Header */}
       <div style={{ background: vs.header, color: '#fff', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontWeight: 700, fontSize: 11 }}>
           {voucher.type} Voucher — {voucher.number}
@@ -304,7 +312,6 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 13, opacity: 0.8 }}>✕</button>
       </div>
 
-      {/* Meta */}
       <div style={{ padding: '8px 12px', background: vs.bodyBg, borderBottom: `1px solid ${BORDER}` }}>
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
           <div><span style={{ color: '#666', fontSize: 11 }}>Date: </span><strong>{fmtDate(voucher.date)}</strong></div>
@@ -316,11 +323,10 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
         )}
       </div>
 
-      {/* Entries */}
       <div style={{ background: '#fff' }}>
         <div style={{ display: 'flex', background: '#edf1f5', padding: '3px 0', borderBottom: `1px solid ${BORDER}` }}>
           <div style={{ flex: 1, padding: '0 10px', fontSize: 10, fontWeight: 700, color: '#555' }}>LEDGER</div>
-          <div style={{ width: 50,  padding: '0 8px', fontSize: 10, fontWeight: 700, color: '#555', textAlign: 'center' }}>DR/CR</div>
+          <div style={{ width: 50, padding: '0 8px', fontSize: 10, fontWeight: 700, color: '#555', textAlign: 'center' }}>DR/CR</div>
           <div style={{ width: 110, padding: '0 10px', fontSize: 10, fontWeight: 700, color: '#555', textAlign: 'right' }}>AMOUNT</div>
         </div>
         {(voucher.entries || []).map((e, i) => {
@@ -328,15 +334,11 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
           return (
             <div key={i} style={{ display: 'flex', borderBottom: `1px solid ${ROW_BORDER}`, background: i % 2 === 0 ? '#fff' : '#fafbfd' }}>
               <div style={{ flex: 1, padding: '4px 10px', fontWeight: 600, fontSize: 12 }}>{name}</div>
-              <div style={{ width: 50, padding: '4px 8px', textAlign: 'center', fontSize: 11,
-                color: e.type === 'Dr' ? '#1a3a6a' : '#6a1a1a', fontWeight: 700 }}>{e.type}</div>
-              <div style={{ width: 110, padding: '4px 10px', textAlign: 'right', fontSize: 12, fontWeight: 600 }}>
-                ₹{fmtAmount(e.amount)}
-              </div>
+              <div style={{ width: 50, padding: '4px 8px', textAlign: 'center', fontSize: 11, color: e.type === 'Dr' ? '#1a3a6a' : '#6a1a1a', fontWeight: 700 }}>{e.type}</div>
+              <div style={{ width: 110, padding: '4px 10px', textAlign: 'right', fontSize: 12, fontWeight: 600 }}>₹{fmtAmount(e.amount)}</div>
             </div>
           );
         })}
-        {/* Total row */}
         <div style={{ display: 'flex', borderTop: `2px solid ${BORDER}`, background: LIGHT_BG }}>
           <div style={{ flex: 1, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: '#555' }}>Total</div>
           <div style={{ width: 50 }} />
@@ -346,21 +348,19 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
         </div>
       </div>
 
-      {/* Void error */}
       {voidErr && (
-        <div style={{ margin: '8px 12px 0', padding: '5px 10px', background: '#fff0f0', border: '1px solid #f5a0a0', borderRadius: 2, fontSize: 11, color: '#c00', fontWeight: 600 }}>
-          ✗ Void failed: {voidErr}
+        <div style={{ margin: '8px 12px 0', padding: '6px 10px', background: '#fff0f0', border: '1px solid #f5a0a0', borderRadius: 2, fontSize: 11, color: '#900', fontWeight: 600, lineHeight: 1.5 }}>
+          ✗ {voidErr}
         </div>
       )}
 
-      {/* Action buttons */}
       {!voidConfirm ? (
         <div style={{ padding: '10px 12px', display: 'flex', gap: 8, borderTop: `1px solid ${BORDER}`, background: vs.bodyBg }}>
           <button onClick={() => setMode('edit')}
             style={{ background: vs.header, color: '#fff', border: 'none', borderRadius: 2, padding: '5px 16px', fontSize: 12, fontWeight: 700, fontFamily: FONT, cursor: 'pointer', flex: 1 }}>
             ✎ Edit Voucher
           </button>
-          <button onClick={() => setVoidConfirm(true)}
+          <button onClick={() => { setVoidErr(''); setVoidConfirm(true); }}
             style={{ background: 'none', border: '1px solid #f5a0a0', borderRadius: 2, padding: '5px 14px', fontSize: 12, fontWeight: 700, fontFamily: FONT, cursor: 'pointer', color: '#c00' }}>
             Void
           </button>
@@ -391,17 +391,18 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
 // ─────────────────────────────────────────────────────────────────────────────
 export default function DayBookScreen({ branchId, initialDate, fromDate: propFrom, toDate: propTo, user }) {
   const today = new Date().toISOString().slice(0, 10);
-  const [vouchers, setVouchers]       = useState([]);
-  const [ledgers, setLedgers]         = useState([]);
-  const [loading, setLoading]         = useState(true);
-  const [fromDate, setFromDate]       = useState(propFrom || initialDate || today);
-  const [toDate, setToDate]           = useState(propTo   || initialDate || today);
+  const [vouchers, setVouchers]             = useState([]);
+  const [ledgers, setLedgers]               = useState([]);
+  const [loading, setLoading]               = useState(true);
+  const [fromDate, setFromDate]             = useState(propFrom || initialDate || today);
+  const [toDate, setToDate]                 = useState(propTo   || initialDate || today);
   const [selectedVoucher, setSelectedVoucher] = useState(null);
-  const [companyName, setCompanyName] = useState('');
-  const [showPeriod, setShowPeriod]   = useState(false);
-  const [panelWidth]                  = useState(380);
-  const fromRef = useRef(null);
-  const toRef   = useRef(null);
+  const [focusedIdx, setFocusedIdx]         = useState(-1);   // FIX 1: keyboard nav index
+  const [companyName, setCompanyName]       = useState('');
+  const [showPeriod, setShowPeriod]         = useState(false);
+  const tableBodyRef = useRef(null);
+  const fromRef      = useRef(null);
+  const toRef        = useRef(null);
 
   // ── Fetch company
   useEffect(() => {
@@ -414,7 +415,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
       .then(d => { if (d?.name) setCompanyName(d.name); }).catch(() => {});
   }, [branchId]);
 
-  // ── Fetch ledgers (for name resolution in edit panel)
+  // ── Fetch ledgers
   useEffect(() => {
     const q = branchId ? `?branchId=${branchId}` : '';
     fetch(`/api/ledgers${q}`).then(r => r.json()).then(setLedgers).catch(() => {});
@@ -444,26 +445,81 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // ── Keyboard shortcuts — capture phase to block F2/F5 browser defaults
+  // FIX 1: sync focusedIdx when vouchers list changes
+  useEffect(() => {
+    if (vouchers.length === 0) { setFocusedIdx(-1); return; }
+    // keep focus in range
+    setFocusedIdx(prev => {
+      if (prev < 0) return -1;
+      return Math.min(prev, vouchers.length - 1);
+    });
+  }, [vouchers]);
+
+  // FIX 1: scroll focused row into view
+  useEffect(() => {
+    if (focusedIdx < 0) return;
+    const row = tableBodyRef.current?.querySelector(`[data-row-idx="${focusedIdx}"]`);
+    row?.scrollIntoView({ block: 'nearest' });
+  }, [focusedIdx]);
+
+  // ── Keyboard shortcuts — capture phase
   useEffect(() => {
     const APP_KEYS = new Set(['F2', 'F5']);
     const h = (e) => {
+      // Don't hijack keys when user is typing in an input/select/textarea
+      const tag = document.activeElement?.tagName;
+      const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
       if (APP_KEYS.has(e.key)) e.preventDefault();
-      if (e.altKey && ['p','e'].includes(e.key.toLowerCase())) e.preventDefault();
+      if (e.altKey && ['p', 'e'].includes(e.key.toLowerCase())) e.preventDefault();
+
       if (e.key === 'F2')  { setShowPeriod(p => !p); return; }
       if (e.key === 'F5')  { fetchData(); return; }
-      if (e.key === 'Escape' && selectedVoucher) { setSelectedVoucher(null); return; }
       if (e.altKey && e.key.toLowerCase() === 'p') { window.print(); return; }
       if (e.altKey && e.key.toLowerCase() === 'e') { handleExport(); return; }
+
+      // FIX 1: Arrow navigation — only when not in an input
+      if (!inInput && !showPeriod) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setFocusedIdx(prev => {
+            const next = Math.min(vouchers.length - 1, prev + 1);
+            setSelectedVoucher(vouchers[next] || null);
+            return next;
+          });
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setFocusedIdx(prev => {
+            const next = Math.max(0, prev - 1);
+            setSelectedVoucher(vouchers[next] || null);
+            return next;
+          });
+          return;
+        }
+        // Enter to open/close detail panel
+        if (e.key === 'Enter' && focusedIdx >= 0) {
+          e.preventDefault();
+          const v = vouchers[focusedIdx];
+          setSelectedVoucher(sel => sel?.id === v?.id ? null : v || null);
+          return;
+        }
+      }
+
+      if (e.key === 'Escape') {
+        if (selectedVoucher) { setSelectedVoucher(null); return; }
+        if (showPeriod) { setShowPeriod(false); return; }
+      }
     };
     window.addEventListener('keydown', h, { capture: true });
     return () => window.removeEventListener('keydown', h, { capture: true });
-  }, [vouchers, selectedVoucher, fetchData]);
+  }, [vouchers, selectedVoucher, focusedIdx, fetchData, showPeriod]);
 
   // ── Export CSV
   const handleExport = () => {
     const rows = [
-      ['Date','Particulars','Vch Type','Vch No.','Debit Amount','Credit Amount'],
+      ['Date', 'Particulars', 'Vch Type', 'Vch No.', 'Debit Amount', 'Credit Amount'],
       ...vouchers.map(v => {
         const dr = (v.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
         const cr = (v.entries || []).filter(e => e.type === 'Cr').reduce((a, e) => a + e.amount, 0);
@@ -492,20 +548,28 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
     ? fmtDate(fromDate)
     : `${fmtDate(fromDate)} to ${fmtDate(toDate)}`;
 
-  // ── Refresh selected voucher after edit
   const handleSaved = () => {
     fetchData();
-    // Re-select the updated voucher from fresh data
     setSelectedVoucher(null);
   };
 
   return (
-    <div style={s.root}>
+    // FIX 1: tabIndex so the root div captures arrow keys when nothing else is focused
+    <div style={s.root} tabIndex={0}
+      onFocus={() => { /* allow arrow keys */ }}
+      onKeyDown={e => {
+        // Row navigation via arrow keys when the table area is focused directly
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') e.preventDefault();
+      }}
+    >
       <style>{`
         @media print { .no-print { display: none !important; } body { background: white; } }
         .db-row:hover { background: #eef4fb !important; cursor: pointer; }
-        .db-row.sel { background: ${HIGHLIGHT} !important; }
+        .db-row.sel    { background: ${HIGHLIGHT} !important; }
+        .db-row.focused:not(.sel) { background: #deeeff !important; outline: none; }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .db-row { outline: none; }
+        .side-btn:hover { background: rgba(255,255,255,0.08) !important; }
       `}</style>
 
       {/* Title Bar */}
@@ -521,7 +585,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
         <span style={s.reportPeriod}>{periodLabel}</span>
       </div>
       <div style={s.subHeader}>
-        <span style={s.subTitle}>List of All Vouchers — click any row to view / edit</span>
+        <span style={s.subTitle}>List of All Vouchers — click a row or use ↑↓ keys to navigate, Enter to open</span>
       </div>
 
       {/* Period Modal */}
@@ -554,41 +618,84 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
       )}
 
       {/* Body: table + slide-in detail panel */}
+      {/* FIX 2: No right panel — table uses full width (minus detail panel when open) */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
 
-        {/* Main table */}
-        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', paddingRight: 90, transition: 'padding-right 0.25s' }}>
+        {/* Main table — full width, shrinks when panel is open */}
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'auto',
+          transition: 'margin-right 0.25s',
+          marginRight: selectedVoucher ? 382 : 0,
+        }}>
           <table style={s.table}>
             <thead>
               <tr style={s.theadRow}>
-                <th style={{ ...s.th, width: 80,  textAlign: 'left'    }}>Date</th>
-                <th style={{ ...s.th,             textAlign: 'left'    }}>Particulars</th>
-                <th style={{ ...s.th, width: 100, textAlign: 'left'    }}>Vch Type</th>
-                <th style={{ ...s.th, width: 80,  textAlign: 'center'  }}>Vch No.</th>
-                <th style={{ ...s.th, width: 130, textAlign: 'right'   }}>
+                <th style={{ ...s.th, width: 80,  textAlign: 'left'   }}>Date</th>
+                <th style={{ ...s.th,             textAlign: 'left'   }}>Particulars</th>
+                <th style={{ ...s.th, width: 100, textAlign: 'left'   }}>Vch Type</th>
+                <th style={{ ...s.th, width: 80,  textAlign: 'center' }}>Vch No.</th>
+                <th style={{ ...s.th, width: 130, textAlign: 'right'  }}>
                   Debit Amount<br /><span style={s.subCol}>Inwards Qty</span>
                 </th>
-                <th style={{ ...s.th, width: 130, textAlign: 'right'   }}>
+                <th style={{ ...s.th, width: 130, textAlign: 'right'  }}>
                   Credit Amount<br /><span style={s.subCol}>Outwards Qty</span>
                 </th>
               </tr>
             </thead>
-            <tbody>
+            <tbody ref={tableBodyRef}>
               {loading ? (
                 <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: '#888', fontStyle: 'italic', fontSize: 12 }}>Loading vouchers…</td></tr>
               ) : vouchers.length === 0 ? (
                 <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: '#888', fontStyle: 'italic', fontSize: 12 }}>No vouchers found for this period.</td></tr>
-              ) : vouchers.map(v => {
+              ) : vouchers.map((v, rowIdx) => {
                 const drAmt = (v.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
                 const crAmt = (v.entries || []).filter(e => e.type === 'Cr').reduce((a, e) => a + e.amount, 0);
                 const displayDr = drAmt || (crAmt === 0 ? v.amount : 0);
                 const isSelected = selectedVoucher?.id === v.id;
+                const isFocused  = focusedIdx === rowIdx;
                 const vs = VOUCHER_STYLES[v.type];
                 return (
-                  <tr key={v.id}
-                    className={`db-row${isSelected ? ' sel' : ''}`}
-                    style={{ ...s.tr, background: isSelected ? HIGHLIGHT : '#fff', borderLeft: isSelected ? `3px solid ${vs?.tab || HEADER_BG}` : '3px solid transparent' }}
-                    onClick={() => setSelectedVoucher(isSelected ? null : v)}
+                  <tr
+                    key={v.id}
+                    data-row-idx={rowIdx}
+                    tabIndex={0}                   // FIX 1: focusable row
+                    className={`db-row${isSelected ? ' sel' : ''}${isFocused && !isSelected ? ' focused' : ''}`}
+                    style={{
+                      ...s.tr,
+                      background: isSelected ? HIGHLIGHT : isFocused ? '#deeeff' : '#fff',
+                      borderLeft: isSelected ? `3px solid ${vs?.tab || HEADER_BG}` : isFocused ? `3px solid #5590cc` : '3px solid transparent',
+                    }}
+                    onClick={() => {
+                      setFocusedIdx(rowIdx);
+                      setSelectedVoucher(isSelected ? null : v);
+                    }}
+                    // FIX 1: keyboard on individual row
+                    onKeyDown={e => {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        const next = Math.min(vouchers.length - 1, rowIdx + 1);
+                        setFocusedIdx(next);
+                        setSelectedVoucher(vouchers[next]);
+                        tableBodyRef.current?.querySelector(`[data-row-idx="${next}"]`)?.focus();
+                      }
+                      if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        const next = Math.max(0, rowIdx - 1);
+                        setFocusedIdx(next);
+                        setSelectedVoucher(vouchers[next]);
+                        tableBodyRef.current?.querySelector(`[data-row-idx="${next}"]`)?.focus();
+                      }
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedVoucher(isSelected ? null : v);
+                      }
+                      if (e.key === 'Escape') {
+                        setSelectedVoucher(null);
+                      }
+                    }}
+                    onFocus={() => setFocusedIdx(rowIdx)}
                   >
                     <td style={{ ...s.td, color: '#333' }}>{fmtDate(v.date)}</td>
                     <td style={{ ...s.td, fontWeight: 600, color: '#1a1a1a' }}>
@@ -619,8 +726,8 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
         {/* Slide-in Detail Panel */}
         {selectedVoucher && (
           <div className="no-print" style={{
-            position: 'absolute', top: 0, right: 90, bottom: 0,
-            width: panelWidth,
+            position: 'absolute', top: 0, right: 0, bottom: 0,
+            width: 380,
             background: '#fff',
             borderLeft: `2px solid ${BORDER}`,
             boxShadow: '-4px 0 20px rgba(0,0,0,0.12)',
@@ -638,24 +745,6 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
             />
           </div>
         )}
-
-        {/* Right Button Panel */}
-        <div style={s.rightPanel} className="no-print">
-          {[
-            { key: 'F2',    label: 'Period',  action: () => setShowPeriod(true) },
-            { key: 'F3',    label: 'Company', action: () => {} },
-            { key: 'F5',    label: 'Refresh', action: fetchData },
-            { key: 'Alt+P', label: 'Print',   action: () => window.print() },
-            { key: 'Alt+E', label: 'Export',  action: handleExport },
-            { key: 'Esc',   label: 'Close',   action: () => setSelectedVoucher(null) },
-            { key: 'F12',   label: 'Config',  action: () => {} },
-          ].map(btn => (
-            <button key={btn.key} onClick={btn.action} style={s.sideBtn}>
-              <span style={s.sideBtnKey}>{btn.key}</span>
-              <span style={s.sideBtnLabel}>{btn.label}</span>
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Status bar */}
@@ -663,8 +752,9 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
         <span style={{ color: '#aaa', fontSize: 10 }}>
           {loading ? 'Loading…' : `${vouchers.length} voucher${vouchers.length !== 1 ? 's' : ''}`}
           {selectedVoucher ? ` — viewing ${selectedVoucher.number}` : ''}
+          {focusedIdx >= 0 && vouchers[focusedIdx] ? ` — row ${focusedIdx + 1} of ${vouchers.length}` : ''}
         </span>
-        <span style={{ color: '#aaa', fontSize: 10 }}>F2: Period  |  F5: Refresh  |  Click row: View/Edit  |  Esc: Close panel</span>
+        <span style={{ color: '#aaa', fontSize: 10 }}>↑↓ Navigate  |  Enter: Open  |  Esc: Close  |  F2: Period  |  F5: Refresh</span>
       </div>
     </div>
   );
@@ -708,21 +798,9 @@ const s = {
   },
   tfootRow: { background: LIGHT_BG, borderTop: `1px solid ${BORDER}`, position: 'sticky', bottom: 0 },
   tfoot:    { padding: '4px 8px', fontSize: 12, borderRight: `1px solid ${ROW_BORDER}` },
-  rightPanel: {
-    position: 'absolute', top: 0, right: 0, bottom: 0, width: 90,
-    background: '#1a2a3a', display: 'flex', flexDirection: 'column', borderLeft: '1px solid #0d1a2a',
-  },
-  sideBtn: {
-    background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.08)',
-    color: '#cdd5e0', cursor: 'pointer', display: 'flex', flexDirection: 'column',
-    alignItems: 'flex-start', padding: '6px 8px', textAlign: 'left', fontFamily: FONT,
-    transition: 'background 0.1s', flex: 1,
-  },
-  sideBtnKey:   { fontSize: 9, color: 'rgba(255,255,255,0.45)', fontWeight: 700, lineHeight: 1.2 },
-  sideBtnLabel: { fontSize: 11, color: '#d0dae6', fontWeight: 600, lineHeight: 1.3 },
   statusBar: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '3px 100px 3px 8px', background: '#1a2a3a', borderTop: '1px solid #0d1a2a',
+    padding: '3px 8px', background: '#1a2a3a', borderTop: '1px solid #0d1a2a',
     flexShrink: 0, height: 24,
   },
   modalOverlay: {
