@@ -540,6 +540,107 @@ async function startServer() {
     }
   });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PASTE THESE TWO ROUTES into server.ts
+// Place them immediately AFTER the  app.post("/api/vouchers", ...)  block
+// and BEFORE the  // ── BANKING  comment.
+// ─────────────────────────────────────────────────────────────────────────────
+
+  // ── UPDATE a voucher (Edit Voucher in Day Book) ───────────────────────────
+  app.put("/api/vouchers/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const { entries, userId, username, ...voucherData } = req.body;
+
+      const existing = await db('vouchers').where({ id }).first();
+      if (!existing) {
+        return res.status(404).json({ error: `Voucher ${id} not found.` });
+      }
+
+      await db.transaction(async (trx) => {
+        // 1. Update the voucher header (date, narration, etc.)
+        if (Object.keys(voucherData).length > 0) {
+          await trx('vouchers').where({ id }).update(voucherData);
+        }
+
+        // 2. Replace all entries if provided
+        if (Array.isArray(entries) && entries.length > 0) {
+          await trx('voucher_entries').where({ voucherId: id }).delete();
+
+          const newEntries = entries.map((e: any) => ({
+            voucherId: id,
+            ledgerId: e.ledgerId,
+            amount: Number(e.amount),
+            type: e.type,
+            costCentreId: e.costCentreId || null,
+            methodAdjustment: e.methodAdjustment || 'On Account',
+            refNo: e.refNo || '',
+          }));
+          await trx('voucher_entries').insert(newEntries);
+        }
+
+        // 3. Audit log
+        await trx('audit_logs').insert({
+          id: Date.now().toString() + '_upd',
+          userId: userId || 'system',
+          username: username || 'system',
+          action: 'VOUCHER_UPDATE',
+          timestamp: new Date().toISOString(),
+          branchId: voucherData.branchId || existing.branchId,
+          details: `Updated ${existing.type} Voucher: ${existing.number || id}`,
+        });
+      });
+
+      res.json({ success: true, id });
+    } catch (err: any) {
+      console.error('[Voucher PUT Error]:', err);
+      res.status(500).json({
+        error: 'Failed to update voucher',
+        details: err.sqlMessage || err.message,
+      });
+    }
+  });
+
+  // ── DELETE / VOID a voucher ───────────────────────────────────────────────
+  app.delete("/api/vouchers/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const existing = await db('vouchers').where({ id }).first();
+      if (!existing) {
+        return res.status(404).json({
+          error: `Voucher ${id} not found. It may have already been deleted.`,
+        });
+      }
+
+      await db.transaction(async (trx) => {
+        // 1. Delete entries first (FK constraint)
+        await trx('voucher_entries').where({ voucherId: id }).delete();
+
+        // 2. Delete voucher header
+        await trx('vouchers').where({ id }).delete();
+
+        // 3. Audit log
+        await trx('audit_logs').insert({
+          id: Date.now().toString() + '_void',
+          userId: 'system',
+          username: 'system',
+          action: 'VOUCHER_VOID',
+          timestamp: new Date().toISOString(),
+          branchId: existing.branchId,
+          details: `Voided ${existing.type} Voucher: ${existing.number || id} for ₹${existing.amount}`,
+        });
+      });
+
+      res.json({ success: true, id });
+    } catch (err: any) {
+      console.error('[Voucher DELETE Error]:', err);
+      res.status(500).json({
+        error: 'Failed to void voucher',
+        details: err.sqlMessage || err.message,
+      });
+    }
+  });
+
   // ── BANKING ────────────────────────────────────────────────────────────────
 
   app.get('/api/bank/reconciliations', async (req, res) => {
