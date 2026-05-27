@@ -1,11 +1,11 @@
 /**
  * TallyPrime-style Balance Sheet A/c — v4
  * Fixes:
- * 1. Resolved crash (removed invalid printReport import, defined missing variables).
- * 2. Voided transactions are automatically excluded.
- * 3. ESC key collapses expanded groups OR returns to dashboard via onBack prop.
- * 4. Full keyboard navigation (Arrow Up/Down, Enter to expand/drill down).
- * 5. Added focus management so keyboard shortcuts work immediately on load.
+ * 1. Fixed "printReport" import crash (causing the blank screen).
+ * 2. Voided transactions filtered out (as per P&L / vouchers).
+ * 3. Physical ESC key triggers onBack to go back to the main dashboard.
+ * 4. Added Unified Keyboard Arrow Key Navigation across both columns.
+ * 5. Full-height layout to fit your container.
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -17,20 +17,19 @@ interface Ledger {
   openingBalance?: number; balanceType?: 'Dr' | 'Cr';
 }
 
-function fmtAmtAbs(n: number) {
-  return Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-}
-function fmtDate(iso: string) {
+const fmtAmtAbs = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const fmtDate = (iso: string) => {
   try {
     const d = new Date(iso);
     const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return `${d.getDate()}-${M[d.getMonth()]}-${d.getFullYear()}`;
   } catch { return iso; }
-}
+};
 
+// Voided voucher helper
 const isVoided = (v: any): boolean => v.voided === true || v.voided === 1 || v.voided === '1';
 
-// ─── LedgerDetail (drill-down, identical to P&L / Trial Balance) ─────────────
+// ─── LedgerDetail (drill-down, identical to P&L) ─────────────────────────────
 function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?: string; onBack: () => void }) {
   const [rows, setRows]       = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +47,7 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
     fetch(`/api/vouchers/ledger/${ledger.id}${q}`)
       .then(r => r.json())
       .then(d => {
-        // Exclude voided transactions in detail view
+        // Exclude voided vouchers in detail view
         const active = (Array.isArray(d) ? d : []).filter(v => !isVoided(v));
         setRows(active);
       })
@@ -72,7 +71,7 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
   const BD   = '#e0e6ee';
 
   return (
-    <div style={{ fontFamily: FONT, fontSize: 12, display:'flex', flexDirection:'column', height:'100vh', background:'#fff', border:'1px solid #b8c4cc', borderRadius:2, overflow:'hidden' }}>
+    <div style={{ fontFamily: FONT, fontSize: 12, display:'flex', flexDirection:'column', height:'100%', background:'#fff', border:'1px solid #b8c4cc', borderRadius:2, overflow:'hidden' }}>
       <div style={{ background: HDR, color:'#fff', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'3px 10px', fontSize:12, fontWeight:700, flexShrink:0 }}>
         <button onClick={onBack} style={{ background:'none', border:'1px solid rgba(255,255,255,0.4)', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:FONT, padding:'1px 10px', borderRadius:2 }}>← Back (Esc)</button>
         <span style={{ flex:2, textAlign:'center', fontWeight:800, fontSize:13 }}>{ledger.name}</span>
@@ -159,19 +158,21 @@ function PeriodModal({ from, to, onAccept, onCancel }: { from:string; to:string;
   return (
     <div style={{ position:'fixed', inset:0, zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.4)' }}>
       <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:2, boxShadow:'0 8px 32px rgba(0,0,0,0.28)', width:300, overflow:'hidden', fontFamily:FONT }}>
-        <div style={{ background:HDR, color:'#fff', padding:'5px 12px', fontSize:12, fontWeight:700 }}>Change Period</div>
+        <div style={{ background:HDR, color:'#fff', padding:'5px 12px', fontSize:12, fontWeight:700 }}>Change Period  <span style={{ fontSize:9, opacity:0.6 }}>F2</span></div>
         <div style={{ padding:'14px 16px', display:'flex', flexDirection:'column', gap:12 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <label style={{ fontSize:12, width:90 }}>From Date :</label>
-            <input autoFocus type="date" value={f} onChange={e=>setF(e.target.value)} onKeyDown={e=>{if(e.key==='Enter') toRef.current?.focus()}} style={{ flex:1, borderBottom:`2px solid ${HDR}`, border:'none', outline:'none', background:'#fffde0' }} />
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <label style={{ fontSize:12, width:90 }}>To Date :</label>
-            <input ref={toRef} type="date" value={t} onChange={e=>setT(e.target.value)} onKeyDown={e=>{if(e.key==='Enter') onAccept(f,t)}} style={{ flex:1, borderBottom:`2px solid ${HDR}`, border:'none', outline:'none', background:'#fffde0' }} />
-          </div>
+          {[{lbl:'From Date :', val:f, set:setF, ref:undefined as any, onKey:(e:React.KeyboardEvent)=>{ if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();toRef.current?.focus();}}},
+            {lbl:'To Date :',   val:t, set:setT, ref:toRef,           onKey:(e:React.KeyboardEvent)=>{ if(e.key==='Enter') onAccept(f,t);}}
+          ].map((row,i) => (
+            <div key={i} style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <label style={{ fontSize:12, color:'#555', fontStyle:'italic', width:90, flexShrink:0 }}>{row.lbl}</label>
+              <input autoFocus={i===0} ref={row.ref} type="date" value={row.val} onChange={e=>row.set(e.target.value)} onKeyDown={row.onKey}
+                style={{ flex:1, border:'none', borderBottom:`2px solid ${HDR}`, outline:'none', fontSize:13, fontWeight:700, fontFamily:FONT, padding:'2px 4px', background:'#fffde0', color:'#1a1a1a' }} />
+            </div>
+          ))}
         </div>
         <div style={{ padding:'8px 16px 12px', display:'flex', justifyContent:'flex-end', gap:10 }}>
-          <button onClick={()=>onAccept(f,t)} style={{ background:HDR, color:'#fff', border:'none', padding:'5px 18px', cursor:'pointer' }}>Accept</button>
+          <button onClick={()=>onAccept(f,t)} style={{ background:HDR, color:'#fff', border:'none', padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Accept</button>
+          <button onClick={onCancel}          style={{ background:'#f0f4f8', color:'#444', border:`1px solid ${BD}`, padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Cancel</button>
         </div>
       </div>
     </div>
@@ -183,6 +184,8 @@ function AddPeriodModal({ onAdd, onCancel }: { onAdd:(label:string,from:string,t
   const [label, setLabel] = useState('');
   const [from,  setFrom]  = useState('');
   const [to,    setTo]    = useState('');
+  const HDR = '#1f4e79'; const BD = '#b8c4cc';
+  const FONT = `-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif`;
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel(); } };
     window.addEventListener('keydown', h, true);
@@ -190,13 +193,26 @@ function AddPeriodModal({ onAdd, onCancel }: { onAdd:(label:string,from:string,t
   }, [onCancel]);
   return (
     <div style={{ position:'fixed', inset:0, zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.4)' }}>
-      <div style={{ background:'#fff', padding:20, width:340 }}>
-        <h4 style={{ margin:'0 0 15px 0' }}>Add Comparison Period</h4>
-        <input placeholder="Label (optional)" value={label} onChange={e=>setLabel(e.target.value)} style={{ width:'100%', marginBottom:10 }} />
-        <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{ width:'100%', marginBottom:10 }} />
-        <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{ width:'100%', marginBottom:10 }} />
-        <button onClick={()=>{ if(from&&to) onAdd(label, from, to); }} style={{ marginRight:10 }}>Add</button>
-        <button onClick={onCancel}>Cancel</button>
+      <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:2, boxShadow:'0 8px 32px rgba(0,0,0,0.28)', width:340, overflow:'hidden', fontFamily:FONT }}>
+        <div style={{ background:HDR, color:'#fff', padding:'5px 12px', fontSize:12, fontWeight:700 }}>Add Comparison Period</div>
+        <div style={{ padding:'14px 16px', display:'flex', flexDirection:'column', gap:12 }}>
+          {[
+            { lbl:'Label (optional):', val:label, set:setLabel, type:'text',  ph:'e.g. FY 2023-24' },
+            { lbl:'From Date :',       val:from,  set:setFrom,  type:'date',  ph:'' },
+            { lbl:'To Date :',         val:to,    set:setTo,    type:'date',  ph:'' },
+          ].map((row,i) => (
+            <div key={i} style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <label style={{ fontSize:12, color:'#555', fontStyle:'italic', width:110, flexShrink:0 }}>{row.lbl}</label>
+              <input autoFocus={i===0} type={row.type} value={row.val} placeholder={row.ph} onChange={e=>row.set(e.target.value)}
+                style={{ flex:1, border:'none', borderBottom:`2px solid ${HDR}`, outline:'none', fontSize:13, fontWeight:700, fontFamily:FONT, padding:'2px 4px', background:'#fffde0', color:'#1a1a1a' }} />
+            </div>
+          ))}
+        </div>
+        <div style={{ padding:'8px 16px 12px', display:'flex', justifyContent:'flex-end', gap:10 }}>
+          <button onClick={()=>{ if(from&&to) onAdd(label||`${fmtDate(from)} – ${fmtDate(to)}`,from,to); }}
+            style={{ background:HDR, color:'#fff', border:'none', padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Add</button>
+          <button onClick={onCancel} style={{ background:'#f0f4f8', color:'#444', border:`1px solid ${BD}`, padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Cancel</button>
+        </div>
       </div>
     </div>
   );
@@ -216,7 +232,7 @@ const DARK     = '#1a2a3a';
 const LIABILITY_GROUPS = ['Capital Account', 'Reserves & Surplus', 'Loans (Liability)', 'Current Liabilities', 'Suspense Account'];
 const ASSET_GROUPS     = ['Fixed Assets', 'Investments', 'Current Assets', 'Misc. Expenses (Asset)'];
 
-// ─── Main BalanceSheetScreen ───────────────────────────────────────────────────
+// ─── Main BSScreen ─────────────────────────────────────────────────────────────
 export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) {
   const [ledgers, setLedgers]             = useState<any[]>([]);
   const [allVouchers, setAllVouchers]     = useState<any[]>([]);
@@ -229,19 +245,20 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
   const [drillLedger, setDrillLedger]     = useState<Ledger | null>(null);
   const [loading, setLoading]             = useState(true);
   const [showNettProfit, setShowNettProfit] = useState(true);
-  const [focusedRowIdx, setFocusedRowIdx] = useState<number>(0);
-
+  
+  // Unified Keyboard Row Focus
+  const [focusedRowIdx, setFocusedRowIdx] = useState<number>(-1);
   const rootRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Auto-focus container so physical keys respond immediately
+  // Auto-focus the component container on mount or when returning from sub-views
   useEffect(() => {
     if (!drillLedger && !showPeriod && !showAddPeriod) {
       rootRef.current?.focus();
     }
   }, [drillLedger, showPeriod, showAddPeriod]);
 
-  // Fetch data on mount
+  // ── Fetch once ──────────────────────────────────────────────────────
   useEffect(() => {
     const q = branchId ? `?branchId=${branchId}` : '';
     setLoading(true);
@@ -252,10 +269,10 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
     ]).then(([l, v, b]) => {
       setLedgers(Array.isArray(l) ? l : []);
       
-      // FIX: Filter voided transactions immediately
+      // Filter out voided vouchers upon load
       const vArr = (Array.isArray(v) ? v : []).filter((x: any) => !isVoided(x));
       setAllVouchers(vArr);
-
+      
       if (vArr.length > 0) {
         const dates = vArr.map((x:any) => x.date?.slice(0,10)).filter(Boolean).sort();
         setMainPeriod({ from: dates[0], to: dates[dates.length-1] });
@@ -265,9 +282,11 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
         if (br) setCompanyName(br.name);
       }
     }).catch(()=>{}).finally(()=>setLoading(false));
+    fetch('/api/settings/company').then(r=>r.ok?r.json():null)
+      .then(d=>{if(d?.name)setCompanyName(d.name);}).catch(()=>{});
   }, [branchId]);
 
-  // Calculations
+  // ── Balance calculation for a ledger within a period ────────────────
   const calcBalanceForPeriod = useCallback((ledgerId: string, from: string, to: string) => {
     const ledger  = ledgers.find(l => l.id === ledgerId);
     const ob      = Number(ledger?.openingBalance || 0);
@@ -295,14 +314,19 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
       .filter(l => calcBalanceForPeriod(l.id, from, to) !== 0);
   }, [ledgers, calcBalanceForPeriod]);
 
+  // All periods
   const allPeriods: Period[] = useMemo(() => [
     { label: companyName || '…', from: mainPeriod.from, to: mainPeriod.to },
     ...extraPeriods,
   ], [mainPeriod, extraPeriods, companyName]);
 
+  // Net Profit Carry calculations
+  const PL_INCOME_GROUPS   = ['Sales Account', 'Direct Income', 'Indirect Income', 'Closing Stock'];
+  const PL_EXPENSE_GROUPS  = ['Opening Stock', 'Purchase Account', 'Direct Expenses', 'Indirect Expenses'];
+
   const plNetForPeriod = useCallback((from: string, to: string) => {
-    const income  = ['Sales Account', 'Direct Income', 'Indirect Income', 'Closing Stock'].reduce((a,g)  => a + Math.abs(groupTotalForPeriod(g, from, to)), 0);
-    const expense = ['Opening Stock', 'Purchase Account', 'Direct Expenses', 'Indirect Expenses'].reduce((a,g) => a + Math.abs(groupTotalForPeriod(g, from, to)), 0);
+    const income  = PL_INCOME_GROUPS.reduce((a,g)  => a + Math.abs(groupTotalForPeriod(g, from, to)), 0);
+    const expense = PL_EXPENSE_GROUPS.reduce((a,g) => a + Math.abs(groupTotalForPeriod(g, from, to)), 0);
     return income - expense;
   }, [groupTotalForPeriod]);
 
@@ -319,52 +343,36 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
     return { liabRaw, assetRaw, plNet, liabTotal, assetTotal, grand, diff };
   }), [allPeriods, groupTotalForPeriod, plNetForPeriod, showNettProfit]);
 
-  // FIX: Separate navigable rows for sequential left/right column arrow navigation
-  const liabilityRows = useMemo(() => {
-    const rows: any[] = [];
-    LIABILITY_GROUPS.forEach(grp => {
-      const anyNonZero = allPeriods.some(p => groupTotalForPeriod(grp, p.from, p.to) !== 0);
+  // Define flat navigable row representation for unified arrow key traversal
+  const ALL_GROUPS = [...LIABILITY_GROUPS, ...ASSET_GROUPS];
+  const navigableRows = useMemo(() => {
+    const rows: Array<{ type: 'group'; name: string } | { type: 'ledger'; ledger: any; groupName: string }> = [];
+    ALL_GROUPS.forEach(grpName => {
+      const anyNonZero = allPeriods.some(p => groupTotalForPeriod(grpName, p.from, p.to) !== 0);
       if (!anyNonZero) return;
-      rows.push({ type: 'group', name: grp, side: 'liab' });
-      if (expanded.has(grp)) {
-        groupLedgersNonZero(grp, mainPeriod.from, mainPeriod.to).forEach(l => {
-          rows.push({ type: 'ledger', ledger: l, groupName: grp, side: 'liab' });
+      rows.push({ type: 'group', name: grpName });
+      if (expanded.has(grpName)) {
+        groupLedgersNonZero(grpName, mainPeriod.from, mainPeriod.to).forEach(l => {
+          rows.push({ type: 'ledger', ledger: l, groupName: grpName });
         });
       }
     });
     return rows;
   }, [allPeriods, expanded, groupTotalForPeriod, groupLedgersNonZero, mainPeriod]);
 
-  const assetRows = useMemo(() => {
-    const rows: any[] = [];
-    ASSET_GROUPS.forEach(grp => {
-      const anyNonZero = allPeriods.some(p => groupTotalForPeriod(grp, p.from, p.to) !== 0);
-      if (!anyNonZero) return;
-      rows.push({ type: 'group', name: grp, side: 'asset' });
-      if (expanded.has(grp)) {
-        groupLedgersNonZero(grp, mainPeriod.from, mainPeriod.to).forEach(l => {
-          rows.push({ type: 'ledger', ledger: l, groupName: grp, side: 'asset' });
-        });
-      }
-    });
-    return rows;
-  }, [allPeriods, expanded, groupTotalForPeriod, groupLedgersNonZero, mainPeriod]);
-
-  const navigableRows = useMemo(() => [...liabilityRows, ...assetRows], [liabilityRows, assetRows]);
-
-  // Handle row visual alignment scroll
+  // Keep focused row scrolled into view dynamically
   useEffect(() => {
     if (focusedRowIdx < 0) return;
     const el = contentRef.current?.querySelector(`[data-rowidx="${focusedRowIdx}"]`);
     el?.scrollIntoView({ block: 'nearest' });
   }, [focusedRowIdx]);
 
-  // FIX: Full Keyboard Shortcuts (ESC, Arrow keys, Enter)
+  // ── Keyboard shortcuts ───────────────────────────────────────────────
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (drillLedger || showPeriod || showAddPeriod) return;
+      if (drillLedger) return;
 
       let handled = false;
       if (e.key === 'ArrowDown') {
@@ -387,28 +395,30 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
           setExpanded(prev => { const n = new Set(prev); n.delete(grpName); return n; });
           handled = true;
         }
-      } else if (e.key === 'Escape') {
+      } else if (e.key === 'F2') { 
+        setShowPeriod(true); handled = true; 
+      } else if (e.key === 'F5') {
+        setExpanded(new Set([...LIABILITY_GROUPS, ...ASSET_GROUPS])); handled = true;
+      } else if (e.key === 'Escape') { 
         if (expanded.size > 0) {
           setExpanded(new Set());
         } else if (onBack) {
-          onBack(); // Triggers exit to Dashboard
+          onBack(); // Esc triggers dashboard back
         }
-        handled = true;
-      } else if (e.key === 'F2') {
-        setShowPeriod(true); handled = true;
-      } else if (e.key === 'F5') {
-        setExpanded(new Set([...LIABILITY_GROUPS, ...ASSET_GROUPS])); handled = true;
-      } else if (e.altKey && e.key.toLowerCase() === 'n') {
-        setShowAddPeriod(true); handled = true;
-      } else if (e.altKey && e.key.toLowerCase() === 'e') {
-        handleExport(); handled = true;
+        handled = true; 
+      } else if (e.altKey && e.key.toLowerCase() === 'p') { 
+        window.print(); handled = true; 
+      } else if (e.altKey && e.key.toLowerCase() === 'n') { 
+        setShowAddPeriod(true); handled = true; 
+      } else if (e.altKey && e.key.toLowerCase() === 'e') { 
+        handleExport(); handled = true; 
       }
 
       if (handled) { e.preventDefault(); e.stopPropagation(); }
     };
     window.addEventListener('keydown', h, true);
     return () => window.removeEventListener('keydown', h, true);
-  }, [drillLedger, showPeriod, showAddPeriod, focusedRowIdx, navigableRows, expanded, onBack]);
+  }, [drillLedger, navigableRows, focusedRowIdx, expanded, onBack]);
 
   const toggleGroup = (name: string) => setExpanded(prev => {
     const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n;
@@ -442,28 +452,23 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
     </>
   );
 
-  // FIX: Unified Sequential Index Tracking
-  let rowIdxCounter = -1;
-
-  const renderGroupRow = (grpName: string, side: 'liab' | 'asset') => {
+  const renderGroupRow = (grpName: string) => {
     const anyNonZero = allPeriods.some(p => groupTotalForPeriod(grpName, p.from, p.to) !== 0);
     if (!anyNonZero) return null;
 
     const isExp = expanded.has(grpName);
-
-    // Calculate dynamic sequence idx in our navigable space
-    const targetSet = side === 'liab' ? liabilityRows : assetRows;
-    const baseOffset = side === 'asset' ? liabilityRows.length : 0;
-    const targetIdxInColumn = targetSet.findIndex(r => r.name === grpName && r.type === 'group');
-    const computedIdx = targetIdxInColumn !== -1 ? baseOffset + targetIdxInColumn : -1;
-    const isFocused = focusedRowIdx === computedIdx;
+    
+    // Determine static focus index lookup
+    const grpIdx = navigableRows.findIndex(r => r.type === 'group' && r.name === grpName);
+    const isFocused = focusedRowIdx === grpIdx;
 
     return (
       <React.Fragment key={grpName}>
         <tr 
-          data-rowidx={computedIdx}
-          style={{ ...rs.groupRow, cursor:'pointer', background: isFocused ? '#ddeeff' : '#fff' }} 
-          onClick={() => { setFocusedRowIdx(computedIdx); toggleGroup(grpName); }}
+          data-rowidx={grpIdx}
+          style={{ ...rs.groupRow, cursor:'pointer', background: isFocused ? '#ffd966' : '#fff' }} 
+          onClick={() => { setFocusedRowIdx(grpIdx); toggleGroup(grpName); }} 
+          className="bs-grp-row"
         >
           <td style={rs.tdName}>
             <span style={rs.toggle}>{isExp ? '−' : '+'}</span>
@@ -480,21 +485,21 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
           })}
         </tr>
         {isExp && groupLedgersNonZero(grpName, mainPeriod.from, mainPeriod.to).map(l => {
-          const ledgerOffsetIdx = targetSet.findIndex(r => r.ledger?.id === l.id && r.type === 'ledger');
-          const finalLedgerIdx = ledgerOffsetIdx !== -1 ? baseOffset + ledgerOffsetIdx : -1;
-          const isLedgerFocused = focusedRowIdx === finalLedgerIdx;
-
+          const ledgerIdx = navigableRows.findIndex(r => r.type === 'ledger' && r.ledger.id === l.id);
+          const isLedgerFocused = focusedRowIdx === ledgerIdx;
+          
           return (
             <tr 
               key={l.id} 
-              data-rowidx={finalLedgerIdx}
+              data-rowidx={ledgerIdx}
               style={{ ...rs.ledgerRow, background: isLedgerFocused ? '#ddeeff' : '#fafbff' }}
-              onClick={() => setFocusedRowIdx(finalLedgerIdx)}
+              onClick={() => setFocusedRowIdx(ledgerIdx)}
             >
               <td style={{ ...rs.tdName, paddingLeft:28 }}>
                 <span
                   onClick={(e) => { e.stopPropagation(); setDrillLedger(l); }}
                   style={{ fontStyle:'italic', color:'#1a5fa8', cursor:'pointer', textDecoration:'underline', fontSize:11 }}
+                  title="Click to view transactions"
                 >
                   {l.name}
                 </span>
@@ -516,7 +521,8 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
 
   const SectionHeader = ({ label }: { label: string }) => (
     <tr style={{ background:'#fafbff' }}>
-      <td colSpan={1 + allPeriods.length} style={{ padding:'6px 10px 2px', fontSize:12, fontStyle:'italic', fontWeight:600, color:'#444', letterSpacing:2, borderBottom:'none' }}>
+      <td colSpan={1 + allPeriods.length}
+        style={{ padding:'6px 10px 2px', fontSize:12, fontStyle:'italic', fontWeight:600, color:'#444', letterSpacing:2, borderBottom:'none' }}>
         {label}
       </td>
     </tr>
@@ -556,12 +562,14 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
   };
 
   return (
-    <div ref={rootRef} style={s.root} id="bs-report" tabIndex={-1}>
+    <div ref={rootRef} style={s.root} id="bs-report" tabIndex={0}>
       <style>{`
         @media print { .no-print { display:none!important; } }
+        .bs-grp-row:hover { background: #eef4fb !important; }
         #bs-report:focus { outline: none; }
       `}</style>
 
+      {/* Modals */}
       {showPeriod && (
         <PeriodModal from={mainPeriod.from} to={mainPeriod.to}
           onAccept={(f,t) => { setMainPeriod({from:f,to:t}); setShowPeriod(false); }}
@@ -576,7 +584,9 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
       {/* Title Bar */}
       <div style={s.titleBar}>
         {onBack && (
-          <button onClick={onBack} style={s.backBtn}>← Back (Esc)</button>
+          <button onClick={onBack} className="no-print" style={s.backBtn}>
+            ← Back (Esc)
+          </button>
         )}
         <span style={{ flex:1, fontWeight:700 }}>Balance Sheet</span>
         <span style={{ flex:2, textAlign:'center', fontWeight:800, fontSize:12 }}>{companyName||'…'}</span>
@@ -595,7 +605,8 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
               <table style={s.table}>
                 <thead>
                   <tr style={{ background:LIGHT }}>
-                    <th colSpan={1 + allPeriods.length} style={{ ...rs.th, textAlign:'center', background:'#e8f0f7', letterSpacing:2, fontSize:12, fontWeight:800, color:'#1f4e79', borderBottom:'2px solid #b8c4cc' }}>
+                    <th colSpan={1 + allPeriods.length}
+                      style={{ ...rs.th, textAlign:'center', background:'#e8f0f7', letterSpacing:2, fontSize:12, fontWeight:800, color:'#1f4e79', borderBottom:'2px solid #b8c4cc' }}>
                       LIABILITIES
                     </th>
                   </tr>
@@ -603,15 +614,15 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
                 </thead>
                 <tbody>
                   <SectionHeader label="Share Capital & Reserves" />
-                  {renderGroupRow('Capital Account', 'liab')}
-                  {renderGroupRow('Reserves & Surplus', 'liab')}
+                  {renderGroupRow('Capital Account')}
+                  {renderGroupRow('Reserves & Surplus')}
 
                   <SectionHeader label="Loan Funds" />
-                  {renderGroupRow('Loans (Liability)', 'liab')}
+                  {renderGroupRow('Loans (Liability)')}
 
                   <SectionHeader label="Current Liabilities" />
-                  {renderGroupRow('Current Liabilities', 'liab')}
-                  {renderGroupRow('Suspense Account', 'liab')}
+                  {renderGroupRow('Current Liabilities')}
+                  {renderGroupRow('Suspense Account')}
 
                   {showNettProfit && periodTotals[0]?.plNet >= 0 && renderPLRow()}
                   {renderDiffRow('liab')}
@@ -637,7 +648,8 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
               <table style={s.table}>
                 <thead>
                   <tr style={{ background:LIGHT }}>
-                    <th colSpan={1 + allPeriods.length} style={{ ...rs.th, textAlign:'center', background:'#e8f0f7', letterSpacing:2, fontSize:12, fontWeight:800, color:'#1f4e79', borderBottom:'2px solid #b8c4cc' }}>
+                    <th colSpan={1 + allPeriods.length}
+                      style={{ ...rs.th, textAlign:'center', background:'#e8f0f7', letterSpacing:2, fontSize:12, fontWeight:800, color:'#1f4e79', borderBottom:'2px solid #b8c4cc' }}>
                       ASSETS
                     </th>
                   </tr>
@@ -645,16 +657,16 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
                 </thead>
                 <tbody>
                   <SectionHeader label="Fixed Assets" />
-                  {renderGroupRow('Fixed Assets', 'asset')}
+                  {renderGroupRow('Fixed Assets')}
 
                   <SectionHeader label="Investments" />
-                  {renderGroupRow('Investments', 'asset')}
+                  {renderGroupRow('Investments')}
 
                   <SectionHeader label="Current Assets" />
-                  {renderGroupRow('Current Assets', 'asset')}
+                  {renderGroupRow('Current Assets')}
 
                   <SectionHeader label="Miscellaneous" />
-                  {renderGroupRow('Misc. Expenses (Asset)', 'asset')}
+                  {renderGroupRow('Misc. Expenses (Asset)')}
 
                   {showNettProfit && periodTotals[0]?.plNet < 0 && renderPLRow()}
                   {renderDiffRow('asset')}
@@ -681,13 +693,20 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
         {[
           { k:'F2',    l:'Period',        a:()=>setShowPeriod(true) },
           { k:'F5',    l:'Expand All',    a:()=>setExpanded(new Set([...LIABILITY_GROUPS,...ASSET_GROUPS])) },
-          { k:'Esc',   l:'Collapse / Back', a:()=>{ if(expanded.size>0) setExpanded(new Set()); else onBack?.(); } },
+          { k:'Esc',   l:'Collapse / Back', a:()=>{ if(expanded.size>0){setExpanded(new Set());}else if(onBack){onBack();} } },
           { k:'Alt+N', l:'Add Period',    a:()=>setShowAddPeriod(true) },
+          { k:'Alt+P', l:'Print',         a:()=>window.print() },
           { k:'Alt+E', l:'Export Excel',  a:handleExport },
           { k:'P&L',   l: showNettProfit ? 'Hide P&L\nBalance' : 'Show P&L\nBalance', a:()=>setShowNettProfit(p=>!p) },
+          { k:'',      l: extraPeriods.length > 0 ? `${extraPeriods.length} extra\nperiod(s)` : '', a:()=>{} },
           { k:'✕ Clr', l:'Clear Periods', a:()=>setExtraPeriods([]) },
+          { k:'F12',   l:'Configure',     a:()=>{} },
         ].map((b,i) => (
-          <button key={i} onClick={b.a} style={s.sideBtn}>
+          <button key={i} onClick={b.a} className="no-print" style={{
+            ...s.sideBtn,
+            background: b.k==='Alt+N' ? 'rgba(100,200,100,0.15)' : b.k==='✕ Clr' ? 'rgba(255,80,80,0.15)' : b.k==='P&L' ? 'rgba(255,200,50,0.12)' : 'none',
+            opacity: b.l ? 1 : 0.2,
+          }}>
             <span style={s.sBtnKey}>{b.k}</span>
             <span style={s.sBtnLabel}>{b.l}</span>
           </button>
@@ -704,9 +723,10 @@ export default function BalanceSheetScreen({ branchId, onBack }: BSScreenProps) 
               ? `Balance Sheet Balanced ✓  |  P&L: ${plNet >= 0 ? 'Net Profit' : 'Net Loss'} ₹ ${fmtAmtAbs(plNet)}`
               : `⚠ Out of Balance by ₹ ${fmtAmtAbs(liabTotal - assetTotal)}`;
           })()}
+          {extraPeriods.length > 0 && `  ·  Comparing ${allPeriods.length} periods`}
         </span>
         <span style={{ color:'#aaa', fontSize:10 }}>
-          F2: Period | F5: Expand All | Esc: Back | ↑↓: Navigate Rows
+          F2: Period  |  F5: Expand  |  Alt+N: Add Comparison  |  Click ledger: Transactions  |  P&L: Toggle Net Profit
         </span>
       </div>
     </div>
@@ -725,17 +745,17 @@ const rs: Record<string, React.CSSProperties> = {
 };
 
 const s: Record<string, React.CSSProperties> = {
-  root:        { fontFamily:FONT_, fontSize:12, color:'#1a1a1a', background:'#fff', display:'flex', flexDirection:'column', height:'100vh', border:`1px solid ${BORDER}`, borderRadius:2, overflow:'hidden', position:'relative', outline:'none' },
+  root:        { fontFamily:FONT_, fontSize:12, color:'#1a1a1a', background:'#fff', display:'flex', flexDirection:'column', height:'100%', border:`1px solid ${BORDER}`, borderRadius:2, overflow:'hidden', position:'relative', outline:'none' },
   titleBar:    { background:HDR_BG, color:'#fff', display:'flex', alignItems:'center', padding:'3px 8px', fontSize:11, fontWeight:600, flexShrink:0 },
-  backBtn:     { background:'none', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', cursor:'pointer', fontSize:10, marginRight:10 },
+  backBtn:     { background:'none', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', cursor:'pointer', fontSize:10, marginRight:10, padding:'1px 5px' },
   contentWrap: { flex:1, overflowY:'auto', paddingRight:90 },
   twoCol:      { display:'flex', minHeight:'100%' },
   col:         { flex:1, display:'flex', flexDirection:'column', minWidth:0 },
   divider:     { width:2, background:BORDER, flexShrink:0 },
   table:       { width:'100%', borderCollapse:'collapse', tableLayout:'fixed' },
   totalRow:    { background:LIGHT, borderTop:`2px double #555`, position:'sticky', bottom:0 },
-  rightPanel:  { position:'absolute', top:26, right:0, bottom:0, width:88, background:DARK, display:'flex', flexDirection:'column', borderLeft:'1px solid #0d1a2a' },
-  sideBtn:     { border:'none', borderBottom:'1px solid rgba(255,255,255,0.07)', color:'#cdd5e0', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'flex-start', padding:'6px 8px', textAlign:'left', fontFamily:FONT_, width:'100%', transition:'background 0.1s', background:'none' },
+  rightPanel:  { position:'absolute', top:26, right:0, bottom:24, width:88, background:DARK, display:'flex', flexDirection:'column', borderLeft:'1px solid #0d1a2a' },
+  sideBtn:     { border:'none', borderBottom:'1px solid rgba(255,255,255,0.07)', color:'#cdd5e0', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'flex-start', padding:'6px 8px', textAlign:'left', fontFamily:FONT_, flex:1, transition:'background 0.1s' },
   sBtnKey:     { fontSize:9, color:'rgba(255,255,255,0.4)', fontWeight:700, lineHeight:1.3 },
   sBtnLabel:   { fontSize:10, color:'#d0dae6', fontWeight:600, lineHeight:1.3, whiteSpace:'pre-line' },
   statusBar:   { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'3px 100px 3px 8px', background:DARK, borderTop:'1px solid #0d1a2a', flexShrink:0, height:24 },
