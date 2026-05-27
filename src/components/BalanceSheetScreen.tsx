@@ -352,6 +352,7 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
   const [loadError, setLoadError]         = useState('');
   const [showNettProfit, setShowNettProfit] = useState(true);
   const [focusedRowIdx, setFocusedRowIdx] = useState<number>(-1);
+  const [showDebug, setShowDebug]         = useState(false);
 
   const rootRef    = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -705,6 +706,62 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
             No ledger data found. Please check your API or add ledger entries.
           </div>
         ) : (
+          <>
+          {/* ── DEBUG PANEL (remove after fixing) ── */}
+          {showDebug && (
+            <div style={{ background:'#0d1117', color:'#39ff14', fontFamily:'monospace', fontSize:11, padding:12, borderBottom:'2px solid #ff0', overflowX:'auto', maxHeight:320, overflowY:'auto' }}>
+              <div style={{ color:'#ff0', fontWeight:700, marginBottom:6 }}>═══ DEBUG PANEL ═══ (click "DBG" button to hide)</div>
+
+              <div style={{ color:'#0af', marginTop:6 }}>▶ mainPeriod: {JSON.stringify(mainPeriod)}</div>
+              <div style={{ color:'#0af' }}>▶ ledgers.length: {ledgers.length}</div>
+              <div style={{ color:'#0af' }}>▶ vouchers.length: {allVouchers.length}</div>
+
+              <div style={{ color:'#ff0', marginTop:8 }}>▶ FIRST 3 LEDGERS (check "group" field):</div>
+              {ledgers.slice(0,3).map((l,i) => (
+                <div key={i} style={{ marginLeft:12, color:'#fff', marginTop:2 }}>
+                  [{i}] id={l.id} | name={l.name} | <span style={{ color:'#f80' }}>group="{l.group}"</span> | OB={l.openingBalance} {l.balanceType}
+                </div>
+              ))}
+
+              <div style={{ color:'#ff0', marginTop:8 }}>▶ ALL UNIQUE GROUP VALUES IN LEDGERS:</div>
+              <div style={{ marginLeft:12, color:'#0f8' }}>
+                {[...new Set(ledgers.map(l => l.group))].map((g, i) => (
+                  <span key={i} style={{ marginRight:8, background:'#1a3a1a', padding:'1px 4px', borderRadius:2 }}>"{g}"</span>
+                ))}
+              </div>
+
+              <div style={{ color:'#ff0', marginTop:8 }}>▶ FIRST VOUCHER STRUCTURE (check entries format):</div>
+              {allVouchers.length > 0 ? (
+                <pre style={{ margin:'4px 0 0 12px', color:'#ccc', fontSize:10 }}>
+                  {JSON.stringify(allVouchers[0], null, 2).slice(0, 800)}
+                </pre>
+              ) : <div style={{ marginLeft:12, color:'#f44' }}>NO VOUCHERS LOADED</div>}
+
+              <div style={{ color:'#ff0', marginTop:8 }}>▶ GROUP TOTALS (Capital Account, Current Assets):</div>
+              <div style={{ marginLeft:12, color:'#0af' }}>
+                Capital Account: {groupTotalForPeriod('Capital Account', mainPeriod.from, mainPeriod.to)}
+              </div>
+              <div style={{ marginLeft:12, color:'#0af' }}>
+                Current Assets: {groupTotalForPeriod('Current Assets', mainPeriod.from, mainPeriod.to)}
+              </div>
+              <div style={{ marginLeft:12, color:'#0af' }}>
+                Fixed Assets: {groupTotalForPeriod('Fixed Assets', mainPeriod.from, mainPeriod.to)}
+              </div>
+              <div style={{ marginLeft:12, color:'#0af' }}>
+                Current Liabilities: {groupTotalForPeriod('Current Liabilities', mainPeriod.from, mainPeriod.to)}
+              </div>
+
+              <div style={{ color:'#ff0', marginTop:8 }}>▶ LEDGERS PER EXPECTED GROUP:</div>
+              {ALL_GROUPS.map(g => {
+                const count = ledgers.filter(l => l.group === g).length;
+                return (
+                  <div key={g} style={{ marginLeft:12, color: count > 0 ? '#0f8' : '#f44' }}>
+                    {count > 0 ? '✓' : '✗'} "{g}" → {count} ledger(s)
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div style={s.twoCol}>
 
             {/* ── Liabilities ── */}
@@ -793,6 +850,7 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
             </div>
 
           </div>
+          </>
         )}
       </div>
 
@@ -806,7 +864,7 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
           { k:'Alt+P', l:'Print',                          a: () => window.print() },
           { k:'Alt+E', l:'Export Excel',                   a: handleExport },
           { k:'P&L',   l: showNettProfit ? 'Hide P&L\nBalance' : 'Show P&L\nBalance', a: () => setShowNettProfit(p => !p) },
-          { k:'',      l: extraPeriods.length > 0 ? `${extraPeriods.length} extra\nperiod(s)` : '', a: () => {} },
+          { k:'DBG',   l: showDebug ? 'Hide\nDebug' : 'Show\nDebug',                  a: () => setShowDebug(p => !p) },
           { k:'✕ Clr', l:'Clear Periods',                 a: () => setExtraPeriods([]) },
           { k:'F12',   l:'Configure',                      a: () => {} },
         ].map((b, i) => (
