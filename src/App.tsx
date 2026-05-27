@@ -481,7 +481,7 @@ export default function App() {
       {/* Secondary Ribbon */}
       <div className="bg-tally-teal text-white h-[30px] flex items-center px-4 justify-between border-b border-tally-hotkey">
         <div className="flex gap-4 items-center text-[13px] font-semibold">
-          <span>{user.role === 'HQ' ? 'HQ Administration' : 'Gateway of Tally'}</span>
+          <span>{user.role === 'HQ' ? 'HQ Administration' : 'EBC HQ'}</span>
           {user.role === 'HQ' && currentScreen !== 'HQ' && (
             <button 
               onClick={() => setCurrentScreen('HQ')} 
@@ -597,7 +597,7 @@ export default function App() {
             <div className="w-1/2 flex items-center justify-center p-8">
               <div className="w-80 bg-white tally-border tally-shadow overflow-hidden">
                 <div className="bg-tally-teal text-white text-center py-1 font-bold text-sm uppercase tracking-wider">
-                  Gateway of Tally
+                  EBC HQ
                 </div>
                 
                 <div className="py-2">
@@ -711,7 +711,8 @@ export default function App() {
                 {currentScreen === 'LEDGER' && <MastersDashboard branchId={selectedBranchId} />}
                 {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} onSelectLedger={(id) => { setSelectedLedgerId(id); setCurrentScreen('LEDGER_DETAIL'); }} />}
                 {currentScreen === 'CHART' && <ChartOfAccountsScreen branchId={selectedBranchId} />}
-                {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} />}
+{currentScreen === 'BALANCE_SHEET' && <BalanceSheetScreen branchId={selectedBranchId} />}  
+{currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} />}
                 {currentScreen === 'TRIAL_BALANCE' && <TrialBalanceScreen branchId={selectedBranchId} />}
                 {currentScreen === 'CASH_BANK_BOOK' && <CashBankBookScreen branchId={selectedBranchId} />}
                 {currentScreen === 'RATIO' && <RatioAnalysisScreen onBack={handleBack} branchId={selectedBranchId} />}
