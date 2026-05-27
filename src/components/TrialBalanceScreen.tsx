@@ -17,12 +17,11 @@ interface Voucher {
   type: string;
   narration: string;
   amount: number;
-  entry_amount?: number; // from joined query
+  entry_amount?: number; 
   entry_type?: 'Dr' | 'Cr';
-  entries?: any[];
 }
 
-// --- Constants & Helpers ---
+// --- Constants ---
 const FONT = `-apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Geneva, Verdana, sans-serif`;
 const HDR_BG = '#1f4e79';
 const YELLOW = '#ffd966';
@@ -35,66 +34,63 @@ const MONTHS = [
   "October", "November", "December", "January", "February", "March"
 ];
 
-function fmtAmt(n: number) {
-  if (n === 0) return "";
-  return Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-}
+const fmtAmt = (n: number) => n === 0 ? "" : Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
-function fmtDate(iso: string) {
+const fmtDate = (iso: string) => {
   try {
     const d = new Date(iso);
     const ms = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return `${d.getDate()}-${ms[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`;
   } catch { return iso; }
-}
+};
 
 // ─── 3. VOUCHER REGISTER (Level 3) ──────────────────────────────────────────
-function VoucherRegister({ ledger, monthIdx, year, branchId, onBack }: any) {
+function VoucherRegister({ ledger, monthIdx, branchId, onBack }: any) {
   const [vouchers, setVouchers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [selIdx, setSelIdx] = useState(0);
 
   useEffect(() => {
-    // Tally Fiscal Year logic (Month 0 is April)
     const fiscalMonth = (monthIdx + 3) % 12; 
-    const fiscalYear = monthIdx < 9 ? year : year + 1;
-
     fetch(`/api/vouchers/ledger/${ledger.id}?branchId=${branchId || ''}`)
       .then(r => r.json())
-      .then(data => {
-        const filtered = data.filter((v: any) => {
-          const d = new Date(v.date);
-          return d.getMonth() === fiscalMonth;
-        });
-        setVouchers(filtered);
-      })
-      .finally(() => setLoading(false));
+      .then(data => setVouchers(data.filter((v: any) => new Date(v.date).getMonth() === fiscalMonth)))
+      .catch(() => setVouchers([]));
   }, [ledger.id, monthIdx]);
+
+  // Handle Keyboard for this level
+  useEffect(() => {
+    const handleKeys = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSelIdx(s => Math.min(vouchers.length - 1, s + 1)); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setSelIdx(s => Math.max(0, s - 1)); }
+      if (e.key === 'Escape') { e.preventDefault(); onBack(); } // Go back to Monthly Summary
+    };
+    window.addEventListener('keydown', handleKeys);
+    return () => window.removeEventListener('keydown', handleKeys);
+  }, [vouchers.length, onBack]);
 
   return (
     <div style={ds.root}>
       <div style={ds.titleBar}>
         <button onClick={onBack} style={ds.backBtn}>Esc: Back</button>
-        <span style={ds.titleCenter}>Voucher Register: {ledger.name} ({MONTHS[monthIdx]})</span>
+        <span style={ds.titleCenter}>{ledger.name} ({MONTHS[monthIdx]})</span>
       </div>
       <div style={ds.tableWrap}>
         <table style={ds.table}>
           <thead>
             <tr style={ds.thead}>
               <th style={{ ...ds.th, width: 100 }}>Date</th>
-              <th style={ds.th}>Particulars</th>
+              <th style={ds.th}>Particulars (Narration)</th>
               <th style={{ ...ds.th, width: 120 }}>Vch Type</th>
-              <th style={{ ...ds.th, width: 80 }}>Vch No.</th>
               <th style={{ ...ds.th, width: 120, textAlign: 'right' }}>Debit</th>
               <th style={{ ...ds.th, width: 120, textAlign: 'right' }}>Credit</th>
             </tr>
           </thead>
           <tbody>
             {vouchers.map((v, i) => (
-              <tr key={i} style={ds.tr}>
+              <tr key={i} style={{ ...ds.tr, background: selIdx === i ? YELLOW : 'transparent' }}>
                 <td style={ds.td}>{fmtDate(v.date)}</td>
-                <td style={ds.td}>{v.narration || '—'}</td>
+                <td style={ds.td}>{v.narration || v.type}</td>
                 <td style={ds.td}>{v.type}</td>
-                <td style={ds.td}>{v.number}</td>
                 <td style={{ ...ds.td, textAlign: 'right', color: '#7a0000' }}>{v.entry_type === 'Dr' ? fmtAmt(v.entry_amount) : ''}</td>
                 <td style={{ ...ds.td, textAlign: 'right', color: '#006b00' }}>{v.entry_type === 'Cr' ? fmtAmt(v.entry_amount) : ''}</td>
               </tr>
@@ -115,7 +111,6 @@ function LedgerMonthlySummary({ ledger, branchId, onBack, onDrill }: any) {
     fetch(`/api/vouchers/ledger/${ledger.id}?branchId=${branchId || ''}`)
       .then(r => r.json())
       .then(vouchers => {
-        // Group by Month (April to March)
         const summary = MONTHS.map((m, i) => {
           const fiscalMonth = (i + 3) % 12;
           const vchs = vouchers.filter((v: any) => new Date(v.date).getMonth() === fiscalMonth);
@@ -128,15 +123,15 @@ function LedgerMonthlySummary({ ledger, branchId, onBack, onDrill }: any) {
   }, [ledger.id]);
 
   useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown') setSelIdx(s => Math.min(11, s + 1));
-      if (e.key === 'ArrowUp') setSelIdx(s => Math.max(0, s - 1));
-      if (e.key === 'Enter') onDrill(data[selIdx].monthIdx);
-      if (e.key === 'Escape') onBack();
+    const handleKeys = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSelIdx(s => Math.min(11, s + 1)); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setSelIdx(s => Math.max(0, s - 1)); }
+      if (e.key === 'Enter') { e.preventDefault(); onDrill(data[selIdx]?.monthIdx); }
+      if (e.key === 'Escape') { e.preventDefault(); onBack(); } // Go back to Trial Balance
     };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [selIdx, data]);
+    window.addEventListener('keydown', handleKeys);
+    return () => window.removeEventListener('keydown', handleKeys);
+  }, [selIdx, data, onBack, onDrill]);
 
   const ob = Number(ledger.openingBalance || 0);
   const obSgn = ledger.balanceType === 'Cr' ? -ob : ob;
@@ -145,17 +140,17 @@ function LedgerMonthlySummary({ ledger, branchId, onBack, onDrill }: any) {
   return (
     <div style={ds.root}>
       <div style={ds.titleBar}>
-        <button onClick={onBack} style={ds.backBtn}>← Back</button>
-        <span style={ds.titleCenter}>Ledger Monthly Summary: {ledger.name}</span>
+        <button onClick={onBack} style={ds.backBtn}>Esc: Back</button>
+        <span style={ds.titleCenter}>Monthly Summary: {ledger.name}</span>
       </div>
       <div style={ds.tableWrap}>
         <table style={ds.table}>
           <thead>
             <tr style={ds.thead}>
               <th style={ds.th}>Particulars</th>
-              <th style={{ ...ds.th, textAlign: 'right' }}>Debit</th>
-              <th style={{ ...ds.th, textAlign: 'right' }}>Credit</th>
-              <th style={{ ...ds.th, textAlign: 'right' }}>Closing Balance</th>
+              <th style={{ ...ds.th, textAlign: 'right', width: 150 }}>Debit</th>
+              <th style={{ ...ds.th, textAlign: 'right', width: 150 }}>Credit</th>
+              <th style={{ ...ds.th, textAlign: 'right', width: 180 }}>Closing Balance</th>
             </tr>
           </thead>
           <tbody>
@@ -167,17 +162,11 @@ function LedgerMonthlySummary({ ledger, branchId, onBack, onDrill }: any) {
             {data.map((row, i) => {
               running += (row.dr - row.cr);
               return (
-                <tr 
-                  key={i} 
-                  style={{ ...ds.tr, background: selIdx === i ? YELLOW : 'transparent' }}
-                  onClick={() => onDrill(row.monthIdx)}
-                >
+                <tr key={i} style={{ ...ds.tr, background: selIdx === i ? YELLOW : 'transparent' }} onClick={() => onDrill(row.monthIdx)}>
                   <td style={ds.td}>{row.month}</td>
                   <td style={{ ...ds.td, textAlign: 'right' }}>{fmtAmt(row.dr)}</td>
                   <td style={{ ...ds.td, textAlign: 'right' }}>{fmtAmt(row.cr)}</td>
-                  <td style={{ ...ds.td, textAlign: 'right', fontWeight: 600 }}>
-                    {fmtAmt(running)} {running >= 0 ? 'Dr' : 'Cr'}
-                  </td>
+                  <td style={{ ...ds.td, textAlign: 'right', fontWeight: 600 }}>{fmtAmt(running)} {running >= 0 ? 'Dr' : 'Cr'}</td>
                 </tr>
               );
             })}
@@ -188,21 +177,17 @@ function LedgerMonthlySummary({ ledger, branchId, onBack, onDrill }: any) {
   );
 }
 
-// ─── 1. TRIAL BALANCE (Main Screen) ──────────────────────────────────────────
+// ─── 1. MAIN TRIAL BALANCE ──────────────────────────────────────────────────
 export default function TrialBalanceScreen({ branchId }: { branchId?: string }) {
   const [ledgers, setLedgers] = useState<Ledger[]>([]);
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Navigation State
   const [viewLevel, setViewLevel] = useState<'trial' | 'monthly' | 'vouchers'>('trial');
   const [selectedLedger, setSelectedLedger] = useState<Ledger | null>(null);
   const [selectedMonthIdx, setSelectedMonthIdx] = useState<number>(0);
-  
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
-  // Data Loading
   useEffect(() => {
     const q = branchId ? `?branchId=${branchId}` : '';
     Promise.all([
@@ -212,20 +197,20 @@ export default function TrialBalanceScreen({ branchId }: { branchId?: string }) 
       setLedgers(l);
       setVouchers(v);
       setLoading(false);
+      // Auto-select first group on load
+      if (l.length > 0) setSelectedKey(`G:${l[0].group_name || 'Primary'}`);
     });
   }, [branchId]);
 
-  // Balance Calculation
-  const calcBalance = (ledgerId: string) => {
+  const calcBalance = useCallback((ledgerId: string) => {
     const l = ledgers.find(x => x.id === ledgerId);
     let bal = (l?.balanceType === 'Cr' ? -1 : 1) * Number(l?.openingBalance || 0);
     vouchers.forEach(v => {
-      v.entries?.forEach(e => {
-        if (e.ledgerId === ledgerId) bal += (e.type === 'Dr' ? e.amount : -e.amount);
-      });
+      if (v.entries) v.entries.forEach(e => { if (e.ledgerId === ledgerId) bal += (e.type === 'Dr' ? e.amount : -e.amount); });
+      else if ((v as any).ledgerId === ledgerId) bal += ((v as any).entry_type === 'Dr' ? (v as any).entry_amount : -(v as any).entry_amount);
     });
     return bal;
-  };
+  }, [ledgers, vouchers]);
 
   const groupsData = useMemo(() => {
     const g: Record<string, { dr: number; cr: number; ledgers: Ledger[] }> = {};
@@ -237,85 +222,93 @@ export default function TrialBalanceScreen({ branchId }: { branchId?: string }) 
       if (bal >= 0) g[grp].dr += bal; else g[grp].cr += Math.abs(bal);
     });
     return g;
-  }, [ledgers, vouchers]);
+  }, [ledgers, vouchers, calcBalance]);
 
-  // View Switcher
+  const sortedGroups = useMemo(() => Object.keys(groupsData).sort(), [groupsData]);
+
+  const flatList = useMemo(() => {
+    const list: any[] = [];
+    sortedGroups.forEach(grp => {
+      list.push({ key: `G:${grp}`, type: 'group', name: grp });
+      if (expandedGroups.has(grp)) {
+        groupsData[grp].ledgers.forEach(l => list.push({ key: `L:${l.id}`, type: 'ledger', ledger: l }));
+      }
+    });
+    return list;
+  }, [sortedGroups, expandedGroups, groupsData]);
+
+  // Global Keyboard Navigation for Trial Balance level
+  useEffect(() => {
+    if (viewLevel !== 'trial') return;
+
+    const handleKeys = (e: KeyboardEvent) => {
+      const idx = flatList.findIndex(x => x.key === selectedKey);
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const next = flatList[Math.min(flatList.length - 1, idx + 1)];
+        if (next) setSelectedKey(next.key);
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prev = flatList[Math.max(0, idx - 1)];
+        if (prev) setSelectedKey(prev.key);
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const current = flatList[idx];
+        if (current?.type === 'group') {
+          const n = new Set(expandedGroups);
+          n.has(current.name) ? n.delete(current.name) : n.add(current.name);
+          setExpandedGroups(n);
+        } else if (current?.type === 'ledger') {
+          setSelectedLedger(current.ledger);
+          setViewLevel('monthly');
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeys);
+    return () => window.removeEventListener('keydown', handleKeys);
+  }, [selectedKey, flatList, expandedGroups, viewLevel]);
+
   if (viewLevel === 'vouchers' && selectedLedger) {
-    return (
-      <VoucherRegister 
-        ledger={selectedLedger} 
-        monthIdx={selectedMonthIdx} 
-        year={2024} // Should be dynamic based on period
-        branchId={branchId}
-        onBack={() => setViewLevel('monthly')} 
-      />
-    );
+    return <VoucherRegister ledger={selectedLedger} monthIdx={selectedMonthIdx} branchId={branchId} onBack={() => setViewLevel('monthly')} />;
   }
-
   if (viewLevel === 'monthly' && selectedLedger) {
-    return (
-      <LedgerMonthlySummary 
-        ledger={selectedLedger} 
-        branchId={branchId}
-        onBack={() => setViewLevel('trial')} 
-        onDrill={(mIdx: number) => {
-          setSelectedMonthIdx(mIdx);
-          setViewLevel('vouchers');
-        }}
-      />
-    );
+    return <LedgerMonthlySummary ledger={selectedLedger} branchId={branchId} onBack={() => setViewLevel('trial')} onDrill={(mIdx: number) => { setSelectedMonthIdx(mIdx); setViewLevel('vouchers'); }} />;
   }
 
   return (
     <div style={s.root}>
-      <div style={s.titleBar}>
-        <span style={s.titleLeft}>Trial Balance</span>
-        <span style={s.titleCenter}>Company Name</span>
-      </div>
-
+      <div style={s.titleBar}><span style={s.titleLeft}>Trial Balance</span></div>
       <div style={s.tableWrap}>
         <table style={s.table}>
           <thead>
-            <tr style={s.reportHdr}>
-              <th style={s.colParticulars}>Particulars</th>
-              <th style={s.colDebit}>Debit</th>
-              <th style={s.colCredit}>Credit</th>
-            </tr>
+            <tr style={ds.thead}><th style={s.colParticulars}>Particulars</th><th style={s.colDebit}>Debit</th><th style={s.colCredit}>Credit</th></tr>
           </thead>
           <tbody>
-            {Object.keys(groupsData).map(grp => (
-              <React.Fragment key={grp}>
-                <tr 
-                  style={s.groupRow} 
-                  onClick={() => {
-                    const n = new Set(expandedGroups);
-                    n.has(grp) ? n.delete(grp) : n.add(grp);
-                    setExpandedGroups(n);
-                  }}
-                >
-                  <td style={s.colParticulars}><b>{grp}</b></td>
-                  <td style={s.colDebit}>{fmtAmt(groupsData[grp].dr)}</td>
-                  <td style={s.colCredit}>{fmtAmt(groupsData[grp].cr)}</td>
-                </tr>
-                {expandedGroups.has(grp) && groupsData[grp].ledgers.map(l => {
-                  const b = calcBalance(l.id);
-                  return (
-                    <tr 
-                      key={l.id} 
-                      style={s.ledgerRow} 
-                      onClick={() => {
-                        setSelectedLedger(l);
-                        setViewLevel('monthly');
-                      }}
-                    >
-                      <td style={{ ...s.colParticulars, paddingLeft: 30 }}>{l.name}</td>
-                      <td style={s.colDebit}>{b >= 0 ? fmtAmt(b) : ''}</td>
-                      <td style={s.colCredit}>{b < 0 ? fmtAmt(b) : ''}</td>
-                    </tr>
-                  );
-                })}
-              </React.Fragment>
-            ))}
+            {sortedGroups.map(grp => {
+              const isGSelected = selectedKey === `G:${grp}`;
+              return (
+                <React.Fragment key={grp}>
+                  <tr style={{ ...s.groupRow, background: isGSelected ? YELLOW : 'transparent' }} onClick={() => setSelectedKey(`G:${grp}`)}>
+                    <td style={s.colParticulars}><b>{grp}</b></td>
+                    <td style={s.colDebit}>{fmtAmt(groupsData[grp].dr)}</td>
+                    <td style={s.colCredit}>{fmtAmt(groupsData[grp].cr)}</td>
+                  </tr>
+                  {expandedGroups.has(grp) && groupsData[grp].ledgers.map(l => {
+                    const isLSelected = selectedKey === `L:${l.id}`;
+                    const b = calcBalance(l.id);
+                    return (
+                      <tr key={l.id} style={{ ...s.ledgerRow, background: isLSelected ? YELLOW : 'transparent' }} onClick={() => setSelectedKey(`L:${l.id}`)}>
+                        <td style={{ ...s.colParticulars, paddingLeft: 30 }}>{l.name}</td>
+                        <td style={s.colDebit}>{b >= 0 ? fmtAmt(b) : ''}</td>
+                        <td style={s.colCredit}>{b < 0 ? fmtAmt(b) : ''}</td>
+                      </tr>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -323,26 +316,25 @@ export default function TrialBalanceScreen({ branchId }: { branchId?: string }) 
   );
 }
 
-// ─── STYLES (Cleaned up for clarity) ──────────────────────────────────────────
+// ─── STYLES ──────────────────────────────────────────────────────────────────
 const ds: Record<string, React.CSSProperties> = {
-  root: { fontFamily: FONT, fontSize: 12, height: '100%', display: 'flex', flexDirection: 'column', background: '#fff' },
-  titleBar: { background: HDR_BG, color: '#fff', padding: '4px 10px', display: 'flex', justifyContent: 'space-between' },
-  backBtn: { background: 'transparent', color: '#fff', border: '1px solid #fff', cursor: 'pointer', fontSize: 10 },
+  root: { fontFamily: FONT, fontSize: 12, height: '100vh', display: 'flex', flexDirection: 'column', background: '#fff', overflow: 'hidden' },
+  titleBar: { background: HDR_BG, color: '#fff', padding: '4px 10px', display: 'flex', justifyContent: 'space-between', flexShrink: 0 },
+  backBtn: { background: 'rgba(255,255,255,0.2)', color: '#fff', border: '1px solid #fff', cursor: 'pointer', fontSize: 10, padding: '2px 8px' },
   titleCenter: { fontWeight: 'bold' },
   tableWrap: { flex: 1, overflowY: 'auto' },
-  table: { width: '100%', borderCollapse: 'collapse' },
-  thead: { background: LIGHT, position: 'sticky', top: 0 },
-  th: { padding: '8px', borderBottom: `1px solid ${BORDER}`, textAlign: 'left', fontSize: 11 },
-  td: { padding: '6px 8px', borderBottom: `1px solid ${ROW_BDR}`, fontSize: 12 },
+  table: { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' },
+  thead: { background: LIGHT, position: 'sticky', top: 0, zIndex: 10 },
+  th: { padding: '8px', borderBottom: `1px solid ${BORDER}`, textAlign: 'left', fontSize: 11, borderRight: `1px solid ${ROW_BDR}` },
+  td: { padding: '4px 8px', borderBottom: `1px solid ${ROW_BDR}`, fontSize: 12, borderRight: `1px solid ${ROW_BDR}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
   tr: { cursor: 'pointer' }
 };
 
 const s: Record<string, React.CSSProperties> = {
   ...ds,
-  reportHdr: { background: '#f0f0f0', borderBottom: `2px solid ${BORDER}` },
-  groupRow: { background: '#fff', cursor: 'pointer', borderBottom: `1px solid ${ROW_BDR}` },
-  ledgerRow: { background: '#fafafa', cursor: 'pointer', borderBottom: `1px solid ${ROW_BDR}` },
-  colParticulars: { width: '60%', padding: '6px 10px' },
-  colDebit: { width: '20%', textAlign: 'right', padding: '6px 10px' },
-  colCredit: { width: '20%', textAlign: 'right', padding: '6px 10px' },
+  groupRow: { borderBottom: `1px solid ${ROW_BDR}` },
+  ledgerRow: { borderBottom: `1px solid ${ROW_BDR}` },
+  colParticulars: { width: '50%', padding: '6px 10px', borderRight: `1px solid ${ROW_BDR}` },
+  colDebit: { width: '25%', textAlign: 'right', padding: '6px 10px', borderRight: `1px solid ${ROW_BDR}` },
+  colCredit: { width: '25%', textAlign: 'right', padding: '6px 10px' },
 };
