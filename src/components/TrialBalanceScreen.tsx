@@ -31,7 +31,7 @@ const fmtDate = (iso: string) => {
 const isVoided = (v: any): boolean => v.voided === true || v.voided === 1 || v.voided === '1';
 
 // ─── LEVEL 4: VOUCHER DETAIL ────────────────────────────────────────────────
-function VoucherDetail({ voucherId, onBack }: any) {
+function VoucherDetail({ voucherId, onBack, onPrint, companyName }: any) {
   const [voucher, setVoucher] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -46,6 +46,32 @@ function VoucherDetail({ voucherId, onBack }: any) {
       .catch(() => setLoading(false));
   }, [voucherId]);
 
+  const handlePrint = () => {
+    if (voucher && onPrint) {
+      onPrint({
+        type: 'voucher',
+        companyName: companyName,
+        voucherType: voucher.type,
+        voucherNo: voucher.number,
+        date: fmtDate(voucher.date),
+        narration: voucher.narration,
+        entries: (voucher.entries || []).map((e: any) => ({
+          ledgerName: e.ledger_name || e.ledgerId,
+          type: e.type,
+          amount: e.amount
+        }))
+      });
+    }
+  };
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.altKey && e.key.toLowerCase() === 'p') { e.preventDefault(); handlePrint(); }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [voucher, onPrint, companyName]);
+
   if (loading) return <div style={{...ds.root, padding: 20}}>Loading Voucher...</div>;
   if (!voucher) return <div style={{...ds.root, padding: 20}}>Voucher not found. <button onClick={onBack}>Back</button></div>;
 
@@ -54,7 +80,13 @@ function VoucherDetail({ voucherId, onBack }: any) {
 
   return (
     <div style={ds.root}>
-      <div style={ds.titleBar}><button onClick={onBack} style={ds.backBtn}>Esc: Back</button><span>Voucher Detail: {voucher.number}</span></div>
+      <div style={ds.titleBar}>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onBack} style={ds.backBtn}>Esc: Back</button>
+          <span>Voucher Detail: {voucher.number}</span>
+        </div>
+        <button onClick={handlePrint} style={ds.backBtn}>Alt+P: Print</button>
+      </div>
       <div style={{ padding: 20, flex: 1, overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20, borderBottom: '1px solid #ccc', paddingBottom: 10 }}>
           <div>
@@ -104,7 +136,7 @@ function VoucherDetail({ voucherId, onBack }: any) {
 }
 
 // ─── LEVEL 3: VOUCHER REGISTER ──────────────────────────────────────────────
-function VoucherRegister({ ledger, monthIdx, branchId, onBack, onDrill }: any) {
+function VoucherRegister({ ledger, monthIdx, branchId, onBack, onDrill, onPrint, companyName }: any) {
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [selIdx, setSelIdx] = useState(0);
 
@@ -120,15 +152,47 @@ function VoucherRegister({ ledger, monthIdx, branchId, onBack, onDrill }: any) {
       .catch(() => setVouchers([]));
   }, [ledger.id, monthIdx, branchId]);
 
+  const handlePrint = () => {
+    if (onPrint) {
+      let running = 0; // Simplified for monthly register print
+      onPrint({
+        type: 'ledger',
+        companyName: companyName,
+        ledgerName: ledger.name,
+        period: MONTHS[monthIdx],
+        openingBalance: 0,
+        balanceType: 'Dr',
+        rows: vouchers.map(v => {
+          const amt = Number(v.entry_amount);
+          const isDr = v.entry_type === 'Dr';
+          running += isDr ? amt : -amt;
+          return {
+            date: fmtDate(v.date),
+            particulars: v.other_ledger_name || 'Multiple Ledgers',
+            vchType: v.type || 'Journal',
+            vchNo: v.number || '-',
+            debit: isDr ? amt : undefined,
+            credit: !isDr ? amt : undefined,
+            balance: Math.abs(running),
+            runType: running >= 0 ? 'Dr' : 'Cr'
+          };
+        }),
+        closingBalance: Math.abs(running),
+        closingType: running >= 0 ? 'Dr' : 'Cr'
+      });
+    }
+  };
+
   useEffect(() => {
     const handleKeys = (e: KeyboardEvent) => {
       if (e.key === 'ArrowDown') { e.preventDefault(); setSelIdx(s => Math.min(vouchers.length - 1, s + 1)); }
       if (e.key === 'ArrowUp')   { e.preventDefault(); setSelIdx(s => Math.max(0, s - 1)); }
       if (e.key === 'Enter')     { e.preventDefault(); if (vouchers[selIdx]) onDrill(vouchers[selIdx].id); }
+      if (e.altKey && e.key.toLowerCase() === 'p') { e.preventDefault(); handlePrint(); }
     };
     window.addEventListener('keydown', handleKeys, true);
     return () => window.removeEventListener('keydown', handleKeys, true);
-  }, [vouchers, selIdx, onDrill]);
+  }, [vouchers, selIdx, onDrill, onPrint, companyName]);
 
   const totals = useMemo(() => {
     return vouchers.reduce((acc, v) => {
@@ -140,7 +204,13 @@ function VoucherRegister({ ledger, monthIdx, branchId, onBack, onDrill }: any) {
 
   return (
     <div style={ds.root}>
-      <div style={ds.titleBar}><button onClick={onBack} style={ds.backBtn}>Esc: Back</button><span>{ledger.name} ({MONTHS[monthIdx]})</span></div>
+      <div style={ds.titleBar}>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onBack} style={ds.backBtn}>Esc: Back</button>
+          <span>{ledger.name} ({MONTHS[monthIdx]})</span>
+        </div>
+        <button onClick={handlePrint} style={ds.backBtn}>Alt+P: Print</button>
+      </div>
       <div style={ds.tableWrap}>
         <table style={ds.table}>
           <thead><tr style={ds.thead}><th style={ds.th}>Date</th><th style={ds.th}>Particulars</th><th style={{...ds.th, textAlign:'right'}}>Debit</th><th style={{...ds.th, textAlign:'right'}}>Credit</th></tr></thead>
@@ -253,7 +323,7 @@ function LedgerMonthlySummary({ ledger, branchId, onBack, onDrill }: any) {
 }
 
 // ─── LEVEL 1: TRIAL BALANCE ─────────────────────────────────────────────────
-export default function TrialBalanceScreen({ branchId, onBackToGateway }: { branchId?: string; onBackToGateway?: () => void }) {
+export default function TrialBalanceScreen({ branchId, onBackToGateway, onPrint }: { branchId?: string; onBackToGateway?: () => void; onPrint?: (data: any) => void }) {
   const [ledgers, setLedgers]               = useState<Ledger[]>([]);
   const [vouchers, setVouchers]             = useState<any[]>([]);
   const [viewLevel, setViewLevel]           = useState<'trial' | 'monthly' | 'vouchers' | 'voucher_detail'>('trial');
@@ -416,10 +486,10 @@ export default function TrialBalanceScreen({ branchId, onBackToGateway }: { bran
   };
 
   if (viewLevel === 'voucher_detail' && selectedVoucherId) {
-    return <VoucherDetail voucherId={selectedVoucherId} onBack={() => setViewLevel('vouchers')} />;
+    return <VoucherDetail voucherId={selectedVoucherId} onBack={() => setViewLevel('vouchers')} onPrint={onPrint} companyName={ledgers.length > 0 ? (ledgers[0] as any).company_name || 'BERITHSYSTEMS' : 'BERITHSYSTEMS'} />;
   }
   if (viewLevel === 'vouchers' && selectedLedger) {
-    return <VoucherRegister ledger={selectedLedger} monthIdx={selectedMonthIdx} branchId={branchId} onBack={() => setViewLevel('monthly')} onDrill={(vId: string) => { setSelectedVoucherId(vId); setViewLevel('voucher_detail'); }} />;
+    return <VoucherRegister ledger={selectedLedger} monthIdx={selectedMonthIdx} branchId={branchId} onBack={() => setViewLevel('monthly')} onDrill={(vId: string) => { setSelectedVoucherId(vId); setViewLevel('voucher_detail'); }} onPrint={onPrint} companyName={ledgers.length > 0 ? (ledgers[0] as any).company_name || 'BERITHSYSTEMS' : 'BERITHSYSTEMS'} />;
   }
   if (viewLevel === 'monthly' && selectedLedger) {
     return <LedgerMonthlySummary ledger={selectedLedger} branchId={branchId} onBack={() => setViewLevel('trial')} onDrill={(mIdx: number) => { setSelectedMonthIdx(mIdx); setViewLevel('vouchers'); }} />;
