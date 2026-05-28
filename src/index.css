@@ -14,10 +14,6 @@
 }
 
 @layer base {
-  html, body, #root {
-    height: 100%;
-  }
-
   body {
     @apply bg-tally-bg font-tally text-tally-teal overflow-hidden select-none;
     font-size: 13px;
