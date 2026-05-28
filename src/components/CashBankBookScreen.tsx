@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Landmark, Wallet, ChevronRight } from 'lucide-react';
 import { activeVouchers } from '../lib/voucherUtils';
+import { isCashBankGroup } from '../lib/accountGroups';
 
 interface LedgerSummary {
   id: string;
@@ -8,8 +9,6 @@ interface LedgerSummary {
   group: string;
   balance: number;
 }
-
-const CASH_BANK_GROUPS = ['Cash-in-hand', 'Bank Accounts'];
 
 function entryType(e: { type?: string; entry_type?: string }): 'Dr' | 'Cr' {
   const t = e.type || e.entry_type;
@@ -36,7 +35,8 @@ export default function CashBankBookScreen({ branchId }: { branchId?: string }) 
     ])
       .then(([ledgerData, voucherData]) => {
         const cashBankLedgers = (Array.isArray(ledgerData) ? ledgerData : []).filter(
-          (l: { group?: string }) => l.group && CASH_BANK_GROUPS.includes(l.group),
+          (l: { group?: string; group_name?: string }) =>
+            isCashBankGroup(l.group_name || l.group),
         );
 
         const ledgerIds = new Set(cashBankLedgers.map((l: { id: string }) => l.id));
@@ -76,10 +76,10 @@ export default function CashBankBookScreen({ branchId }: { branchId?: string }) 
         });
 
         setLedgers(
-          cashBankLedgers.map((l: { id: string; name: string; group: string }) => ({
+          cashBankLedgers.map((l: { id: string; name: string; group?: string; group_name?: string }) => ({
             id: l.id,
             name: l.name,
-            group: l.group,
+            group: (l.group_name || l.group || '').trim(),
             balance: balances[l.id] ?? 0,
           })),
         );
@@ -154,11 +154,15 @@ export default function CashBankBookScreen({ branchId }: { branchId?: string }) 
                     <Wallet className="w-3 h-3" /> Cash-in-Hand
                   </td>
                   <td className="px-4 py-2 text-right font-mono font-bold">
-                    {fmt(ledgers.filter((l) => l.group === 'Cash-in-hand').reduce((acc, l) => acc + l.balance, 0))}
+                    {fmt(
+                      ledgers
+                        .filter((l) => l.group === 'Cash-in-hand' || l.group === 'Cash')
+                        .reduce((acc, l) => acc + l.balance, 0),
+                    )}
                   </td>
                 </tr>
                 {ledgers
-                  .filter((l) => l.group === 'Cash-in-hand')
+                  .filter((l) => l.group === 'Cash-in-hand' || l.group === 'Cash')
                   .map((l) => (
                     <tr key={l.id} className="hover:bg-tally-accent/10 cursor-pointer group">
                       <td className="px-8 py-2 flex justify-between items-center pr-10">
