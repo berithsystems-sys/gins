@@ -1,74 +1,85 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { ChevronRight, Save, RotateCcw } from 'lucide-react';
+import { User, Lock, Save } from 'lucide-react';
 
-interface Settings {
-  companyName: string;
-  gstin: string;
-  pan: string;
-  registrationType: 'Regular' | 'Composition';
-  financialYear: string;
-  bookClosingDate: string;
-  useAccounting: boolean;
-  showMonthlyBreakdown: boolean;
-  showLedgerBalances: boolean;
-  warnNegativeBalance: boolean;
-  dateFormat: string;
-  decimalPlaces: number;
-  autoBackup: boolean;
-  backupFrequency: 'Daily' | 'Weekly' | 'Monthly';
-  printShowHeader: boolean;
-  printShowFooter: boolean;
-  printShowPageNumbers: boolean;
-  printShowCompanyName: boolean;
-  printPageSize: 'A4' | 'A3' | 'Letter';
-  printMargin: number;
+interface SettingsScreenProps {
+  onBack: () => void;
+  user: { id: string; username: string; role: string; branchId?: string };
+  onUserUpdate: (user: any) => void;
 }
 
-const DEFAULT_SETTINGS: Settings = {
-  companyName: 'BERITHSYSTEMS',
-  gstin: '',
-  pan: '',
-  registrationType: 'Regular',
-  financialYear: '2025-26',
-  bookClosingDate: '2026-03-31',
-  useAccounting: true,
-  showMonthlyBreakdown: true,
-  showLedgerBalances: true,
-  warnNegativeBalance: true,
-  dateFormat: 'DD-MM-YYYY',
-  decimalPlaces: 2,
-  autoBackup: true,
-  backupFrequency: 'Weekly',
-  printShowHeader: true,
-  printShowFooter: true,
-  printShowPageNumbers: true,
-  printShowCompanyName: true,
-  printPageSize: 'A4',
-  printMargin: 0.5,
-};
-
-export default function SettingsScreen({ onBack }: { onBack: () => void }) {
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [activeTab, setActiveTab] = useState<'general' | 'company' | 'display' | 'backup' | 'print'>('general');
+export default function SettingsScreen({ onBack, user, onUserUpdate }: SettingsScreenProps) {
+  const [username, setUsername] = useState(user.username);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState<'profile' | 'security'>('profile');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem('appSettings');
-    if (saved) setSettings(JSON.parse(saved));
-  }, []);
+    setUsername(user.username);
+  }, [user]);
 
-  const saveSettings = () => {
-    localStorage.setItem('appSettings', JSON.stringify(settings));
-    setMessage('Settings saved successfully!');
-    setTimeout(() => setMessage(''), 3000);
+  const showStatus = (text: string, isError = false) => {
+    if (isError) {
+      setError(text);
+      setTimeout(() => setError(''), 4000);
+    } else {
+      setMessage(text);
+      setTimeout(() => setMessage(''), 4000);
+    }
   };
 
-  const resetSettings = () => {
-    setSettings(DEFAULT_SETTINGS);
-    localStorage.removeItem('appSettings');
-    setMessage('Settings reset to defaults!');
-    setTimeout(() => setMessage(''), 3000);
+  const handleProfileSave = async () => {
+    if (!username.trim()) return showStatus('Username cannot be empty', true);
+    if (username === user.username) return showStatus('No profile changes to save');
+
+    setSavingProfile(true);
+    try {
+      const res = await fetch(`/api/users/${user.id}/email`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: username.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unable to update username');
+
+      onUserUpdate({ ...user, username: username.trim() });
+      showStatus('Username updated successfully');
+    } catch (err: any) {
+      showStatus(err.message || 'Failed to update profile', true);
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) return showStatus('Complete all password fields', true);
+    if (newPassword !== confirmPassword) return showStatus('New password and confirmation do not match', true);
+    if (newPassword.length < 6) return showStatus('New password must be at least 6 characters', true);
+
+    setChangingPassword(true);
+    try {
+      const res = await fetch(`/api/users/${user.id}/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unable to change password');
+
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      showStatus('Password changed successfully');
+    } catch (err: any) {
+      showStatus(err.message || 'Failed to change password', true);
+    } finally {
+      setChangingPassword(false);
+    }
   };
 
   return (
@@ -78,25 +89,23 @@ export default function SettingsScreen({ onBack }: { onBack: () => void }) {
       exit={{ opacity: 0 }}
       className="flex flex-col h-full bg-tally-bg"
     >
-      {/* Header */}
       <div className="bg-tally-header text-white h-[35px] flex items-center justify-between px-3 border-b border-tally-hotkey">
-        <span className="text-[12px] font-bold">ALT+S: Settings & Configuration</span>
-        <span className="text-[10px] text-tally-accent">Press ESC to go back</span>
+        <div className="text-[12px] font-bold flex items-center gap-2">
+          <User className="w-4 h-4" />
+          User Settings & Security
+        </div>
+        <button onClick={onBack} className="text-[10px] text-tally-accent hover:text-white">ESC: Back</button>
       </div>
 
-      {/* Tabs */}
-      <div className="bg-tally-teal text-white flex border-b border-tally-hotkey h-[32px]">
+      <div className="bg-tally-teal text-white flex border-b border-tally-hotkey h-[38px]">
         {[
-          { id: 'general' as const, label: 'General' },
-          { id: 'company' as const, label: 'Company' },
-          { id: 'display' as const, label: 'Display' },
-          { id: 'print' as const, label: 'Print' },
-          { id: 'backup' as const, label: 'Backup' },
+          { id: 'profile' as const, label: 'Profile' },
+          { id: 'security' as const, label: 'Security' },
         ].map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 text-[11px] font-bold border-r border-teal-900 transition-colors ${
+            className={`flex-1 text-[11px] font-bold transition-colors ${
               activeTab === tab.id ? 'bg-tally-accent text-black' : 'hover:bg-teal-700'
             }`}
           >
@@ -105,346 +114,136 @@ export default function SettingsScreen({ onBack }: { onBack: () => void }) {
         ))}
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="space-y-4">
-          {/* General Settings */}
-          {activeTab === 'general' && (
-            <>
-              <div className="bg-white border-2 border-tally-teal p-4 space-y-3">
-                <h3 className="text-[12px] font-bold text-tally-teal border-b border-tally-teal/20 pb-2">
-                  General Options
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold">Use Accounting Terminology</label>
-                    <select
-                      value={settings.useAccounting ? 'Yes' : 'No'}
-                      onChange={(e) => setSettings({ ...settings, useAccounting: e.target.value === 'Yes' })}
-                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
-                    >
-                      <option>Yes</option>
-                      <option>No</option>
-                    </select>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-4">
+          <div className="space-y-4">
+            <div className="bg-white border-2 border-tally-teal p-4 rounded-md">
+              <h3 className="text-[12px] font-bold text-tally-teal uppercase tracking-[0.2em] mb-3">Signed in user</h3>
+              <div className="space-y-3 text-[11px] text-gray-700">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-50 p-3 rounded border border-slate-200">
+                    <div className="text-[9px] uppercase font-bold text-gray-500">Username</div>
+                    <div className="font-bold mt-1">{user.username}</div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold">Date Format</label>
-                    <select
-                      value={settings.dateFormat}
-                      onChange={(e) => setSettings({ ...settings, dateFormat: e.target.value })}
-                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
-                    >
-                      <option>DD-MM-YYYY</option>
-                      <option>MM-DD-YYYY</option>
-                      <option>YYYY-MM-DD</option>
-                    </select>
+                  <div className="bg-slate-50 p-3 rounded border border-slate-200">
+                    <div className="text-[9px] uppercase font-bold text-gray-500">Role</div>
+                    <div className="font-bold mt-1">{user.role}</div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold">Decimal Places</label>
-                    <select
-                      value={settings.decimalPlaces}
-                      onChange={(e) => setSettings({ ...settings, decimalPlaces: parseInt(e.target.value) })}
-                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
-                    >
-                      <option value="2">2</option>
-                      <option value="3">3</option>
-                      <option value="4">4</option>
-                    </select>
+                  <div className="bg-slate-50 p-3 rounded border border-slate-200 col-span-2">
+                    <div className="text-[9px] uppercase font-bold text-gray-500">Branch ID</div>
+                    <div className="font-bold mt-1">{user.branchId || 'HQ / Global'}</div>
                   </div>
                 </div>
               </div>
-            </>
-          )}
+            </div>
 
-          {/* Company Settings */}
-          {activeTab === 'company' && (
-            <>
-              <div className="bg-white border-2 border-tally-teal p-4 space-y-3">
-                <h3 className="text-[12px] font-bold text-tally-teal border-b border-tally-teal/20 pb-2">
-                  Company Information
-                </h3>
-                <div className="space-y-3">
+            {activeTab === 'profile' && (
+              <div className="bg-white border-2 border-tally-teal p-4 rounded-md">
+                <h3 className="text-[12px] font-bold text-tally-teal uppercase tracking-[0.2em] mb-3">Profile Settings</h3>
+                <div className="space-y-4">
                   <div>
-                    <label className="text-[10px] font-bold text-gray-600 block mb-1">Company Name</label>
+                    <label className="text-[10px] font-bold uppercase text-gray-500">Login Email</label>
                     <input
                       type="text"
-                      value={settings.companyName}
-                      onChange={(e) => setSettings({ ...settings, companyName: e.target.value })}
-                      className="w-full border-2 border-tally-teal px-2 py-1 text-[11px] font-bold"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="w-full border-2 border-tally-teal px-3 py-2 mt-1 text-[11px] font-bold rounded"
+                    />
+                  </div>
+                  <div className="text-[10px] text-gray-500 leading-relaxed">
+                    Your login email identifies your account. Changing it will update the current signed-in user immediately.
+                  </div>
+                  <button
+                    onClick={handleProfileSave}
+                    disabled={savingProfile}
+                    className="bg-tally-teal text-white px-4 py-2 rounded font-bold text-[11px] hover:bg-teal-700 transition-colors disabled:opacity-60"
+                  >
+                    <Save className="w-3 h-3 inline-block mr-2" />
+                    {savingProfile ? 'Saving...' : 'Save Profile'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'security' && (
+              <div className="bg-white border-2 border-tally-teal p-4 rounded-md">
+                <h3 className="text-[12px] font-bold text-tally-teal uppercase tracking-[0.2em] mb-3">Change Password</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-gray-500">Current Password</label>
+                    <input
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      className="w-full border-2 border-tally-teal px-3 py-2 mt-1 text-[11px] font-bold rounded"
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-gray-600 block mb-1">GSTIN</label>
+                    <label className="text-[10px] font-bold uppercase text-gray-500">New Password</label>
                     <input
-                      type="text"
-                      value={settings.gstin}
-                      onChange={(e) => setSettings({ ...settings, gstin: e.target.value })}
-                      className="w-full border-2 border-tally-teal px-2 py-1 text-[11px] font-bold"
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="w-full border-2 border-tally-teal px-3 py-2 mt-1 text-[11px] font-bold rounded"
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-gray-600 block mb-1">PAN</label>
+                    <label className="text-[10px] font-bold uppercase text-gray-500">Confirm New Password</label>
                     <input
-                      type="text"
-                      value={settings.pan}
-                      onChange={(e) => setSettings({ ...settings, pan: e.target.value })}
-                      className="w-full border-2 border-tally-teal px-2 py-1 text-[11px] font-bold"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full border-2 border-tally-teal px-3 py-2 mt-1 text-[11px] font-bold rounded"
                     />
                   </div>
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold">Registration Type</label>
-                    <select
-                      value={settings.registrationType}
-                      onChange={(e) => setSettings({ ...settings, registrationType: e.target.value as 'Regular' | 'Composition' })}
-                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
-                    >
-                      <option>Regular</option>
-                      <option>Composition</option>
-                    </select>
-                  </div>
+                  <button
+                    onClick={handleChangePassword}
+                    disabled={changingPassword}
+                    className="bg-tally-teal text-white px-4 py-2 rounded font-bold text-[11px] hover:bg-teal-700 transition-colors disabled:opacity-60"
+                  >
+                    <Lock className="w-3 h-3 inline-block mr-2" />
+                    {changingPassword ? 'Updating...' : 'Update Password'}
+                  </button>
                 </div>
               </div>
+            )}
+          </div>
 
-              <div className="bg-white border-2 border-tally-teal p-4 space-y-3">
-                <h3 className="text-[12px] font-bold text-tally-teal border-b border-tally-teal/20 pb-2">
-                  Financial Year
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold">Current Financial Year</label>
-                    <input
-                      type="text"
-                      value={settings.financialYear}
-                      onChange={(e) => setSettings({ ...settings, financialYear: e.target.value })}
-                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold w-[150px]"
-                      placeholder="2025-26"
-                    />
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold">Book Closing Date</label>
-                    <input
-                      type="date"
-                      value={settings.bookClosingDate}
-                      onChange={(e) => setSettings({ ...settings, bookClosingDate: e.target.value })}
-                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
-                    />
-                  </div>
-                </div>
+          <div className="space-y-4">
+            <div className="bg-white border-2 border-tally-teal p-4 rounded-md">
+              <h3 className="text-[12px] font-bold text-tally-teal uppercase tracking-[0.2em] mb-3">Security Summary</h3>
+              <div className="space-y-3 text-[11px] text-gray-700">
+                <p>
+                  This settings page applies only to the current signed-in user. Password changes are immediately persisted for your account.
+                </p>
+                <p>
+                  Role: <span className="font-bold">{user.role}</span>
+                </p>
+                <p>
+                  Branch ID: <span className="font-bold">{user.branchId || 'HQ / Global'}</span>
+                </p>
+                <p>
+                  Always keep your password secure and do not share it with others.
+                </p>
               </div>
-            </>
-          )}
-
-          {/* Display Settings */}
-          {activeTab === 'display' && (
-            <>
-              <div className="bg-white border-2 border-tally-teal p-4 space-y-3">
-                <h3 className="text-[12px] font-bold text-tally-teal border-b border-tally-teal/20 pb-2">
-                  Display Options
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold">Show Monthly Breakdown</label>
-                    <select
-                      value={settings.showMonthlyBreakdown ? 'Yes' : 'No'}
-                      onChange={(e) => setSettings({ ...settings, showMonthlyBreakdown: e.target.value === 'Yes' })}
-                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
-                    >
-                      <option>Yes</option>
-                      <option>No</option>
-                    </select>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold">Show Ledger Balances</label>
-                    <select
-                      value={settings.showLedgerBalances ? 'Yes' : 'No'}
-                      onChange={(e) => setSettings({ ...settings, showLedgerBalances: e.target.value === 'Yes' })}
-                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
-                    >
-                      <option>Yes</option>
-                      <option>No</option>
-                    </select>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold">Warn on Negative Balance</label>
-                    <select
-                      value={settings.warnNegativeBalance ? 'Yes' : 'No'}
-                      onChange={(e) => setSettings({ ...settings, warnNegativeBalance: e.target.value === 'Yes' })}
-                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
-                    >
-                      <option>Yes</option>
-                      <option>No</option>
-                    </select>
-                  </div>
-                </div>
+            </div>
+            <div className="bg-white border-2 border-tally-teal p-4 rounded-md text-[10px] text-gray-500">
+              <div className="font-bold uppercase tracking-[0.2em] mb-2">Keyboard shortcut</div>
+              <div className="space-y-3">
+                <div>ALT+F1: Logout</div>
+                <div>ALT+S: Open settings</div>
+                <div>ESC: Go back</div>
               </div>
-            </>
-          )}
-
-          {/* Backup Settings */}
-          {activeTab === 'backup' && (
-            <>
-              <div className="bg-white border-2 border-tally-teal p-4 space-y-3">
-                <h3 className="text-[12px] font-bold text-tally-teal border-b border-tally-teal/20 pb-2">
-                  Backup Options
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold">Enable Auto Backup</label>
-                    <select
-                      value={settings.autoBackup ? 'Yes' : 'No'}
-                      onChange={(e) => setSettings({ ...settings, autoBackup: e.target.value === 'Yes' })}
-                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
-                    >
-                      <option>Yes</option>
-                      <option>No</option>
-                    </select>
-                  </div>
-                  {settings.autoBackup && (
-                    <div className="flex justify-between items-center">
-                      <label className="text-[11px] font-bold">Backup Frequency</label>
-                      <select
-                        value={settings.backupFrequency}
-                        onChange={(e) => setSettings({ ...settings, backupFrequency: e.target.value as 'Daily' | 'Weekly' | 'Monthly' })}
-                        className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
-                      >
-                        <option>Daily</option>
-                        <option>Weekly</option>
-                        <option>Monthly</option>
-                      </select>
-                    </div>
-                  )}
-                  <div className="pt-2">
-                    <button
-                      onClick={() => {
-                        alert('Backup initiated. Data will be backed up to your local storage.');
-                        setMessage('Backup completed!');
-                        setTimeout(() => setMessage(''), 3000);
-                      }}
-                      className="w-full bg-tally-teal text-white px-3 py-2 text-[11px] font-bold hover:bg-teal-700 transition-colors"
-                    >
-                      Create Manual Backup Now
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Print Settings */}
-          {activeTab === 'print' && (
-            <>
-              <div className="bg-white border-2 border-tally-teal p-4 space-y-3">
-                <h3 className="text-[12px] font-bold text-tally-teal border-b border-tally-teal/20 pb-2">
-                  Report Header & Footer
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold">Show Company Name in Header</label>
-                    <select
-                      value={settings.printShowCompanyName ? 'Yes' : 'No'}
-                      onChange={(e) => setSettings({ ...settings, printShowCompanyName: e.target.value === 'Yes' })}
-                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
-                    >
-                      <option>Yes</option>
-                      <option>No</option>
-                    </select>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold">Show Report Header</label>
-                    <select
-                      value={settings.printShowHeader ? 'Yes' : 'No'}
-                      onChange={(e) => setSettings({ ...settings, printShowHeader: e.target.value === 'Yes' })}
-                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
-                    >
-                      <option>Yes</option>
-                      <option>No</option>
-                    </select>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold">Show Page Footer</label>
-                    <select
-                      value={settings.printShowFooter ? 'Yes' : 'No'}
-                      onChange={(e) => setSettings({ ...settings, printShowFooter: e.target.value === 'Yes' })}
-                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
-                    >
-                      <option>Yes</option>
-                      <option>No</option>
-                    </select>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold">Show Page Numbers</label>
-                    <select
-                      value={settings.printShowPageNumbers ? 'Yes' : 'No'}
-                      onChange={(e) => setSettings({ ...settings, printShowPageNumbers: e.target.value === 'Yes' })}
-                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
-                    >
-                      <option>Yes</option>
-                      <option>No</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white border-2 border-tally-teal p-4 space-y-3">
-                <h3 className="text-[12px] font-bold text-tally-teal border-b border-tally-teal/20 pb-2">
-                  Page Layout
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold">Page Size</label>
-                    <select
-                      value={settings.printPageSize}
-                      onChange={(e) => setSettings({ ...settings, printPageSize: e.target.value as 'A4' | 'A3' | 'Letter' })}
-                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold"
-                    >
-                      <option>A4</option>
-                      <option>A3</option>
-                      <option>Letter</option>
-                    </select>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold">Margin (inches)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="2"
-                      value={settings.printMargin}
-                      onChange={(e) => setSettings({ ...settings, printMargin: parseFloat(e.target.value) })}
-                      className="border-2 border-tally-teal px-2 py-1 text-[10px] font-bold w-[100px]"
-                    />
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Message */}
-      {message && (
-        <div className="bg-green-100 text-green-800 px-4 py-2 text-[11px] font-bold border-b border-green-300">
-          ✓ {message}
+      {(message || error) && (
+        <div className={`px-4 py-3 text-[11px] font-bold ${error ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-green-100 text-green-700 border border-green-300'}`}>
+          {error || message}
         </div>
       )}
-
-      {/* Footer */}
-      <div className="bg-tally-bg p-2 border-t border-tally-hotkey flex justify-between">
-        <button
-          onClick={resetSettings}
-          className="flex items-center gap-2 bg-gray-600 text-white px-4 py-1 text-[11px] font-bold hover:bg-gray-700 transition-colors"
-        >
-          <RotateCcw className="w-3 h-3" />
-          Reset to Defaults
-        </button>
-        <button
-          onClick={saveSettings}
-          className="flex items-center gap-2 bg-tally-teal text-white px-4 py-1 text-[11px] font-bold hover:bg-teal-700 transition-colors"
-        >
-          <Save className="w-3 h-3" />
-          Save (Enter)
-        </button>
-      </div>
     </motion.div>
   );
 }
