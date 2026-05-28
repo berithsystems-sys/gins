@@ -631,7 +631,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
           /* background extends behind the sticky tfoot even when rows are few */
         }
         .db-table-wrap {
-          height: auto;
+          min-height: 100%;
           display: flex;
           flex-direction: column;
           background: #fff;
@@ -867,7 +867,7 @@ const s = {
     // FIX-A: height:100% works when parent has a height; add min-height as fallback
     height: '100%', minHeight: 0,
     position: 'relative',
-    border: `1px solid ${BORDER}`, borderRadius: 2, overflow: 'hidden',
+    overflow: 'hidden',
   },
   titleBar: {
     background: HEADER_BG, color: '#fff', display: 'flex', alignItems: 'center',
