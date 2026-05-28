@@ -173,8 +173,39 @@ export default function App() {
     }, 50);
   });
 
+  const gatewayScreenMap: { [menuId: string]: typeof currentScreen } = {
+    masters: 'LEDGER',
+    alter: 'ALTER',
+    chart: 'CHART',
+    vouchers: 'VOUCHER',
+    daybook: 'DAYBOOK',
+    banking: 'BANKING',
+    payroll: 'PAYROLL',
+    debug: 'DEBUG',
+    balance_sheet: 'BALANCE_SHEET',
+    pl_account: 'PL_ACCOUNT',
+    ratio_analysis: 'RATIO',
+    trial_balance: 'TRIAL_BALANCE',
+    audit: 'AUDIT',
+  };
+
   const handleGotoSelect = (item: any) => {
-    setCurrentScreen(item.id);
+    if (!item?.id) return;
+    if (gatewayScreenMap[item.id]) {
+      setCurrentScreen(gatewayScreenMap[item.id]);
+      return;
+    }
+
+    const upperId = String(item.id).toUpperCase();
+    const allowedScreens = [
+      'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'DAYBOOK', 'CASH_BANK_BOOK', 'RATIO', 'CHART',
+      'LEDGER', 'ALTER', 'VOUCHER', 'BANKING', 'PAYROLL', 'AUDIT', 'ADMIN', 'HQ', 'GATEWAY',
+      'DEBUG', 'SETTINGS', 'COMPANY', 'DATA', 'IMPORT', 'EXPORT', 'PRINT', 'EMAIL', 'EXCHANGE'
+    ];
+
+    if (allowedScreens.includes(upperId)) {
+      setCurrentScreen(upperId as typeof currentScreen);
+    }
   };
 
   const renderGoTo = () => {
@@ -613,10 +644,6 @@ export default function App() {
                             key={item.id}
                             className={`px-4 py-0.5 flex justify-between cursor-pointer transition-colors ${isSelected ? 'bg-tally-accent text-black font-bold' : 'hover:bg-gray-100'}`}
                             onClick={() => {
-                              const idx = flatMenu.findIndex(f => f.id === item.id);
-                              setSelectedIndex(idx);
-                            }}
-                            onDoubleClick={() => {
                               const idx = flatMenu.findIndex(f => f.id === item.id);
                               setSelectedIndex(idx);
                               handleGotoSelect(item);
