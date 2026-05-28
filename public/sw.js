@@ -1,15 +1,19 @@
-const CACHE_NAME = 'tally-prime-v1';
-const urlsToCache = [
+const CACHE_NAME = 'gins-erp-v2';
+const OFFLINE_URL = '/index.html';
+
+// Assets to cache immediately on install
+const INITIAL_CACHED_RESOURCES = [
   '/',
-  '/index.html',
+  OFFLINE_URL,
   '/manifest.json'
 ];
 
 self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.addAll(INITIAL_CACHED_RESOURCES);
+    })
   );
 });
 
@@ -28,24 +32,57 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Network First strategy for API calls
-  if (event.request.url.includes('/api/')) {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // 1. API Calls: Network Only (or Network First if offline support needed for data)
+  if (url.pathname.startsWith('/api/')) {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match(event.request))
+      fetch(request).catch(() => {
+        return caches.match(request);
+      })
     );
     return;
   }
 
-  // Stale-While-Revalidate for static assets
+  // 2. Navigation requests (HTML): Network First
+  // This prevents the "blank screen" by ensuring we always try to get the latest index.html
+  // which contains the correct links to the latest hashed JS/CSS files.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request).catch(() => {
+        return caches.match(OFFLINE_URL);
+      })
+    );
+    return;
+  }
+
+  // 3. Static Assets (JS, CSS, Images): Stale-While-Revalidate
   event.respondWith(
-    caches.match(event.request).then(cachedResponse => {
-      const fetchPromise = fetch(event.request).then(networkResponse => {
+    caches.match(request).then(cachedResponse => {
+      if (cachedResponse) {
+        // Return cached version but trigger a background update
+        fetch(request).then(networkResponse => {
+          if (networkResponse && networkResponse.status === 200) {
+            caches.open(CACHE_NAME).then(cache => {
+              cache.put(request, networkResponse);
+            });
+          }
+        }).catch(() => {}); // Ignore background fetch errors
+        return cachedResponse;
+      }
+
+      // If not in cache, fetch from network
+      return fetch(request).then(networkResponse => {
+        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+          return networkResponse;
+        }
+        const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then(cache => {
-          cache.put(event.request, networkResponse.clone());
+          cache.put(request, responseToCache);
         });
         return networkResponse;
       });
-      return cachedResponse || fetchPromise;
     })
   );
 });
