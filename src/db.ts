@@ -188,6 +188,7 @@ export async function initDB() {
       table.string('email');
       table.string('pan');
       table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
+      table.string('methodAdjustment').defaultTo('On Account');
     });
   }
 
@@ -205,6 +206,8 @@ export async function initDB() {
       table.float('cgst').defaultTo(0);
       table.float('sgst').defaultTo(0);
       table.string('branchId').references('id').inTable('branches').onDelete('CASCADE');
+      table.boolean('voided').notNullable().defaultTo(false);
+      table.dateTime('voidedAt').nullable();
     });
   }
 
@@ -320,6 +323,23 @@ export async function initDB() {
       console.log("Migrated voucher_entries table with new columns.");
     }
 
+    const ledgerColumns = await db('ledgers').columnInfo();
+    if (!ledgerColumns.methodAdjustment) {
+      await db.schema.table('ledgers', (table) => {
+        table.string('methodAdjustment').defaultTo('On Account');
+      });
+      console.log("Migrated ledgers table with methodAdjustment.");
+    }
+
+    const voucherColumns = await db('vouchers').columnInfo();
+    if (!voucherColumns.voided) {
+      await db.schema.table('vouchers', (table) => {
+        table.boolean('voided').notNullable().defaultTo(false);
+        table.dateTime('voidedAt').nullable();
+      });
+      console.log("Migrated vouchers table with voided / voidedAt.");
+    }
+
     // Fix incorrect foreign key in vouchers table if it exists
     try {
       // This is a specific fix for a known schema error where branchId referenced vouchers instead of branches
@@ -397,7 +417,7 @@ export async function initDB() {
         { id: 'g_013', name: 'Purchase Account', branchId: '1' },
         { id: 'g_014', name: 'Suspense Account', branchId: '1' },
         { id: 'g_015', name: 'Bank Accounts', branchId: '1' },
-        { id: 'g_016', name: 'Cash', branchId: '1' }
+        { id: 'g_016', name: 'Cash-in-hand', branchId: '1' }
       ];
       await db('account_groups').insert(standardGroups);
       console.log("✓ Chart of Accounts created (16 groups)");
@@ -407,7 +427,7 @@ export async function initDB() {
     if (!ledgerCount || ledgerCount.count === 0) {
       console.log("Seeding default ledgers...");
       const defaultLedgers = [
-        { id: 'l_001', name: 'Cash', groupId: 'g_016', group_name: 'Cash', openingBalance: 0, balanceType: 'Dr', branchId: '1' },
+        { id: 'l_001', name: 'Cash', groupId: 'g_016', group_name: 'Cash-in-hand', openingBalance: 0, balanceType: 'Dr', branchId: '1' },
         { id: 'l_002', name: 'Bank Account', groupId: 'g_015', group_name: 'Bank Accounts', openingBalance: 0, balanceType: 'Dr', branchId: '1' },
         { id: 'l_003', name: 'Service Income', groupId: 'g_008', group_name: 'Direct Income', openingBalance: 0, balanceType: 'Cr', branchId: '1' },
         { id: 'l_004', name: 'Consulting Income', groupId: 'g_008', group_name: 'Direct Income', openingBalance: 0, balanceType: 'Cr', branchId: '1' },
