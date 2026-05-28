@@ -19,7 +19,7 @@ import { exportToExcel } from '../lib/ReportUtils';
 const FONT_   = `-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,sans-serif`;
 const HDR_BG  = '#1f4e79';
 const BORDER  = '#b8c4cc';
-const LIGHT   = '#f0f4f8';
+const LIGHT   = '#f9fbff';
 const ROW_BDR = '#e0e6ee';
 const DARK    = '#1a2a3a';
 
@@ -127,27 +127,27 @@ const normalizeLedger = (raw: any, groupIdMap: Record<string, string> = {}): Led
 
 // ── Static styles (module-level — never recreated on render) ─────────────────
 const rs: Record<string, React.CSSProperties> = {
-  th:        { padding:'5px 10px', fontSize:11, fontWeight:700, color:'#333', borderBottom:`1px solid ${BORDER}`, background:LIGHT, whiteSpace:'nowrap' },
+  th:        { padding:'3px 10px', fontSize:11, fontWeight:700, color:'#333', borderBottom:`1px solid ${BORDER}`, background:LIGHT, whiteSpace:'nowrap' },
   groupRow:  { borderBottom:`1px solid ${ROW_BDR}`, background:'#fff', transition:'background 0.07s' },
   ledgerRow: { borderBottom:`1px solid ${ROW_BDR}`, background:'#fafbff' },
-  tdName:    { padding:'3px 8px', fontSize:12, verticalAlign:'middle', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' },
-  tdAmt:     { padding:'3px 10px', fontSize:12, fontWeight:700, textAlign:'right', verticalAlign:'middle', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' },
-  toggle:    { display:'inline-block', width:14, height:14, lineHeight:'14px', textAlign:'center', fontSize:11, fontWeight:900, border:`1px solid ${BORDER}`, background:LIGHT, color:'#555', marginRight:6, cursor:'pointer', flexShrink:0 },
-  groupName: { fontWeight:700, textTransform:'uppercase', fontSize:12, letterSpacing:0.3, color:'#1a1a1a' },
+  tdName:    { padding:'2px 8px', fontSize:12, verticalAlign:'middle', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' },
+  tdAmt:     { padding:'2px 10px', fontSize:12, fontWeight:700, textAlign:'right', verticalAlign:'middle', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' },
+  toggle:    { display:'inline-block', width:12, height:12, lineHeight:'11px', textAlign:'center', fontSize:10, fontWeight:900, border:`1px solid ${BORDER}`, background:'transparent', color:'#555', marginRight:6, cursor:'pointer', flexShrink:0 },
+  groupName: { fontWeight:700, textTransform:'uppercase', fontSize:11, letterSpacing:0, color:'#1a1a1a' },
 };
 
 const s: Record<string, React.CSSProperties> = {
   root:        { fontFamily:FONT_, fontSize:12, color:'#1a1a1a', background:'#fff', display:'flex', flexDirection:'column', flex:1, minHeight:0, height:'100%', border:`1px solid ${BORDER}`, borderRadius:2, overflow:'hidden', position:'relative', outline:'none' },
-  titleBar:    { background:HDR_BG, color:'#fff', display:'flex', alignItems:'center', padding:'3px 8px', fontSize:11, fontWeight:600, flexShrink:0 },
+  titleBar:    { background:HDR_BG, color:'#fff', display:'flex', alignItems:'center', padding:'2px 8px', fontSize:11, fontWeight:600, flexShrink:0 },
   backBtn:     { background:'none', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', cursor:'pointer', fontSize:10, marginRight:10, padding:'1px 5px' },
-  contentWrap: { flex:1, minHeight:0, overflow:'hidden', paddingRight:90, display:'flex', flexDirection:'column' },
-  twoCol:      { display:'flex', minHeight:'100%', alignItems:'stretch', height:'100%' },
-  col:         { flex:1, display:'flex', flexDirection:'column', minWidth:0, minHeight:0, overflow:'hidden' },
-  divider:     { width:2, background:BORDER, flexShrink:0 },
-  table:       { width:'100%', borderCollapse:'collapse', tableLayout:'fixed', flex:1, height:'100%' },
-  totalRow:    { background:LIGHT, borderTop:'2px double #555', position:'sticky', bottom:0 },
-  rightPanel:  { position:'absolute', top:26, right:0, bottom:24, width:88, background:DARK, display:'flex', flexDirection:'column', borderLeft:'1px solid #0d1a2a' },
-  sideBtn:     { border:'none', borderBottom:'1px solid rgba(255,255,255,0.07)', color:'#cdd5e0', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'flex-start', padding:'6px 8px', textAlign:'left', fontFamily:FONT_, flex:1, transition:'background 0.1s' },
+  contentWrap: { flex:1, minHeight:0, overflowY:'auto', paddingRight:90, display:'flex', flexDirection:'column', background:'#fff' },
+  twoCol:      { display:'flex', minHeight:'100%', alignItems:'stretch' },
+  col:         { flex:1, display:'flex', flexDirection:'column', minWidth:0 },
+  divider:     { width:1, background:'#eee', flexShrink:0 },
+  table:       { width:'100%', borderCollapse:'collapse', tableLayout:'fixed', height: '100%' },
+  totalRow:    { background:LIGHT, borderTop:'1px solid #1a2a3a', borderBottom:'1px solid #1a2a3a', position:'sticky', bottom:0, zIndex:10 },
+  rightPanel:  { position:'absolute', top:26, right:0, bottom:24, width:88, background:DARK, display:'flex', flexDirection:'column', borderLeft:'1px solid #0d1a2a', zIndex:100 },
+  sideBtn:     { border:'none', borderBottom:'1px solid rgba(255,255,255,0.07)', color:'#cdd5e0', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'flex-start', justifyContent:'center', padding:'4px 8px', textAlign:'left', fontFamily:FONT_, flex:1, transition:'background 0.1s' },
   sBtnKey:     { fontSize:9, color:'rgba(255,255,255,0.4)', fontWeight:700, lineHeight:1.3 },
   sBtnLabel:   { fontSize:10, color:'#d0dae6', fontWeight:600, lineHeight:1.3, whiteSpace:'pre-line' },
   statusBar:   { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'3px 100px 3px 8px', background:DARK, borderTop:'1px solid #0d1a2a', flexShrink:0, height:24 },
@@ -179,11 +179,10 @@ interface ColHdrCellsProps {
 }
 const ColHdrCells = React.memo(({ allPeriods, periodLabel }: ColHdrCellsProps) => (
   <>
-    <th style={{ ...rs.th, textAlign:'left', width:'50%' }}>Particulars</th>
+    <th style={{ ...rs.th, textAlign:'left', width:'70%', borderBottom: `1px solid ${BORDER}` }}>Particulars</th>
     {allPeriods.map((p, i) => (
-      <th key={i} style={{ ...rs.th, textAlign:'right', width:`${50 / allPeriods.length}%`, borderLeft: i === 0 ? 'none' : '1px solid #ccd5dd' }}>
-        <div style={{ fontSize:11, fontWeight:800, color:'#1a1a1a', whiteSpace:'nowrap' }}>{p.label}</div>
-        <div style={{ fontSize:10, fontWeight:400, color:'#777', whiteSpace:'nowrap' }}>{periodLabel(p)}</div>
+      <th key={i} style={{ ...rs.th, textAlign:'right', width:`${30 / allPeriods.length}%`, borderLeft: '1px solid #ccd5dd', borderBottom: `1px solid ${BORDER}` }}>
+        <div style={{ fontSize:10, fontWeight:800, color:'#555', whiteSpace:'nowrap' }}>{p.label}</div>
       </th>
     ))}
   </>
@@ -192,7 +191,7 @@ const ColHdrCells = React.memo(({ allPeriods, periodLabel }: ColHdrCellsProps) =
 // ── SectionHeader ────────────────────────────────────────────────────────────
 const SectionHeader = React.memo(({ label, colSpan }: { label: string; colSpan: number }) => (
   <tr style={{ background:'#fafbff' }}>
-    <td colSpan={colSpan} style={{ padding:'6px 10px 2px', fontSize:12, fontStyle:'italic', fontWeight:600, color:'#444', letterSpacing:2, borderBottom:'none' }}>
+    <td colSpan={colSpan} style={{ padding:'4px 10px 1px', fontSize:11, fontStyle:'italic', fontWeight:700, color:'#555', letterSpacing:0.5, borderBottom:'none', textTransform: 'uppercase' }}>
       {label}
     </td>
   </tr>
@@ -731,8 +730,8 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
 
   const renderPLRow = () => (
     <tr style={{ ...rs.groupRow, background:'#fffbf0' }}>
-      <td style={{ ...rs.tdName, fontStyle:'italic', paddingLeft:16 }}>
-        {(periodTotals[0]?.plNet ?? 0) >= 0 ? 'Profit & Loss A/c  (Net Profit)' : 'Profit & Loss A/c  (Net Loss)'}
+      <td style={{ ...rs.tdName, fontStyle:'italic', paddingLeft:12 }}>
+        {(periodTotals[0]?.plNet ?? 0) >= 0 ? 'Profit & Loss A/c (Net Profit)' : 'Profit & Loss A/c (Net Loss)'}
       </td>
       {periodTotals.map((pt, i) => (
         <td key={i} style={{ ...rs.tdAmt, color: pt.plNet >= 0 ? '#006b00' : '#7a0000', fontStyle:'italic', borderLeft: i===0?'none':'1px solid #dde4ec' }}>
@@ -747,7 +746,7 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
     if (!anyDiff) return null;
     return (
       <tr style={{ ...rs.groupRow, background:'#fff0f0' }}>
-        <td style={{ ...rs.tdName, fontStyle:'italic', color:'#7a0000', paddingLeft:16 }}>
+        <td style={{ ...rs.tdName, fontStyle:'italic', color:'#7a0000', paddingLeft:12 }}>
           {side === 'liab' ? 'Difference (Cr > Dr)' : 'Difference (Dr > Cr)'}
         </td>
         {periodTotals.map((pt, i) => {
@@ -798,7 +797,7 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
         {onBack && <button onClick={onBack} className="no-print" style={s.backBtn}>← Back (Esc)</button>}
         <span style={{ flex:1, fontWeight:700 }}>Balance Sheet</span>
         <span style={{ flex:2, textAlign:'center', fontWeight:800, fontSize:12 }}>{companyName || '…'}</span>
-        <span style={{ flex:1, textAlign:'right', opacity:0.7, fontSize:11 }}>{periodLabel(mainPeriod)}</span>
+        <span style={{ flex:1, textAlign:'right', opacity:0.7, fontSize:10 }}>{periodLabel(mainPeriod)}</span>
       </div>
 
       {/* Content */}
@@ -824,7 +823,7 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
               <table style={s.table}>
                 <thead>
                   <tr>
-                    <th colSpan={colSpan} style={{ ...rs.th, textAlign:'center', background:'#e8f0f7', letterSpacing:2, fontSize:12, fontWeight:800, color:HDR_BG, borderBottom:`2px solid ${BORDER}` }}>
+                    <th colSpan={colSpan} style={{ ...rs.th, textAlign:'center', background:'#f2f7fb', letterSpacing:1.2, fontSize:11, fontWeight:800, color:HDR_BG, borderBottom:`1px solid ${BORDER}`, padding: '2px 0' }}>
                       LIABILITIES
                     </th>
                   </tr>
@@ -846,6 +845,7 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
 
                   {showNettProfit && (periodTotals[0]?.plNet ?? 0) >= 0 && renderPLRow()}
                   {renderDiffRow('liab')}
+                  <tr style={{ height: '100%' }}><td colSpan={colSpan}></td></tr>
                 </tbody>
                 <tfoot>
                   <tr style={s.totalRow}>
@@ -867,7 +867,7 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
               <table style={s.table}>
                 <thead>
                   <tr>
-                    <th colSpan={colSpan} style={{ ...rs.th, textAlign:'center', background:'#e8f0f7', letterSpacing:2, fontSize:12, fontWeight:800, color:HDR_BG, borderBottom:`2px solid ${BORDER}` }}>
+                    <th colSpan={colSpan} style={{ ...rs.th, textAlign:'center', background:'#f2f7fb', letterSpacing:1.2, fontSize:11, fontWeight:800, color:HDR_BG, borderBottom:`1px solid ${BORDER}`, padding: '2px 0' }}>
                       ASSETS
                     </th>
                   </tr>
@@ -890,6 +890,7 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
 
                   {showNettProfit && (periodTotals[0]?.plNet ?? 0) < 0 && renderPLRow()}
                   {renderDiffRow('asset')}
+                  <tr style={{ height: '100%' }}><td colSpan={colSpan}></td></tr>
                 </tbody>
                 <tfoot>
                   <tr style={s.totalRow}>
