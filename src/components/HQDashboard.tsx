@@ -14,7 +14,9 @@ interface HQDashboardProps {
 export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
   const [branches, setBranches] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
-  const [newBranch, setNewBranch] = useState({ name: '', code: '', location: '', email: '', password: '' });
+  const [showEdit, setShowEdit] = useState(false);
+  const [selectedBranch, setSelectedBranch] = useState<any>(null);
+  const [newBranch, setNewBranch] = useState({ name: '', code: '', location: '', email: '', password: '', fy_start: '2026-04-01', books_start: '2026-04-01' });
 
   const [globalBalance, setGlobalBalance] = useState(0);
 
@@ -31,7 +33,7 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch('api/branches', {
+    const res = await fetch('/api/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newBranch)
@@ -40,9 +42,25 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
     if (res.ok) {
       setBranches([...branches, data]);
       setShowAdd(false);
-      setNewBranch({ name: '', code: '', location: '', email: '', password: '' });
+      setNewBranch({ name: '', code: '', location: '', email: '', password: '', fy_start: '2026-04-01', books_start: '2026-04-01' });
     } else {
       alert(data.error || 'Failed to create branch');
+    }
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = await fetch(`/api/branches/${selectedBranch.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(selectedBranch)
+    });
+    if (res.ok) {
+      setBranches(branches.map(b => b.id === selectedBranch.id ? selectedBranch : b));
+      setShowEdit(false);
+      setSelectedBranch(null);
+    } else {
+      alert('Failed to update branch');
     }
   };
 
@@ -110,6 +128,7 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
                         <td className="px-4 py-2 font-mono">{branch.code}</td>
                         <td className="px-4 py-2 italic">{branch.location}</td>
                         <td className="px-4 py-2 text-right flex justify-end gap-2 opacity-0 group-hover:opacity-100">
+                           <button onClick={(e) => { e.stopPropagation(); setSelectedBranch(branch); setShowEdit(true); }} className="p-1 hover:text-tally-teal text-[10px] font-bold uppercase">Edit</button>
                            <button onClick={(e) => { e.stopPropagation(); handleResetPassword(branch.id); }} className="p-1 hover:text-tally-teal"><KeyRound className="w-4 h-4" /></button>
                            <button onClick={(e) => { e.stopPropagation(); handleDelete(branch.id); }} className="p-1 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                         </td>
@@ -234,9 +253,103 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
                   />
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">FY Begin</label>
+                  <input 
+                    type="date" 
+                    className="w-full border-2 p-2 outline-none focus:border-tally-teal text-sm font-bold mt-1"
+                    value={newBranch.fy_start}
+                    onChange={e => setNewBranch({...newBranch, fy_start: e.target.value})}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Books From</label>
+                  <input 
+                    type="date" 
+                    className="w-full border-2 p-2 outline-none focus:border-tally-teal text-sm font-bold mt-1"
+                    value={newBranch.books_start}
+                    onChange={e => setNewBranch({...newBranch, books_start: e.target.value})}
+                    required
+                  />
+                </div>
+              </div>
               <div className="flex gap-4 pt-6">
                 <button type="submit" className="flex-1 bg-tally-teal text-white font-bold py-3 uppercase text-xs hover:bg-tally-header">Create Branch</button>
                 <button type="button" onClick={() => setShowAdd(false)} className="px-6 bg-gray-100 font-bold uppercase text-xs hover:bg-gray-200">Cancel</button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {showEdit && selectedBranch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white border-4 border-tally-teal p-8 w-full max-w-md shadow-2xl"
+          >
+            <h2 className="text-xl font-bold text-tally-teal uppercase mb-6 tracking-widest text-center">Edit Church Branch</h2>
+            <form onSubmit={handleUpdate} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Church / Branch Name</label>
+                <input 
+                  type="text" 
+                  className="w-full border-2 p-3 outline-none focus:border-tally-teal uppercase text-sm font-bold mt-1"
+                  value={selectedBranch.name}
+                  onChange={e => setSelectedBranch({...selectedBranch, name: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Login Code</label>
+                  <input 
+                    type="text" 
+                    className="w-full border-2 p-3 outline-none focus:border-tally-teal uppercase text-sm font-bold mt-1"
+                    value={selectedBranch.code}
+                    onChange={e => setSelectedBranch({...selectedBranch, code: e.target.value})}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Location</label>
+                  <input 
+                    type="text" 
+                    className="w-full border-2 p-3 outline-none focus:border-tally-teal uppercase text-sm font-bold mt-1"
+                    value={selectedBranch.location}
+                    onChange={e => setSelectedBranch({...selectedBranch, location: e.target.value})}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">FY Begin</label>
+                  <input 
+                    type="date" 
+                    className="w-full border-2 p-2 outline-none focus:border-tally-teal text-sm font-bold mt-1"
+                    value={selectedBranch.fy_start}
+                    onChange={e => setSelectedBranch({...selectedBranch, fy_start: e.target.value})}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Books From</label>
+                  <input 
+                    type="date" 
+                    className="w-full border-2 p-2 outline-none focus:border-tally-teal text-sm font-bold mt-1"
+                    value={selectedBranch.books_start}
+                    onChange={e => setSelectedBranch({...selectedBranch, books_start: e.target.value})}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="flex gap-4 pt-6">
+                <button type="submit" className="flex-1 bg-tally-teal text-white font-bold py-3 uppercase text-xs hover:bg-tally-header">Save Changes</button>
+                <button type="button" onClick={() => { setShowEdit(false); setSelectedBranch(null); }} className="px-6 bg-gray-100 font-bold uppercase text-xs hover:bg-gray-200">Cancel</button>
               </div>
             </form>
           </motion.div>
