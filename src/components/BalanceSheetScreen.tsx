@@ -925,4 +925,5 @@ export default function BalanceSheetScreenSafe(props: BSProps) {
     </ErrorBoundary>
   );
 }
-export default BalanceSheetScreen;
+
+export { BalanceSheetScreen };
