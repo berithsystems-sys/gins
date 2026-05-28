@@ -378,7 +378,10 @@ export default function App() {
   }, { enableOnFormTags: true });
   useHotkeys('alt+m', () => setCurrentScreen('EXPORT'), { enableOnFormTags: true });
   useHotkeys('alt+e', () => setCurrentScreen('EXPORT'), { enableOnFormTags: true });
-  useHotkeys('alt+p', () => setCurrentScreen('PRINT'), { enableOnFormTags: true });
+  useHotkeys('alt+p', () => {
+    const screensWithOwnPrint = ['BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'DAYBOOK'];
+    if (!screensWithOwnPrint.includes(currentScreen)) setCurrentScreen('PRINT');
+  }, { enableOnFormTags: true }, [currentScreen]);
   useHotkeys('alt+s', () => setCurrentScreen('SETTINGS'), { enableOnFormTags: true });
   useHotkeys('alt+d', (e) => { 
     if (currentScreen === 'DAYBOOK') return;
