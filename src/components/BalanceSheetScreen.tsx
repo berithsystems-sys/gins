@@ -109,11 +109,11 @@ const s: Record<string, React.CSSProperties> = {
   root:        { fontFamily:FONT_, fontSize:12, color:'#1a1a1a', background:'#fff', display:'flex', flexDirection:'column', height:'100%', border:`1px solid ${BORDER}`, borderRadius:2, overflow:'hidden', position:'relative', outline:'none' },
   titleBar:    { background:HDR_BG, color:'#fff', display:'flex', alignItems:'center', padding:'3px 8px', fontSize:11, fontWeight:600, flexShrink:0 },
   backBtn:     { background:'none', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', cursor:'pointer', fontSize:10, marginRight:10, padding:'1px 5px' },
-  contentWrap: { flex:1, overflowY:'auto', paddingRight:90 },
-  twoCol:      { display:'flex', minHeight:'100%' },
-  col:         { flex:1, display:'flex', flexDirection:'column', minWidth:0 },
+  contentWrap: { flex:1, minHeight:0, overflowY:'auto', paddingRight:90 },
+  twoCol:      { display:'flex', minHeight:'100%', alignItems:'stretch' },
+  col:         { flex:1, display:'flex', flexDirection:'column', minWidth:0, minHeight:0 },
   divider:     { width:2, background:BORDER, flexShrink:0 },
-  table:       { width:'100%', borderCollapse:'collapse', tableLayout:'fixed' },
+  table:       { width:'100%', borderCollapse:'collapse', tableLayout:'fixed', flex:1 },
   totalRow:    { background:LIGHT, borderTop:'2px double #555', position:'sticky', bottom:0 },
   rightPanel:  { position:'absolute', top:26, right:0, bottom:24, width:88, background:DARK, display:'flex', flexDirection:'column', borderLeft:'1px solid #0d1a2a' },
   sideBtn:     { border:'none', borderBottom:'1px solid rgba(255,255,255,0.07)', color:'#cdd5e0', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'flex-start', padding:'6px 8px', textAlign:'left', fontFamily:FONT_, flex:1, transition:'background 0.1s' },
@@ -382,8 +382,6 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
   const [loadError, setLoadError]         = useState('');
   const [showNettProfit, setShowNettProfit] = useState(true);
   const [focusedRowIdx, setFocusedRowIdx] = useState<number>(-1);
-  const [showDebug, setShowDebug]         = useState(false);
-  const [debugInfo, setDebugInfo]         = useState('');
 
   const rootRef    = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -461,13 +459,13 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
       debugLog += `\n🏷️  UNIQUE GROUPS (${uniqueGroups.length}):\n`;
       uniqueGroups.forEach(g => { debugLog += `  • ${g}\n`; });
 
-      setDebugInfo(debugLog);
+      console.debug(debugLog);
     })
     .catch(err => {
       console.error('[BalanceSheet] fetch error:', err);
       debugLog += `\n❌ FETCH ERROR: ${err.message}\n`;
       setLoadError(err.message || 'Failed to load data');
-      setDebugInfo(debugLog);
+      console.debug(debugLog);
     })
     .finally(() => setLoading(false));
 
@@ -774,12 +772,6 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
           </div>
         ) : (
           <>
-          {showDebug && debugInfo && (
-            <div style={{ background:'#0d1117', color:'#39ff14', fontFamily:'monospace', fontSize:11, padding:12, borderBottom:'2px solid #ff0', overflowX:'auto', maxHeight:320, overflowY:'auto', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
-              <div style={{ color:'#ff0', fontWeight:700, marginBottom:6 }}>═══ DEBUG PANEL (v7) ═══</div>
-              {debugInfo}
-            </div>
-          )}
           <div style={s.twoCol}>
 
             {/* ── Liabilities ── */}
@@ -879,10 +871,7 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
           { k:'F5',    l:'Expand All',                     a: () => setExpanded(new Set([...LIABILITY_GROUPS, ...ASSET_GROUPS])) },
           { k:'Esc',   l:'Collapse /\nBack',               a: () => { if (expanded.size > 0) setExpanded(new Set()); else onBack?.(); } },
           { k:'Alt+N', l:'Add Period',                     a: () => setShowAddPeriod(true) },
-          { k:'Alt+P', l:'Print',                          a: () => window.print() },
-          { k:'Alt+E', l:'Export Excel',                   a: handleExport },
           { k:'P&L',   l: showNettProfit ? 'Hide P&L\nBalance' : 'Show P&L\nBalance', a: () => setShowNettProfit(p => !p) },
-          { k:'DBG',   l: showDebug ? 'Hide\nDebug' : 'Show\nDebug',                  a: () => setShowDebug(p => !p) },
           { k:'✕ Clr', l:'Clear Periods',                 a: () => setExtraPeriods([]) },
           { k:'F12',   l:'Configure',                      a: () => {} },
         ].map((b, i) => (
