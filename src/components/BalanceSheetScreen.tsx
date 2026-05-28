@@ -106,14 +106,14 @@ const rs: Record<string, React.CSSProperties> = {
 };
 
 const s: Record<string, React.CSSProperties> = {
-  root:        { fontFamily:FONT_, fontSize:12, color:'#1a1a1a', background:'#fff', display:'flex', flexDirection:'column', height:'100%', border:`1px solid ${BORDER}`, borderRadius:2, overflow:'hidden', position:'relative', outline:'none' },
+  root:        { fontFamily:FONT_, fontSize:12, color:'#1a1a1a', background:'#fff', display:'flex', flexDirection:'column', flex:1, minHeight:0, height:'100%', border:`1px solid ${BORDER}`, borderRadius:2, overflow:'hidden', position:'relative', outline:'none' },
   titleBar:    { background:HDR_BG, color:'#fff', display:'flex', alignItems:'center', padding:'3px 8px', fontSize:11, fontWeight:600, flexShrink:0 },
   backBtn:     { background:'none', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', cursor:'pointer', fontSize:10, marginRight:10, padding:'1px 5px' },
-  contentWrap: { flex:1, minHeight:0, overflowY:'auto', paddingRight:90 },
-  twoCol:      { display:'flex', minHeight:'100%', alignItems:'stretch' },
-  col:         { flex:1, display:'flex', flexDirection:'column', minWidth:0, minHeight:0 },
+  contentWrap: { flex:1, minHeight:0, overflow:'hidden', paddingRight:90, display:'flex', flexDirection:'column' },
+  twoCol:      { display:'flex', minHeight:'100%', alignItems:'stretch', height:'100%' },
+  col:         { flex:1, display:'flex', flexDirection:'column', minWidth:0, minHeight:0, overflow:'hidden' },
   divider:     { width:2, background:BORDER, flexShrink:0 },
-  table:       { width:'100%', borderCollapse:'collapse', tableLayout:'fixed', flex:1 },
+  table:       { width:'100%', borderCollapse:'collapse', tableLayout:'fixed', flex:1, height:'100%' },
   totalRow:    { background:LIGHT, borderTop:'2px double #555', position:'sticky', bottom:0 },
   rightPanel:  { position:'absolute', top:26, right:0, bottom:24, width:88, background:DARK, display:'flex', flexDirection:'column', borderLeft:'1px solid #0d1a2a' },
   sideBtn:     { border:'none', borderBottom:'1px solid rgba(255,255,255,0.07)', color:'#cdd5e0', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'flex-start', padding:'6px 8px', textAlign:'left', fontFamily:FONT_, flex:1, transition:'background 0.1s' },
