@@ -253,7 +253,8 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
   const drAmt = (voucher.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
 
   // ── FIX-B: Soft-delete void — PATCH voided:true only. No DELETE fallback.
-  const handleVoid = async () => {
+  const handleVoid = useCallback(async () => {
+    if (voiding) return;
     setVoiding(true); setVoidErr('');
     try {
       const qs = branchId ? `?branchId=${branchId}` : '';
@@ -287,7 +288,19 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
     } finally {
       setVoiding(false);
     }
-  };
+  }, [voucher.id, branchId, onVoid, voiding]);
+
+  useEffect(() => {
+    const h = (e) => {
+      if (e.altKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        if (!voidConfirm) setVoidConfirm(true);
+        else handleVoid();
+      }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [voidConfirm, handleVoid]);
 
   const isVoided = !!(voucher.voided || voucher.voided === 1);
 
@@ -356,7 +369,7 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
           </button>
           <button onClick={() => { setVoidErr(''); setVoidConfirm(true); }}
             style={{ background: 'none', border: '1px solid #f5a0a0', borderRadius: 2, padding: '5px 14px', fontSize: 12, fontWeight: 700, fontFamily: FONT, cursor: 'pointer', color: '#c00' }}>
-            Void
+            Void (Alt+D)
           </button>
         </div>
       )}
@@ -506,6 +519,15 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
       if (e.key === 'F5') { fetchData(); return; }
       if (e.altKey && e.key.toLowerCase() === 'p') { window.print(); return; }
       if (e.altKey && e.key.toLowerCase() === 'e') { handleExport(); return; }
+      if (e.altKey && e.key.toLowerCase() === 'd' && selectedVoucher && !isEditing) {
+        e.preventDefault();
+        // If panel is already open, the panel's own listener will handle it.
+        // If not, we open the panel and let it handle the shortcut.
+        if (!panelFocused) {
+          setPanelFocused(true);
+        }
+        return; 
+      }
 
       if (!inInput && !showPeriod && !isEditing) {
         if (e.key === 'ArrowDown') {
@@ -604,6 +626,8 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
         .db-row.voided-row { opacity: 0.55; }
         .db-row.voided-row td { text-decoration: line-through; color: #999 !important; }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes zoomIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         .db-row { outline: none; }
         .void-filter-btn { border: 1px solid ${BORDER}; background: #eef2f7; color: #555; font-family: ${FONT}; font-size: 10px; font-weight: 600; padding: 2px 9px; cursor: pointer; transition: background 0.1s; }
         .void-filter-btn:first-child { border-radius: 2px 0 0 2px; }
@@ -646,6 +670,25 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
           content: '';
           display: table-row;
           height: 100%;
+        }
+        .modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.4);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          animation: fadeIn 0.2s ease-out;
+        }
+        .modal-content {
+          background: #fff;
+          border: 4px solid ${HEADER_BG};
+          box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+          width: 800px;
+          max-height: 90vh;
+          overflow: hidden;
+          animation: zoomIn 0.2s ease-out;
         }
       `}</style>
 
@@ -703,6 +746,21 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
               <button onClick={() => { setShowPeriod(false); fetchData(); }} style={s.btnYes}>Accept</button>
               <button onClick={() => setShowPeriod(false)} style={s.btnNo}>Cancel</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {isEditing && selectedVoucher && (
+        <div className="modal-overlay no-print" onClick={() => setIsEditing(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <VoucherEditForm 
+              voucher={selectedVoucher} 
+              ledgers={ledgers} 
+              branchId={branchId} 
+              onSaved={() => { setIsEditing(false); fetchData(); }} 
+              onCancel={() => setIsEditing(false)} 
+            />
           </div>
         </div>
       )}
@@ -790,9 +848,23 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
                       <td style={{ ...s.td, fontWeight: 600, color: '#1a1a1a' }}>
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                           <span style={{ color: '#1a1a1a' }}>
-                            {v.entries?.filter(e => e.type === 'Dr').map(e => e.ledger_name || ledgers.find(l => l.id === e.ledgerId)?.name).join(', ') || 
-                             v.entries?.filter(e => e.type === 'Cr').map(e => e.ledger_name || ledgers.find(l => l.id === e.ledgerId)?.name).join(', ') || 
-                             <span style={{ fontStyle: 'italic', color: '#aaa' }}>(No Ledger)</span>}
+                            {(() => {
+                              const drs = v.entries?.filter(e => e.type === 'Dr') || [];
+                              const crs = v.entries?.filter(e => e.type === 'Cr') || [];
+                              const getName = (e) => e.ledger_name || ledgers.find(l => l.id === e.ledgerId)?.name || e.ledgerId;
+                              
+                              if (drs.length === 1 && crs.length === 1) {
+                                // Simple voucher: show the "other" ledger
+                                return getName(crs[0]); 
+                              } else if (drs.length > 1 || crs.length > 1) {
+                                return '(Multiple Ledgers)';
+                              } else if (drs.length === 1) {
+                                return getName(drs[0]);
+                              } else if (crs.length === 1) {
+                                return getName(crs[0]);
+                              }
+                              return <span style={{ fontStyle: 'italic', color: '#aaa' }}>(No Ledger)</span>;
+                            })()}
                           </span>
                           {v.narration && (
                             <span style={{ fontSize: 10, color: '#666', fontStyle: 'italic', marginTop: 2 }}>
@@ -855,22 +927,22 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
             />
           </div>
         )}
-
-        {/* Edit Voucher Modal */}
-        {isEditing && selectedVoucher && (
-          <div style={s.modalOverlay} className="no-print">
-            <div style={{ ...s.modal, width: 850 }}>
-              <VoucherEditForm
-                voucher={selectedVoucher}
-                ledgers={ledgers}
-                branchId={branchId}
-                onSaved={() => { setIsEditing(false); fetchData(); setSelectedVoucher(null); }}
-                onCancel={() => setIsEditing(false)}
-              />
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Edit Voucher Modal - MOVED OUTSIDE body for better positioning */}
+      {isEditing && selectedVoucher && (
+        <div style={s.modalOverlay} className="no-print">
+          <div style={{ ...s.modal, width: 850, maxHeight: '90vh', overflowY: 'auto' }}>
+            <VoucherEditForm
+              voucher={selectedVoucher}
+              ledgers={ledgers}
+              branchId={branchId}
+              onSaved={() => { setIsEditing(false); fetchData(); setSelectedVoucher(null); }}
+              onCancel={() => setIsEditing(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Status bar */}
       <div style={s.statusBar} className="no-print">
