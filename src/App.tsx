@@ -106,6 +106,7 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showCalculator, setShowCalculator] = useState(false);
   const [calcInput, setCalcInput] = useState('');
+  const [printData, setPrintData] = useState<any>(null);
 
   // Flattened menu for keyboard navigation
   const flatMenu = GATEWAY_MENU.flatMap(s => s.items);
@@ -756,13 +757,13 @@ export default function App() {
                 {currentScreen === 'LEDGER' && <MastersDashboard branchId={selectedBranchId} />}
                 {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} onSelectLedger={(id) => { setSelectedLedgerId(id); setCurrentScreen('LEDGER_DETAIL'); }} />}
                 {currentScreen === 'CHART' && <ChartOfAccountsScreen branchId={selectedBranchId} />}
-                {currentScreen === 'BALANCE_SHEET' && <BalanceSheetScreen branchId={selectedBranchId} onBack={handleBack} />}
-                {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} onBack={handleBack} />}
-                {currentScreen === 'TRIAL_BALANCE' && <TrialBalanceScreen branchId={selectedBranchId} onBackToGateway={() => setCurrentScreen('GATEWAY')} />}
+                {currentScreen === 'BALANCE_SHEET' && <BalanceSheetScreen branchId={selectedBranchId} onBack={handleBack} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
+                {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} onBack={handleBack} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
+                {currentScreen === 'TRIAL_BALANCE' && <TrialBalanceScreen branchId={selectedBranchId} onBackToGateway={() => setCurrentScreen('GATEWAY')} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
                 {currentScreen === 'CASH_BANK_BOOK' && <CashBankBookScreen branchId={selectedBranchId} />}
                 {currentScreen === 'RATIO' && <RatioAnalysisScreen onBack={handleBack} branchId={selectedBranchId} />}
-                {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} />}
-                {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} initialDate={currentDate} onBackToGateway={() => setCurrentScreen('GATEWAY')} />}
+                {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} printData={printData} />}
+                {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} initialDate={currentDate} onBackToGateway={() => setCurrentScreen('GATEWAY')} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
                 {currentScreen === 'LEDGER_DETAIL' && <LedgerVouchersScreen branchId={selectedBranchId} ledgerId={selectedLedgerId} onBack={() => setCurrentScreen('GATEWAY')} />}
                 {currentScreen === 'HQ' && user?.role === 'HQ' && <HQDashboard onSelectBranch={(id) => { setSelectedBranchId(id); setCurrentScreen('GATEWAY'); }} />}
                 {currentScreen === 'ANALYTICS' && <AnalyticsScreen branches={branches} ledgers={allLedgers} vouchers={allVouchers} />}
