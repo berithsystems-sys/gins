@@ -71,11 +71,11 @@ export default function CompanyScreen({ branchId }: { branchId?: string }) {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Financial Year Begin</label>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Financial year beginning from</label>
               <div className="font-black border-b border-gray-100 py-1 uppercase">{formatDate(displayData.fy_start)}</div>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Books Beginning From</label>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Books beginning from</label>
               <div className="font-black border-b border-gray-100 py-1 uppercase">{formatDate(displayData.books_start)}</div>
             </div>
             <div>
