@@ -16,7 +16,7 @@ async function startServer() {
   console.log("Starting server process...");
   
   const app = express();
-  const PORT = Number(process.env.PORT) || 5000;
+  const PORT = 3000;
   const HOST = '0.0.0.0';
 
   console.log(`Port Config: ${PORT} (from env.PORT: ${process.env.PORT})`);
@@ -28,13 +28,21 @@ async function startServer() {
     console.log("Starting DB connection test...");
     try {
       await db.raw('SELECT 1 as connected');
+      
+      const tablesResult = await db.raw("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ?", [(db.client.config.connection as any).database]);
+      const tables = tablesResult[0].map((t: any) => t.TABLE_NAME);
+      
       const userCount = await db('users').count('* as count').first();
+
       res.json({
         status: "success",
-        message: "Database connected successfully!",
+        message: "Connected to Hostinger successfully!",
         config: {
-          client: db.client.config.client,
+          host: (db.client.config.connection as any).host,
+          database: (db.client.config.connection as any).database,
+          user: (db.client.config.connection as any).user
         },
+        tables: tables,
         users_in_db: userCount?.count || 0
       });
     } catch (err: any) {
@@ -43,6 +51,8 @@ async function startServer() {
         status: "error",
         message: err.message,
         code: err.code,
+        hint: "If this is a timeout or access denied, make sure you added your IP to 'Remote MySQL' in Hostinger hPanel.",
+        your_ip_hint: "Check 'what is my ip' on Google and add it to Hostinger."
       });
     }
   });
@@ -850,49 +860,6 @@ async function startServer() {
       res.json(rows);
     } catch (err: any) {
       res.status(500).json({ error: 'Failed to fetch ledger vouchers', details: err.message });
-    }
-  });
-
-  // Ledger statement with contra account names (for Cash/Bank Book drill-down)
-  app.get('/api/ledger-statement/:ledgerId', async (req, res) => {
-    const { ledgerId } = req.params;
-    const { branchId } = req.query as any;
-
-    try {
-      const ledger = await db('ledgers').where({ id: ledgerId }).first();
-      if (!ledger) return res.status(404).json({ error: 'Ledger not found' });
-
-      const branchClause = branchId ? `AND v.branchId = '${branchId}'` : '';
-      const rows = await db.raw(`
-        SELECT
-          v.id,
-          v.date,
-          v.type   AS voucher_type,
-          v.number AS voucher_number,
-          v.narration,
-          ve.amount AS entry_amount,
-          ve.type   AS entry_type,
-          GROUP_CONCAT(DISTINCT l2.name) AS contra_names
-        FROM vouchers v
-        JOIN voucher_entries ve ON v.id = ve.voucherId AND ve.ledgerId = ?
-        LEFT JOIN voucher_entries ve2 ON v.id = ve2.voucherId AND ve2.ledgerId != ?
-        LEFT JOIN ledgers l2 ON ve2.ledgerId = l2.id
-        WHERE (v.voided IS NULL OR v.voided = 0 OR v.voided = '0') ${branchClause}
-        GROUP BY v.id, ve.id
-        ORDER BY v.date ASC, v.createdAt ASC
-      `, [ledgerId, ledgerId]);
-
-      res.json({
-        ledger: {
-          id: ledger.id,
-          name: ledger.name,
-          openingBalance: Number(ledger.openingBalance || 0),
-          balanceType: ledger.balanceType || 'Dr',
-        },
-        transactions: rows,
-      });
-    } catch (err: any) {
-      res.status(500).json({ error: 'Failed to fetch ledger statement', details: err.message });
     }
   });
 
