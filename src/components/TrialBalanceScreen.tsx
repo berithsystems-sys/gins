@@ -414,24 +414,21 @@ export default function TrialBalanceScreen({ branchId, onBackToGateway, onPrint 
   useEffect(() => {
     const handleKeys = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
         e.stopImmediatePropagation();
         if (viewLevel === 'voucher_detail') {
-          e.preventDefault();
           setViewLevel('vouchers');
           return;
         }
         if (viewLevel === 'vouchers') {
-          e.preventDefault();
           setViewLevel('monthly');
           return;
         }
         if (viewLevel === 'monthly') {
-          e.preventDefault();
           setViewLevel('trial');
           return;
         }
         if (viewLevel === 'trial') {
-          e.preventDefault();
           if (onBackToGateway) onBackToGateway();
           return;
         }
