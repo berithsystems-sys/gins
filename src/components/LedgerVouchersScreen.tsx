@@ -71,39 +71,48 @@ export default function LedgerVouchersScreen({ branchId, ledgerId, onBack }: Led
             <p className="text-[10px]">1-Apr-26 to 31-Mar-27</p>
           </div>
 
-          <table className="w-full text-xs">
-            <thead className="bg-tally-light border-b border-tally-teal">
+          <table className="w-full text-xs table-fixed border-collapse">
+            <thead className="bg-tally-light border-b border-tally-teal sticky top-0 z-10">
               <tr className="font-bold uppercase text-[10px]">
-                <th className="px-4 py-1 text-left w-24">Date</th>
-                <th className="px-4 py-1 text-left">Particulars</th>
-                <th className="px-4 py-1 text-left w-24">Vch Type</th>
-                <th className="px-4 py-1 text-center w-20">Vch No.</th>
-                <th className="px-4 py-1 text-right w-32">Debit</th>
+                <th className="px-4 py-1 text-left w-24 border-r border-gray-200">Date</th>
+                <th className="px-4 py-1 text-left border-r border-gray-200">Particulars</th>
+                <th className="px-4 py-1 text-left w-24 border-r border-gray-200">Vch Type</th>
+                <th className="px-4 py-1 text-center w-20 border-r border-gray-200">Vch No.</th>
+                <th className="px-4 py-1 text-right w-32 border-r border-gray-200">Debit</th>
                 <th className="px-4 py-1 text-right w-32">Credit</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-gray-100">
               {/* Opening Balance */}
               <tr className="bg-gray-50 italic">
-                <td className="px-4 py-1">1-Apr-26</td>
-                <td className="px-4 py-1 font-bold">Opening Balance</td>
-                <td colSpan={2}></td>
-                <td className="px-4 py-1 text-right">{openingType === 'Dr' ? openingBal.toLocaleString() : ''}</td>
+                <td className="px-4 py-1 border-r border-gray-100">1-Apr-26</td>
+                <td className="px-4 py-1 font-bold border-r border-gray-100">Opening Balance</td>
+                <td colSpan={2} className="border-r border-gray-100"></td>
+                <td className="px-4 py-1 text-right border-r border-gray-100">{openingType === 'Dr' ? openingBal.toLocaleString() : ''}</td>
                 <td className="px-4 py-1 text-right">{openingType === 'Cr' ? openingBal.toLocaleString() : ''}</td>
               </tr>
 
               {loading ? (
                 <tr><td colSpan={6} className="p-8 text-center italic text-gray-400">Loading vouchers...</td></tr>
               ) : reportData.map((row, idx) => (
-                <tr key={row.id} className="hover:bg-tally-accent cursor-pointer border-b border-gray-50">
-                  <td className="px-4 py-1">{format(new Date(row.date), 'dd-MMM-yy')}</td>
-                  <td className="px-4 py-1 font-bold">
-                    {row.entries.find((e: any) => e.ledgerId !== ledgerId)?.ledger_name || row.narration || '(Multiple Ledgers)'}
+                <tr key={row.id} className="hover:bg-tally-accent cursor-pointer">
+                  <td className="px-4 py-2 border-r border-gray-100 align-top whitespace-normal">{format(new Date(row.date), 'dd-MMM-yy')}</td>
+                  <td className="px-4 py-2 border-r border-gray-100 align-top whitespace-normal">
+                    <div className="flex flex-col">
+                      <span className="font-bold">
+                        {row.entries.find((e: any) => e.ledgerId !== ledgerId)?.ledger_name || '(Multiple Ledgers)'}
+                      </span>
+                      {row.narration && (
+                        <span className="text-[10px] text-gray-500 italic mt-1 leading-tight">
+                          {row.narration}
+                        </span>
+                      )}
+                    </div>
                   </td>
-                  <td className="px-4 py-1 italic">{row.type}</td>
-                  <td className="px-4 py-1 text-center">{row.number || idx + 1}</td>
-                  <td className="px-4 py-1 text-right">{row.entry.type === 'Dr' ? row.entry.amount.toLocaleString() : ''}</td>
-                  <td className="px-4 py-1 text-right">{row.entry.type === 'Cr' ? row.entry.amount.toLocaleString() : ''}</td>
+                  <td className="px-4 py-2 italic border-r border-gray-100 align-top whitespace-normal">{row.type}</td>
+                  <td className="px-4 py-2 text-center border-r border-gray-100 align-top whitespace-normal">{row.number || idx + 1}</td>
+                  <td className="px-4 py-2 text-right border-r border-gray-100 align-top whitespace-normal">{row.entry.type === 'Dr' ? row.entry.amount.toLocaleString() : ''}</td>
+                  <td className="px-4 py-2 text-right align-top whitespace-normal">{row.entry.type === 'Cr' ? row.entry.amount.toLocaleString() : ''}</td>
                 </tr>
               ))}
             </tbody>
