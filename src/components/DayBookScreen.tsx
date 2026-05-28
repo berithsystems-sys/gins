@@ -941,8 +941,8 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
 
       {/* Edit Voucher Modal - MOVED OUTSIDE body for better positioning */}
       {isEditing && selectedVoucher && (
-        <div style={s.modalOverlay} className="no-print">
-          <div style={{ ...s.modal, width: 850, maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="modal-overlay no-print">
+          <div className="modal-content">
             <VoucherEditForm
               voucher={selectedVoucher}
               ledgers={ledgers}
