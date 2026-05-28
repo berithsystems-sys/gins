@@ -72,7 +72,7 @@ interface Ledger {
   _rawGroup?: string;      // DEBUG: original group value from API
 }
 interface Period  { label: string; from: string; to: string; }
-interface BSProps  { branchId?: string; onBack?: () => void; }
+interface BSProps  { branchId?: string; onBack?: () => void; onPrint?: (data: any) => void; }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const fmtAmtAbs = (n: number) =>
@@ -397,8 +397,8 @@ function AddPeriodModal({ onAdd, onCancel }: {
 }
 
 // ── Main BalanceSheetScreen ──────────────────────────────────────────────────
-function BalanceSheetScreen({ branchId, onBack }: BSProps) {
-  const [ledgers, setLedgers]             = useState<Ledger[]>([]);
+export default function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
+  const [ledgers, setLedgers]               = useState<Ledger[]>([]);
   const [allVouchers, setAllVouchers]     = useState<any[]>([]);
   const [allEntries, setAllEntries]       = useState<any[]>([]);
   const [companyName, setCompanyName]     = useState('');
