@@ -294,6 +294,16 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  app.put("/api/branches/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+      await db('branches').where({ id }).update(req.body);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to update branch", details: err.message });
+    }
+  });
+
   app.put("/api/branches/:id/reset-password", async (req, res) => {
     const { password } = req.body;
     await db('users').where({ branchId: req.params.id }).update({ password });
