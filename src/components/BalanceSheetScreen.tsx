@@ -953,7 +953,7 @@ export default function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProp
 }
 
 // ── Exported with error boundary wrapper ─────────────────────────────────────
-export default function BalanceSheetScreenSafe(props: BSProps) {
+function BalanceSheetScreenSafe(props: BSProps) {
   return (
     <ErrorBoundary>
       <BalanceSheetScreen {...props} />
@@ -961,4 +961,5 @@ export default function BalanceSheetScreenSafe(props: BSProps) {
   );
 }
 
+export default BalanceSheetScreenSafe;
 export { BalanceSheetScreen };
