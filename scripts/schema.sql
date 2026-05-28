@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS `branches` (
   `password` varchar(100),
   `gstin` varchar(50),
   `registrationType` varchar(50),
+  `fy_start` varchar(255) DEFAULT '2026-04-01',
+  `books_start` varchar(255) DEFAULT '2026-04-01',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -64,6 +66,7 @@ CREATE TABLE IF NOT EXISTS `ledgers` (
   `email` varchar(100),
   `pan` varchar(20),
   `branchId` varchar(50),
+  `methodAdjustment` varchar(50) DEFAULT 'On Account',
   PRIMARY KEY (`id`),
   FOREIGN KEY (`branchId`) REFERENCES `branches`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -80,6 +83,8 @@ CREATE TABLE IF NOT EXISTS `vouchers` (
   `cgst` float DEFAULT 0,
   `sgst` float DEFAULT 0,
   `branchId` varchar(50),
+  `voided` tinyint(1) NOT NULL DEFAULT 0,
+  `voidedAt` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   FOREIGN KEY (`branchId`) REFERENCES `branches`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -91,6 +96,8 @@ CREATE TABLE IF NOT EXISTS `voucher_entries` (
   `costCentreId` varchar(50),
   `amount` float NOT NULL,
   `type` varchar(5) NOT NULL,
+  `methodAdjustment` varchar(255) DEFAULT 'On Account',
+  `refNo` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   FOREIGN KEY (`voucherId`) REFERENCES `vouchers`(`id`) ON DELETE CASCADE,
   FOREIGN KEY (`ledgerId`) REFERENCES `ledgers`(`id`),
