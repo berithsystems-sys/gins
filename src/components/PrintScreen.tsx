@@ -33,16 +33,14 @@ export default function PrintScreen({ onBack, currentScreen, printData }: { onBa
     await new Promise(resolve => setTimeout(resolve, 500));
     
     const printContent = printData ? generateTallyPrintHTML(printData) : generateDummyPrintContent();
-    const printWindow = window.open('', '', 'width=800,height=600');
+    const printWindow = window.open('', '_blank', 'width=850,height=650');
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
-      // Wait for resources to load if any
-      printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.focus();
         printWindow.print();
-        // Close after print dialog is handled
-        setTimeout(() => printWindow.close(), 100);
-      };
+      }, 400);
     }
     
     setIsPrinting(false);
