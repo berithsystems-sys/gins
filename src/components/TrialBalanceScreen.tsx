@@ -444,6 +444,12 @@ export default function TrialBalanceScreen({ branchId, onBackToGateway, onPrint 
         return;
       }
 
+      if (e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        handlePrint();
+        return;
+      }
+
       if (e.key === 'ArrowDown') { e.preventDefault(); const n = flatList[Math.min(flatList.length - 1, idx + 1)]; if (n) setSelectedKey(n.key); }
       if (e.key === 'ArrowUp')   { e.preventDefault(); const p = flatList[Math.max(0, idx - 1)];                  if (p) setSelectedKey(p.key); }
       if (e.key === 'Enter') {
@@ -460,6 +466,70 @@ export default function TrialBalanceScreen({ branchId, onBackToGateway, onPrint 
     window.addEventListener('keydown', handleKeys, { capture: true });
     return () => window.removeEventListener('keydown', handleKeys, { capture: true });
   }, [selectedKey, flatList, expandedGroups, viewLevel, isDetailed, onBackToGateway]);
+
+  const handlePrint = () => {
+    const fmt = (n: number) => n === 0 ? '' : Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+    const now = new Date().toLocaleString('en-IN');
+
+    const groupRows = sortedGroups.map(grp => {
+      const g = groupsData[grp];
+      const ledgerSubRows = (isDetailed || expandedGroups.has(grp))
+        ? g.ledgers.map(l => {
+            const b = ledgerBalances[l.id];
+            if (b === 0) return '';
+            return `<tr style="background:#fff">
+              <td style="padding:2px 8px 2px 24px;font-size:11px;border-bottom:1px solid #eee;color:#444">${l.name}</td>
+              <td style="padding:2px 10px;text-align:right;font-size:11px;border-bottom:1px solid #eee;color:#444">${b > 0 ? fmt(b) : ''}</td>
+              <td style="padding:2px 10px;text-align:right;font-size:11px;border-bottom:1px solid #eee;color:#444">${b < 0 ? fmt(b) : ''}</td>
+            </tr>`;
+          }).join('')
+        : '';
+      return `
+        <tr style="background:#f2f6fa">
+          <td style="padding:4px 10px;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${grp}</td>
+          <td style="padding:4px 10px;text-align:right;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${fmt(g.dr)}</td>
+          <td style="padding:4px 10px;text-align:right;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${fmt(g.cr)}</td>
+        </tr>${ledgerSubRows}`;
+    }).join('');
+
+    const html = `<!DOCTYPE html><html><head>
+      <title>Trial Balance</title><meta charset="utf-8"/>
+      <style>
+        @page { margin: 12mm; size: A4 portrait; }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 12px; }
+        .hdr { background: #1f4e79; color: #fff; text-align: center; padding: 8px 12px; }
+        .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+        .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; letter-spacing: 0.5px; }
+        table { width: 100%; border-collapse: collapse; }
+        .col-hdr { background: #2c5f8a; color: #fff; text-align: center; font-size: 10px; font-weight: 800; padding: 4px 10px; letter-spacing: 2px; }
+        .total td { border-top: 2px solid #1f4e79; border-bottom: 2px solid #1f4e79; font-weight: 900; font-size: 13px; background: #e8f0f8; padding: 5px 10px; }
+        .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
+      </style>
+    </head><body>
+      <div class="hdr">
+        <h1>${(ledgers[0] as any)?.company_name || 'Company'}</h1>
+        <div class="sub">TRIAL BALANCE${isDetailed ? ' — DETAILED' : ''}</div>
+      </div>
+      <table>
+        <tr>
+          <th class="col-hdr" style="text-align:left;width:60%">PARTICULARS</th>
+          <th class="col-hdr" style="width:20%">DEBIT</th>
+          <th class="col-hdr" style="width:20%">CREDIT</th>
+        </tr>
+        ${groupRows}
+        <tr class="total">
+          <td>Grand Total</td>
+          <td style="text-align:right">${fmt(grandTotals.dr)}</td>
+          <td style="text-align:right">${fmt(grandTotals.cr)}</td>
+        </tr>
+      </table>
+      <div class="footer">Printed on ${now}</div>
+    </body></html>`;
+
+    const win = window.open('', '_blank', 'width=800,height=650');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+  };
 
   const handleExport = () => {
     const exportData = sortedGroups.flatMap(grp => {
@@ -511,6 +581,7 @@ export default function TrialBalanceScreen({ branchId, onBackToGateway, onPrint 
           <button onClick={() => setIsDetailed(!isDetailed)} style={ds.backBtn}>
             {isDetailed ? 'Condensed' : 'Detailed'} (Alt+F1)
           </button>
+          <button onClick={handlePrint} style={ds.backBtn}>Print (Alt+P)</button>
           <button onClick={handleExport} style={ds.backBtn}>Export (Alt+E)</button>
         </div>
       </div>
