@@ -492,6 +492,20 @@ async function startServer() {
     res.json(vouchersWithEntries);
   });
 
+  app.get("/api/voucher-entries", async (req, res) => {
+    const { branchId } = req.query;
+    let query = db('voucher_entries')
+      .join('vouchers', 'voucher_entries.voucherId', '=', 'vouchers.id')
+      .select('voucher_entries.*', 'vouchers.date');
+    
+    if (branchId) {
+      query = query.where('vouchers.branchId', branchId);
+    }
+    
+    const entries = await query;
+    res.json(entries);
+  });
+
   app.post("/api/vouchers", async (req, res) => {
     try {
       const { entries, userId, username, ...voucherData } = req.body;
