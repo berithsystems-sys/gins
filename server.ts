@@ -526,6 +526,9 @@ async function startServer() {
         .where(function () {
           if (branchId) this.where('vouchers.branchId', branchId);
         })
+        .where(function () {
+          this.where('vouchers.voided', 0).orWhereNull('vouchers.voided');
+        })
         .select('voucher_entries.amount', 'voucher_entries.type');
 
       for (const e of entries) {
