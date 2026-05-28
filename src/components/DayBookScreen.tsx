@@ -631,13 +631,12 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
           /* background extends behind the sticky tfoot even when rows are few */
         }
         .db-table-wrap {
-          min-height: 100%;
+          height: auto;
           display: flex;
           flex-direction: column;
           background: #fff;
         }
         .db-table-wrap table {
-          flex: 1;
           border-collapse: collapse;
           width: 100%;
           table-layout: fixed;
