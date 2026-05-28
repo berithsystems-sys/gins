@@ -294,12 +294,13 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
     const h = (e) => {
       if (e.altKey && e.key.toLowerCase() === 'd') {
         e.preventDefault();
+        e.stopImmediatePropagation();
         if (!voidConfirm) setVoidConfirm(true);
         else handleVoid();
       }
     };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
+    window.addEventListener('keydown', h, { capture: true });
+    return () => window.removeEventListener('keydown', h, { capture: true });
   }, [voidConfirm, handleVoid]);
 
   const isVoided = !!(voucher.voided || voucher.voided === 1);
@@ -425,7 +426,7 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Day Book Screen
 // ─────────────────────────────────────────────────────────────────────────────
-export default function DayBookScreen({ branchId, initialDate, fromDate: propFrom, toDate: propTo, user }) {
+export default function DayBookScreen({ branchId, initialDate, fromDate: propFrom, toDate: propTo, user, onBackToGateway }) {
   const today = new Date().toISOString().slice(0, 10);
   const [vouchers, setVouchers]               = useState([]);
   const [ledgers, setLedgers]                 = useState([]);
@@ -521,6 +522,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
       if (e.altKey && e.key.toLowerCase() === 'e') { handleExport(); return; }
       if (e.altKey && e.key.toLowerCase() === 'd' && selectedVoucher && !isEditing) {
         e.preventDefault();
+        e.stopImmediatePropagation();
         // If panel is already open, the panel's own listener will handle it.
         // If not, we open the panel and let it handle the shortcut.
         if (!panelFocused) {
@@ -568,15 +570,20 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
       }
 
       if (e.key === 'Escape') {
+        e.stopImmediatePropagation();
         if (isEditing) { setIsEditing(false); return; }
         if (panelFocused) { setPanelFocused(false); tableBodyRef.current?.querySelector(`[data-row-idx="${focusedIdx}"]`)?.focus(); return; }
         if (selectedVoucher) { setSelectedVoucher(null); setPanelFocused(false); return; }
         if (showPeriod) { setShowPeriod(false); return; }
+        
+        // If nothing else is open, go back to Gateway
+        if (onBackToGateway) onBackToGateway();
+        return;
       }
     };
     window.addEventListener('keydown', h, { capture: true });
     return () => window.removeEventListener('keydown', h, { capture: true });
-  }, [displayedVouchers, selectedVoucher, focusedIdx, fetchData, showPeriod, panelFocused]);
+  }, [displayedVouchers, selectedVoucher, focusedIdx, fetchData, showPeriod, panelFocused, isEditing, onBackToGateway]);
 
   const handleExport = () => {
     const rows = [
@@ -746,21 +753,6 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
               <button onClick={() => { setShowPeriod(false); fetchData(); }} style={s.btnYes}>Accept</button>
               <button onClick={() => setShowPeriod(false)} style={s.btnNo}>Cancel</button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Modal */}
-      {isEditing && selectedVoucher && (
-        <div className="modal-overlay no-print" onClick={() => setIsEditing(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <VoucherEditForm 
-              voucher={selectedVoucher} 
-              ledgers={ledgers} 
-              branchId={branchId} 
-              onSaved={() => { setIsEditing(false); fetchData(); }} 
-              onCancel={() => setIsEditing(false)} 
-            />
           </div>
         </div>
       )}
@@ -1006,8 +998,8 @@ const s = {
     flexShrink: 0, height: 24,   // always pinned to bottom, never squeezed
   },
   modalOverlay: {
-    position: 'fixed', inset: 0, zIndex: 300, display: 'flex',
-    alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)',
+    position: 'fixed', inset: 0, zIndex: 1000, display: 'flex',
+    alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)',
   },
   modal: {
     background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 2,
