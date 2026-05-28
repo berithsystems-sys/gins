@@ -31,6 +31,34 @@ const ASSET_GROUPS = [
 ];
 const ALL_GROUPS = [...LIABILITY_GROUPS, ...ASSET_GROUPS];
 
+// ── Group Mapping Helper ─────────────────────────────────────────────────────
+const mapToPrimaryGroup = (groupName: string): string => {
+  const g = groupName.toLowerCase();
+  
+  // Liabilities
+  if (g.includes('capital') || g.includes('equity')) return 'Capital Account';
+  if (g.includes('reserve') || g.includes('surplus') || g.includes('retained earnings')) return 'Reserves & Surplus';
+  if (g.includes('loan') && (g.includes('liab') || g.includes('secured') || g.includes('unsecured'))) return 'Loans (Liability)';
+  if (g.includes('creditor') || g.includes('current liab') || g.includes('duty') || g.includes('tax') || g.includes('provision') || g.includes('payable') || g.includes('bank od')) return 'Current Liabilities';
+  if (g.includes('suspense')) return 'Suspense Account';
+  
+  // Assets
+  if (g.includes('fixed asset') || g.includes('property') || g.includes('plant') || g.includes('equipment')) return 'Fixed Assets';
+  if (g.includes('investment')) return 'Investments';
+  if (g.includes('bank account') || g.includes('cash') || g.includes('debtor') || g.includes('current asset') || g.includes('stock') || g.includes('inventory') || g.includes('receivable') || g.includes('deposit')) return 'Current Assets';
+  if (g.includes('misc') && g.includes('asset')) return 'Misc. Expenses (Asset)';
+
+  // P&L
+  if (g.includes('sales')) return 'Sales Account';
+  if (g.includes('purchase')) return 'Purchase Account';
+  if (g.includes('direct inc')) return 'Direct Income';
+  if (g.includes('indirect inc')) return 'Indirect Income';
+  if (g.includes('direct exp')) return 'Direct Expenses';
+  if (g.includes('indirect exp')) return 'Indirect Expenses';
+  
+  return groupName; // Return original if no match
+};
+
 const PL_INCOME_GROUPS  = ['Sales Account','Direct Income','Indirect Income','Closing Stock'];
 const PL_EXPENSE_GROUPS = ['Opening Stock','Purchase Account','Direct Expenses','Indirect Expenses'];
 
@@ -38,7 +66,7 @@ const PL_EXPENSE_GROUPS = ['Opening Stock','Purchase Account','Direct Expenses',
 interface Ledger {
   id: string;
   name: string;
-  group: string;           // normalized on load (always a non-empty string)
+  group: string;           // normalized and MAPPED to primary (always a non-empty string)
   openingBalance?: number;
   balanceType?: 'Dr' | 'Cr';
   _rawGroup?: string;      // DEBUG: original group value from API
@@ -87,10 +115,13 @@ const normalizeLedger = (raw: any, groupIdMap: Record<string, string> = {}): Led
     group = '[Unknown Group]';
   }
 
+  // MAPPING: Convert specific sub-groups to primary BS/PL categories
+  const mappedGroup = mapToPrimaryGroup(group);
+
   return {
     ...raw,
-    group,
-    _rawGroup: raw.group || raw.group_name || raw.groupName || '(no source)',
+    group: mappedGroup,
+    _rawGroup: group,
   };
 };
 
@@ -479,13 +510,27 @@ function BalanceSheetScreen({ branchId, onBack }: BSProps) {
   const calcBalanceForPeriod = useCallback((ledgerId: string, from: string, to: string): number => {
     const ledger = ledgers.find(l => l.id === ledgerId);
     if (!ledger) return 0;
+
+    const g = ledger.group;
+    const isPL = PL_INCOME_GROUPS.includes(g) || PL_EXPENSE_GROUPS.includes(g);
+
     const ob     = Number(ledger.openingBalance || 0);
     let running  = ledger.balanceType === 'Cr' ? -ob : ob;
+
     allEntries.forEach((e: any) => {
       if (e.ledgerId !== ledgerId) return;
       const eDate = e._date || '';
-      if (from && eDate < from) return;
-      if (to   && eDate > to)   return;
+
+      if (isPL) {
+        // P&L items are period-specific (e.g. Sales during May)
+        if (from && eDate < from) return;
+      } else {
+        // Balance Sheet items are cumulative (e.g. Cash balance as of May 31)
+        // We include everything from day 1 up to 'to' date.
+        // We do NOT filter by 'from' date here.
+      }
+
+      if (to && eDate > to) return;
       running += e.type === 'Dr' ? Number(e.amount || 0) : -Number(e.amount || 0);
     });
     return running;
