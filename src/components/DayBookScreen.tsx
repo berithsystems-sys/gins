@@ -506,7 +506,9 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
 
   useEffect(() => {
     if (panelFocused && selectedVoucher) {
-      editBtnRef.current?.focus() || panelRef.current?.focus();
+      setTimeout(() => {
+        editBtnRef.current?.focus() || panelRef.current?.focus();
+      }, 0);
     }
   }, [panelFocused, selectedVoucher]);
 
@@ -829,6 +831,8 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
           border: 4px solid ${HEADER_BG};
           box-shadow: 0 10px 25px rgba(0,0,0,0.2);
           width: 800px;
+          max-width: 95vw;
+          min-height: 50vh;
           max-height: 90vh;
           overflow: hidden;
           animation: zoomIn 0.2s ease-out;
