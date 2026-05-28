@@ -75,7 +75,18 @@ function VoucherRegister({ ledger, monthIdx, branchId, onBack }: any) {
             {vouchers.map((v, i) => (
               <tr key={i} style={{ ...ds.tr, background: selIdx === i ? YELLOW : 'transparent' }}>
                 <td style={ds.td}>{fmtDate(v.date)}</td>
-                <td style={ds.td}>{v.narration || v.type}</td>
+                <td style={ds.td}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontWeight: 600 }}>
+                      {v.other_ledger_name || 'Multiple Ledgers'}
+                    </span>
+                    {v.narration && (
+                      <span style={{ fontSize: 10, color: '#666', fontStyle: 'italic', marginTop: 2 }}>
+                        {v.narration}
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td style={{ ...ds.td, textAlign: 'right', color: '#7a0000' }}>{v.entry_type === 'Dr' ? fmtAmt(v.entry_amount) : ''}</td>
                 <td style={{ ...ds.td, textAlign: 'right', color: '#006b00' }}>{v.entry_type === 'Cr' ? fmtAmt(v.entry_amount) : ''}</td>
               </tr>
@@ -314,8 +325,8 @@ const ds: Record<string, React.CSSProperties> = {
   tableWrap:{ flex: 1, overflowY: 'auto', position: 'relative' },
   table:    { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' },
   thead:    { background: LIGHT, position: 'sticky', top: 0, zIndex: 10 },
-  th:       { padding: '8px', borderBottom: `1px solid ${BORDER}`, textAlign: 'left', fontSize: 11, borderRight: `1px solid ${ROW_BDR}` },
-  td:       { padding: '4px 8px', borderBottom: `1px solid ${ROW_BDR}`, fontSize: 12, borderRight: `1px solid ${ROW_BDR}`, whiteSpace: 'nowrap' },
+  th:       { padding: '8px', borderBottom: `1px solid ${BORDER}`, textAlign: 'left', fontSize: 11, borderRight: `1px solid ${ROW_BDR}`, wordWrap: 'break-word', overflowWrap: 'break-word', whiteSpace: 'normal' },
+  td:       { padding: '4px 8px', borderBottom: `1px solid ${ROW_BDR}`, fontSize: 12, borderRight: `1px solid ${ROW_BDR}`, wordWrap: 'break-word', overflowWrap: 'break-word', whiteSpace: 'normal', verticalAlign: 'top' },
   tfoot:    { position: 'sticky', bottom: 0, background: '#fff', zIndex: 10 },
   tdTotal:  { padding: '6px 8px', fontWeight: 'bold', borderRight: `1px solid ${ROW_BDR}`, background: '#f9f9f9' },
   tr:       { cursor: 'pointer' },
