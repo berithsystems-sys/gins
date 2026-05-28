@@ -36,7 +36,7 @@ export default function CompanyScreen({ branchId }: { branchId?: string }) {
       <div className="border-2 border-tally-teal p-6 bg-white shadow-xl max-w-2xl mx-auto">
         <h2 className="text-xl font-bold text-tally-teal uppercase mb-6 flex items-center gap-2">
           <div className="w-1 h-6 bg-tally-teal"></div>
-          Company Information
+          Church Information
         </h2>
         
         <div className="grid grid-cols-2 gap-8 text-sm">
