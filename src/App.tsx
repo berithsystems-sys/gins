@@ -356,7 +356,7 @@ export default function App() {
   useHotkeys('h', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('CHART'); });
   useHotkeys('l', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('AUDIT'); });
   useHotkeys('d', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('DEBUG'); });
-  useHotkeys('ctrl+n', () => setShowCalculator(true));
+  useHotkeys('alt+c', () => setShowCalculator(true), { enableOnFormTags: true });
   const handleLogout = () => {
     localStorage.removeItem('tally_user');
     setUser(null);
@@ -401,8 +401,6 @@ export default function App() {
   useHotkeys('f7', (e) => { e.preventDefault(); setCurrentScreen('VOUCHER'); setVoucherType('Journal'); });
   const [showConfig, setShowConfig] = useState(false);
   useHotkeys('f12', (e) => { e.preventDefault(); setShowConfig(true); });
-  useHotkeys('alt+c', () => setCurrentScreen('LEDGER'), { enableOnFormTags: true });
-  useHotkeys('alt+a', () => alert('Alter Masters Mode Activated'));
   const [showQuit, setShowQuit] = useState(false);
 
   useHotkeys('q', () => setShowQuit(true));
@@ -875,7 +873,7 @@ export default function App() {
               className={`bg-white/10 px-2 rounded cursor-pointer ${showCalculator ? 'bg-tally-accent text-black' : ''}`}
               onClick={() => setShowCalculator(!showCalculator)}
             >
-              Ctrl+N: Calculator
+              Alt+C: Calculator
             </span>
           </div>
         </div>
