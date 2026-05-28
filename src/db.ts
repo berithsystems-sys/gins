@@ -357,14 +357,15 @@ export async function initDB() {
       console.warn("Could not check/fix foreign key constraints:", fkErr.message);
     }
 
-    // Ensure HQ branch exists for vouchers without a specific branchId
+    // Ensure a default HQ branch exists when the database is empty
+    // This avoids reintroducing a hardcoded branch name on startup.
     const hqExists = await db('branches').where({ id: 'HQ' }).first();
     if (!hqExists) {
       await db('branches').insert({
         id: 'HQ',
         code: 'HQ',
-        name: 'BERITHSYSTEMS HQ',
-        location: 'HEADQUARTERS',
+        name: 'Head Office',
+        location: 'Headquarters',
         registrationType: 'Regular'
       });
       console.log("Default HQ branch created.");
