@@ -333,6 +333,95 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
     el?.scrollIntoView({ block: 'nearest' });
   }, [focusedRowIdx]);
 
+  const toggleGroup = (name: string) => setExpanded(prev => {
+    const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n;
+  });
+
+  const handlePrint = () => {
+    const fmt = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+    const period = allPeriods[0];
+    const pt = periodTotals[0];
+    const periodStr = period?.from && period?.to
+      ? `${fmtDate(period.from)} to ${fmtDate(period.to)}`
+      : 'All Dates';
+
+    const buildGroupRows = (groups: string[]) =>
+      groups.map(grp => {
+        const total = Math.abs(groupTotalForPeriod(grp, period.from, period.to));
+        if (total === 0) return '';
+        const ledgerRows = groupLedgersNonZero(grp, mainPeriod.from, mainPeriod.to)
+          .filter(l => calcBalanceForPeriod(l.id, period.from, period.to) !== 0)
+          .map(l => {
+            const bal = Math.abs(calcBalanceForPeriod(l.id, period.from, period.to));
+            return `<tr>
+              <td style="padding:2px 8px 2px 24px;font-size:11px;border-bottom:1px solid #eee;color:#444">${l.name}</td>
+              <td style="padding:2px 10px;text-align:right;font-size:11px;border-bottom:1px solid #eee;color:#444">${fmt(bal)}</td>
+            </tr>`;
+          }).join('');
+        return `
+          <tr style="background:#f2f6fa">
+            <td style="padding:4px 10px;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${grp}</td>
+            <td style="padding:4px 10px;text-align:right;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${fmt(total)}</td>
+          </tr>${ledgerRows}`;
+      }).join('');
+
+    const nett = pt?.nett ?? 0;
+    const grand = pt?.grand ?? 0;
+
+    const html = `<!DOCTYPE html><html><head>
+      <title>Profit & Loss – ${companyName}</title>
+      <meta charset="utf-8"/>
+      <style>
+        @page { margin: 12mm; size: A4 landscape; }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 12px; }
+        .hdr { background: #1f4e79; color: #fff; text-align: center; padding: 8px 12px; }
+        .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+        .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; letter-spacing: 0.5px; }
+        .cols { display: flex; border-top: 2px solid #1f4e79; }
+        .col { flex: 1; }
+        .col:first-child { border-right: 2px solid #1f4e79; }
+        table { width: 100%; border-collapse: collapse; }
+        .col-hdr { background: #2c5f8a; color: #fff; text-align: center; font-size: 10px; font-weight: 800; padding: 4px; letter-spacing: 2px; }
+        .nett-row td { font-style: italic; background: #f0f8f0; padding: 3px 10px; font-size: 11px; border-bottom: 1px solid #eee; font-weight: 700; color: #006b00; }
+        .nett-row.loss td { background: #fff0f0; color: #7a0000; }
+        .total td { border-top: 2px solid #1f4e79; border-bottom: 2px solid #1f4e79; font-weight: 900; font-size: 13px; background: #e8f0f8; padding: 5px 10px; }
+        .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
+      </style>
+    </head><body>
+      <div class="hdr">
+        <h1>${companyName || 'Company'}</h1>
+        <div class="sub">PROFIT &amp; LOSS ACCOUNT &nbsp;·&nbsp; ${periodStr}</div>
+      </div>
+      <div class="cols">
+        <div class="col">
+          <table>
+            <tr><td colspan="2" class="col-hdr">EXPENDITURE</td></tr>
+            ${buildGroupRows(LEFT_GROUPS)}
+            ${nett >= 0 ? `<tr class="nett-row"><td>Net Profit (transferred to Balance Sheet)</td><td style="text-align:right">${fmt(nett)}</td></tr>` : ''}
+            <tr class="total"><td>Total</td><td style="text-align:right">${fmt(grand)}</td></tr>
+          </table>
+        </div>
+        <div class="col">
+          <table>
+            <tr><td colspan="2" class="col-hdr">INCOME</td></tr>
+            ${buildGroupRows(RIGHT_GROUPS)}
+            ${nett < 0 ? `<tr class="nett-row loss"><td>Net Loss (transferred to Balance Sheet)</td><td style="text-align:right">${fmt(Math.abs(nett))}</td></tr>` : ''}
+            <tr class="total"><td>Total</td><td style="text-align:right">${fmt(grand)}</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} &nbsp;|&nbsp; ${companyName}</div>
+    </body></html>`;
+
+    const win = window.open('', '_blank', 'width=960,height=700');
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      setTimeout(() => { win.focus(); win.print(); }, 400);
+    }
+  };
+
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -369,19 +458,17 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
         else if (onBack) onBack();
         handled = true;
       } else if (e.altKey && e.key.toLowerCase() === 'f') {
-        setShowPercent(p=>!p); handled = true;
+        setShowPercent(p => !p); handled = true;
       } else if (e.altKey && e.key.toLowerCase() === 'n') {
         setShowAddPeriod(true); handled = true;
+      } else if (e.altKey && e.key.toLowerCase() === 'p') {
+        handlePrint(); handled = true;
       }
       if (handled) { e.preventDefault(); e.stopPropagation(); }
     };
     window.addEventListener('keydown', h, true);
     return () => window.removeEventListener('keydown', h, true);
-  }, [drillLedger, focusedRowIdx, navigableRows, expanded, onBack]);
-
-  const toggleGroup = (name: string) => setExpanded(prev => {
-    const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n;
-  });
+  }, [drillLedger, focusedRowIdx, navigableRows, expanded, onBack, handlePrint]);
 
   const periodLabel = (p: {from:string;to:string}) =>
     p.from && p.to ? `${fmtDate(p.from)} to ${fmtDate(p.to)}` : '—';
@@ -562,6 +649,7 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
           { k:'Alt+N', l:'Add Period',    a:()=>setShowAddPeriod(true) },
           { k:'Alt+F', l:'Percentages',   a:()=>setShowPercent(p=>!p) },
           { k:'✕ Clr', l:'Clear Periods', a:()=>setExtraPeriods([]) },
+          { k:'Alt+P', l:'Print',          a: handlePrint },
         ].map((b,i) => (
           <button key={i} onClick={b.a} style={s.sideBtn}>
             <span style={s.sBtnKey}>{b.k}</span>
