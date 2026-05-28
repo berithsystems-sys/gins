@@ -4,6 +4,10 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { db, initDB } from "./src/db.ts";
 import { REQUIRED_ACCOUNT_GROUPS } from "./src/lib/accountGroups.ts";
+import {
+  computeLedgerBalances,
+  sumCashBankClosingBalance,
+} from "./src/lib/ledgerBalance.ts";
 
 async function ensureStandardAccountGroups(branchId: string) {
   const existing = await db('account_groups').where({ branchId }).select('name');
@@ -304,9 +308,70 @@ async function startServer() {
   });
 
   app.delete("/api/branches/:id", async (req, res) => {
-    await db('branches').where({ id: req.params.id }).delete();
-    await db('users').where({ branchId: req.params.id }).delete();
-    res.json({ success: true });
+    const { id } = req.params;
+    const existing = await db('branches').where({ id }).first();
+    if (!existing) {
+      return res.status(404).json({ error: 'Branch not found.' });
+    }
+    try {
+      await db.transaction(async (trx) => {
+        await trx('users').where({ branchId: id }).delete();
+        await trx('branches').where({ id }).delete();
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[DELETE branch]', err);
+      res.status(500).json({
+        error: 'Failed to delete branch. Remove or reassign linked data if this persists.',
+        details: err.message,
+      });
+    }
+  });
+
+  /** HQ consolidated cash & bank closing balances (opening + active vouchers, excl. voided). */
+  app.get("/api/hq/summary", async (_req, res) => {
+    try {
+      const branches = await db('branches').select('id', 'code', 'name', 'location');
+      const ledgersRaw = await db('ledgers').select('id', 'branchId', 'group_name', 'openingBalance', 'balanceType');
+      const ledgers = ledgersRaw.map((l: { group_name?: string }) => ({
+        ...l,
+        group: l.group_name,
+      }));
+
+      const entries = await db('voucher_entries as ve')
+        .join('vouchers as v', 've.voucherId', 'v.id')
+        .where((qb) => {
+          qb.where('v.voided', 0).orWhereNull('v.voided');
+        })
+        .select('ve.ledgerId', 've.amount', 've.type');
+
+      const balances = computeLedgerBalances(ledgers, entries);
+      const consolidatedCashBank = sumCashBankClosingBalance(ledgers, balances);
+
+      const perBranch = branches.map((b: { id: string; code: string; name: string; location: string }) => {
+        const cashBank = sumCashBankClosingBalance(ledgers, balances, b.id);
+        return {
+          id: b.id,
+          code: b.code,
+          name: b.name,
+          location: b.location,
+          cashBankBalance: cashBank,
+          cashBankBalanceAbs: Math.abs(cashBank),
+          cashBankSide: cashBank >= 0 ? 'Dr' : 'Cr',
+        };
+      });
+
+      res.json({
+        branchCount: branches.length,
+        consolidatedCashBank,
+        consolidatedCashBankAbs: Math.abs(consolidatedCashBank),
+        consolidatedSide: consolidatedCashBank >= 0 ? 'Dr' : 'Cr',
+        perBranch,
+      });
+    } catch (err: any) {
+      console.error('[HQ summary]', err);
+      res.status(500).json({ error: 'Failed to load HQ summary', details: err.message });
+    }
   });
 
   app.put("/api/branches/:id", async (req, res) => {
