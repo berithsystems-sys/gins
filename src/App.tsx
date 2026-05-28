@@ -761,7 +761,7 @@ export default function App() {
                   : "bg-white border-2 border-tally-teal rounded-sm p-4 shadow-lg flex-1 flex flex-col min-h-0"
               }>
                 {currentScreen === 'LEDGER' && <MastersDashboard branchId={selectedBranchId} />}
-                {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} onSelectLedger={(id) => { setSelectedLedgerId(id); setCurrentScreen('LEDGER_DETAIL'); }} />}
+                {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} />}
                 {currentScreen === 'CHART' && <ChartOfAccountsScreen branchId={selectedBranchId} />}
                 {currentScreen === 'BALANCE_SHEET' && <BalanceSheetScreen branchId={selectedBranchId} onBack={handleBack} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
                 {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} onBack={handleBack} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
