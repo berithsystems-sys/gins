@@ -127,6 +127,8 @@ export async function initDB() {
       table.string('password');
       table.string('gstin');
       table.string('registrationType');
+      table.string('fy_start').defaultTo('2026-04-01');
+      table.string('books_start').defaultTo('2026-04-01');
     });
   }
 
@@ -290,6 +292,15 @@ export async function initDB() {
 
   // Migration for new columns if table already existed
   try {
+    const branchColumns = await db('branches').columnInfo();
+    if (!branchColumns.fy_start) {
+      await db.schema.table('branches', (table) => {
+        table.string('fy_start').defaultTo('2026-04-01');
+        table.string('books_start').defaultTo('2026-04-01');
+      });
+      console.log("Migrated branches table with FY columns.");
+    }
+
     const columns = await db('ledgers').columnInfo();
     if (!columns.gstType) {
       await db.schema.table('ledgers', (table) => {
