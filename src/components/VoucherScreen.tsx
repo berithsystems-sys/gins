@@ -778,7 +778,7 @@ const ddStyles = {
     background: '#fff',
     border: '1px solid #b0b8c4',
     boxShadow: '2px 4px 12px rgba(0,0,0,0.15)',
-    maxHeight: 260,
+    maxHeight: 360,
     overflowY: 'auto',
     animation: 'fadeIn 0.1s ease',
   },
