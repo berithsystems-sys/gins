@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ACCOUNTING - BERITHSYSTEMS.COM</title>
+    <title>Accounting - BERITHSYSTEMS.COM</title>
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#004050">
   </head>
@@ -13,7 +13,26 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js');
+          navigator.serviceWorker.register('/sw.js').then(registration => {
+            registration.onupdatefound = () => {
+              const installingWorker = registration.installing;
+              installingWorker.onstatechange = () => {
+                if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // New version available, force reload
+                  window.location.reload();
+                }
+              };
+            };
+          });
+        });
+
+        // Handle controller change (e.g. after skipWaiting)
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!refreshing) {
+            refreshing = true;
+            window.location.reload();
+          }
         });
       }
     </script>
