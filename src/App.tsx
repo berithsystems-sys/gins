@@ -284,21 +284,10 @@ export default function App() {
 
   useHotkeys('enter', (e) => {
     if (currentScreen === 'GATEWAY') {
-      const selectedId = flatMenu[selectedIndex].id;
-      if (selectedId === 'vouchers') setCurrentScreen('VOUCHER');
-      if (selectedId === 'masters') setCurrentScreen('LEDGER'); 
-      if (selectedId === 'alter') setCurrentScreen('ALTER');
-      if (selectedId === 'daybook') setCurrentScreen('DAYBOOK');
-      if (selectedId === 'banking') setCurrentScreen('BANKING');
-      if (selectedId === 'payroll') setCurrentScreen('PAYROLL');
-      if (selectedId === 'balance_sheet') setCurrentScreen('BALANCE_SHEET');
-      if (selectedId === 'pl_account') setCurrentScreen('PL_ACCOUNT');
-      if (selectedId === 'ratio_analysis') setCurrentScreen('RATIO');
-      if (selectedId === 'trial_balance') setCurrentScreen('TRIAL_BALANCE');
-      if (selectedId === 'cash_bank_book') setCurrentScreen('CASH_BANK_BOOK');
-      if (selectedId === 'chart') setCurrentScreen('CHART');
-      if (selectedId === 'audit') setCurrentScreen('AUDIT');
-      if (selectedId === 'debug') setCurrentScreen('DEBUG');
+      const selectedId = flatMenu[selectedIndex]?.id;
+      if (selectedId && gatewayScreenMap[selectedId]) {
+        setCurrentScreen(gatewayScreenMap[selectedId]);
+      }
     } else if (currentScreen === 'GOTO') {
       e.preventDefault();
       const filtered = getFilteredGotoOptions();
@@ -357,7 +346,12 @@ export default function App() {
   useHotkeys('p', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('PL_ACCOUNT'); });
   useHotkeys('r', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('RATIO'); });
   useHotkeys('t', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('TRIAL_BALANCE'); });
-  useHotkeys('u', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('CASH_BANK_BOOK'); });
+  useHotkeys('u', (e) => {
+    if (currentScreen === 'GATEWAY') {
+      e.preventDefault();
+      setCurrentScreen('CASH_BANK_BOOK');
+    }
+  }, {}, [currentScreen]);
   useHotkeys('h', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('CHART'); });
   useHotkeys('l', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('AUDIT'); });
   // useHotkeys('d', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('DEBUG'); });
@@ -382,10 +376,7 @@ export default function App() {
   }, { enableOnFormTags: true });
   useHotkeys('alt+m', () => setCurrentScreen('EXPORT'), { enableOnFormTags: true });
   useHotkeys('alt+e', () => setCurrentScreen('EXPORT'), { enableOnFormTags: true });
-  useHotkeys('alt+p', () => {
-    const screensWithOwnPrint = ['BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'DAYBOOK'];
-    if (!screensWithOwnPrint.includes(currentScreen)) setCurrentScreen('PRINT');
-  }, { enableOnFormTags: true }, [currentScreen]);
+  // Alt+P: print is handled inside each report screen (Balance Sheet, P&L, Trial Balance, Day Book)
   useHotkeys('alt+s', () => setCurrentScreen('SETTINGS'), { enableOnFormTags: true });
   useHotkeys('alt+d', (e) => { 
     if (currentScreen === 'DAYBOOK') return;
@@ -413,7 +404,16 @@ export default function App() {
 
   useHotkeys('q', () => setShowQuit(true));
   useHotkeys('ctrl+q', () => setShowQuit(true));
-  useHotkeys('y', () => { if (showQuit) window.close(); });
+  useHotkeys('y', (e) => {
+    if (showQuit) {
+      window.close();
+      return;
+    }
+    if (currentScreen === 'GATEWAY') {
+      e.preventDefault();
+      setCurrentScreen('PAYROLL');
+    }
+  }, {}, [currentScreen, showQuit]);
   useHotkeys('n', () => { if (showQuit) setShowQuit(false); });
 
   const [showHelp, setShowHelp] = useState(false);
@@ -511,7 +511,6 @@ export default function App() {
             <span className="cursor-pointer hover:bg-white/10 px-1 rounded" onClick={() => setCurrentScreen('IMPORT')}><u>O</u>: Import</span>
             <span className="cursor-pointer hover:bg-white/10 px-1 rounded" onClick={() => setCurrentScreen('EXPORT')}><u>E</u>: Export</span>
             <span className="cursor-pointer hover:bg-white/10 px-1 rounded" onClick={() => setCurrentScreen('EMAIL')}><u>M</u>: E-mail</span>
-            <span className="cursor-pointer hover:bg-white/10 px-1 rounded" onClick={() => setCurrentScreen('PRINT')}><u>P</u>: Print</span>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -769,7 +768,13 @@ export default function App() {
                 {currentScreen === 'TRIAL_BALANCE' && <TrialBalanceScreen branchId={selectedBranchId} onBackToGateway={() => setCurrentScreen('GATEWAY')} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
                 {currentScreen === 'CASH_BANK_BOOK' && <CashBankBookScreen branchId={selectedBranchId} />}
                 {currentScreen === 'RATIO' && <RatioAnalysisScreen onBack={handleBack} branchId={selectedBranchId} />}
-                {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} printData={printData} />}
+                {currentScreen === 'PRINT' && printData && (
+                  <PrintScreen
+                    onBack={() => { setPrintData(null); handleBack(); }}
+                    currentScreen={currentScreen}
+                    printData={printData}
+                  />
+                )}
                 {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} initialDate={currentDate} onBackToGateway={() => setCurrentScreen('GATEWAY')} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
                 {currentScreen === 'LEDGER_DETAIL' && <LedgerVouchersScreen branchId={selectedBranchId} ledgerId={selectedLedgerId} onBack={() => setCurrentScreen('GATEWAY')} />}
                 {currentScreen === 'HQ' && user?.role === 'HQ' && <HQDashboard onSelectBranch={(id) => { setSelectedBranchId(id); setCurrentScreen('GATEWAY'); }} />}
@@ -782,7 +787,6 @@ export default function App() {
                 {currentScreen === 'DATA' && <DataScreen onNavigate={setCurrentScreen} />}
                 {currentScreen === 'EXCHANGE' && <div className="p-10 text-center font-bold text-tally-teal uppercase italic">Exchange Module - Coming Soon</div>}
                 {currentScreen === 'EXPORT' && <ExportScreen onBack={handleBack} />}
-                {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} />}
                 {currentScreen === 'IMPORT' && <ImportScreen onBack={handleBack} />}
                 {currentScreen === 'SETTINGS' && <SettingsScreen onBack={handleBack} />}
                 {currentScreen === 'DEBUG' && <DebugDiagnosticsScreen />}
