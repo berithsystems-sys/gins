@@ -134,6 +134,14 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
+    if (user) {
+      localStorage.setItem('tally_user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('tally_user');
+    }
+  }, [user]);
+
+  useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
@@ -788,7 +796,7 @@ export default function App() {
                 {currentScreen === 'EXCHANGE' && <div className="p-10 text-center font-bold text-tally-teal uppercase italic">Exchange Module - Coming Soon</div>}
                 {currentScreen === 'EXPORT' && <ExportScreen onBack={handleBack} />}
                 {currentScreen === 'IMPORT' && <ImportScreen onBack={handleBack} />}
-                {currentScreen === 'SETTINGS' && <SettingsScreen onBack={handleBack} />}
+                {currentScreen === 'SETTINGS' && user && <SettingsScreen user={user} onUserUpdate={setUser} onBack={handleBack} />}
                 {currentScreen === 'DEBUG' && <DebugDiagnosticsScreen />}
                 {['GOTO', 'EMAIL'].includes(currentScreen) && (
                   <div className="p-20 text-center space-y-4">
