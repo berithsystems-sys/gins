@@ -14,6 +14,7 @@ import React, {
   useState, useEffect, useMemo, useRef, useCallback, Component, ReactNode,
 } from 'react';
 import { exportToExcel } from '../lib/ReportUtils';
+import { activeVouchers, isVoided } from '../lib/voucherUtils';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const FONT_   = `-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,sans-serif`;
@@ -85,9 +86,6 @@ const fmtDate = (iso: string) => {
     return `${d.getDate()}-${M[d.getMonth()]}-${d.getFullYear()}`;
   } catch { return iso; }
 };
-
-const isVoided = (v: any): boolean =>
-  v.voided === true || v.voided === 1 || v.voided === '1';
 
 /**
  * ENHANCED NORMALIZATION:
@@ -459,18 +457,22 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
         debugLog += `  [0] ${ledgerArr[0].name} → group="${ledgerArr[0].group}"\n`;
       }
 
-      const vArr = (Array.isArray(v) ? v : []).filter((x: any) => !isVoided(x));
+      const vArr = activeVouchers(v);
       setAllVouchers(vArr);
 
-      // Build voucherId→date map
-      const voucherDateMap: Record<string, string> = {};
-      vArr.forEach((v: any) => { voucherDateMap[v.id] = v.date?.slice(0,10) || ''; });
+      const activeVoucherIds = new Set(vArr.map((x: any) => x.id));
 
-      // Attach _date to entries
-      const entryArr = (Array.isArray(ve) ? ve : []).map((e: any) => ({
-        ...e,
-        _date: voucherDateMap[e.voucherId] || '',
-      }));
+      // Build voucherId→date map (active vouchers only)
+      const voucherDateMap: Record<string, string> = {};
+      vArr.forEach((v: any) => { voucherDateMap[v.id] = v.date?.slice(0, 10) || ''; });
+
+      // Exclude entries tied to voided vouchers
+      const entryArr = (Array.isArray(ve) ? ve : [])
+        .filter((e: any) => activeVoucherIds.has(e.voucherId))
+        .map((e: any) => ({
+          ...e,
+          _date: voucherDateMap[e.voucherId] || '',
+        }));
       setAllEntries(entryArr);
 
       if (vArr.length > 0) {
