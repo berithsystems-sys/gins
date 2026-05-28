@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
-import { TrendingUp, BarChart3 } from 'lucide-react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { TrendingUp } from 'lucide-react';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { activeVouchers } from '../lib/voucherUtils';
 
 interface Ratio {
   name: string;
@@ -12,7 +13,16 @@ interface Ratio {
   description: string;
 }
 
-const COLORS = ['#20b2aa', '#ff6b6b', '#ffd93d'];
+type RatioTab = 'liquidity' | 'profitability' | 'solvency' | 'efficiency';
+
+const TAB_ORDER: RatioTab[] = ['liquidity', 'profitability', 'solvency', 'efficiency'];
+
+const CATEGORY_TABS: { id: RatioTab; label: string; icon: string; key: string }[] = [
+  { id: 'liquidity', label: 'Liquidity', icon: '💧', key: '1' },
+  { id: 'profitability', label: 'Profitability', icon: '📈', key: '2' },
+  { id: 'solvency', label: 'Solvency', icon: '🏦', key: '3' },
+  { id: 'efficiency', label: 'Efficiency', icon: '⚙️', key: '4' },
+];
 
 // ── Group Mapping Helper (Synchronized with BalanceSheet) ────────────────────
 const mapToPrimaryGroup = (groupName: string): string => {
@@ -40,7 +50,7 @@ const mapToPrimaryGroup = (groupName: string): string => {
 };
 
 export default function RatioAnalysisScreen({ onBack, branchId }: { onBack: () => void; branchId?: string }) {
-  const [activeTab, setActiveTab] = useState<'liquidity' | 'profitability' | 'solvency' | 'efficiency'>('liquidity');
+  const [activeTab, setActiveTab] = useState<RatioTab>('liquidity');
   const [timeRange, setTimeRange] = useState<'quarterly' | 'annual'>('annual');
   const [ledgers, setLedgers] = useState<any[]>([]);
   const [vouchers, setVouchers] = useState<any[]>([]);
@@ -55,8 +65,8 @@ export default function RatioAnalysisScreen({ onBack, branchId }: { onBack: () =
         fetch(`/api/vouchers${query}`).then(res => res.json()),
         fetch(`/api/branches`).then(res => res.json())
       ]);
-      setLedgers(l);
-      setVouchers(Array.isArray(v) ? v : []);
+      setLedgers(Array.isArray(l) ? l : []);
+      setVouchers(activeVouchers(v));
       
       if (branchId) {
         const currentBranch = b.find((curr: any) => curr.id === branchId);
@@ -66,6 +76,54 @@ export default function RatioAnalysisScreen({ onBack, branchId }: { onBack: () =
     };
     fetchData();
   }, [branchId]);
+
+  const cycleTab = useCallback((direction: 1 | -1) => {
+    setActiveTab((current) => {
+      const idx = TAB_ORDER.indexOf(current);
+      const next = (idx + direction + TAB_ORDER.length) % TAB_ORDER.length;
+      return TAB_ORDER[next];
+    });
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const tag = target?.tagName?.toUpperCase() ?? '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return;
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onBack();
+        return;
+      }
+
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        cycleTab(1);
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        cycleTab(-1);
+        return;
+      }
+
+      if (e.key === 'Tab' && !e.altKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        cycleTab(e.shiftKey ? -1 : 1);
+        return;
+      }
+
+      const num = Number(e.key);
+      if (num >= 1 && num <= 4) {
+        e.preventDefault();
+        setActiveTab(TAB_ORDER[num - 1]);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [cycleTab, onBack]);
 
   // Optimized Balance Calculation
   const ledgerBalances = React.useMemo(() => {
@@ -222,22 +280,27 @@ export default function RatioAnalysisScreen({ onBack, branchId }: { onBack: () =
         <button onClick={onBack} className="text-[10px] bg-white/10 px-2 py-0.5 rounded hover:bg-white/20 uppercase font-bold">Esc: Back</button>
       </div>
 
-      {/* Tabs */}
-      <div className="bg-tally-teal text-white flex border-b border-tally-hotkey h-[32px] overflow-x-auto">
-        {[
-          { id: 'liquidity' as const, label: 'Liquidity', icon: '💧' },
-          { id: 'profitability' as const, label: 'Profitability', icon: '📈' },
-          { id: 'solvency' as const, label: 'Solvency', icon: '🏦' },
-          { id: 'efficiency' as const, label: 'Efficiency', icon: '⚙️' },
-        ].map((tab) => (
+      {/* Tabs — Tab/←/→ cycle categories; 1–4 jump directly */}
+      <div
+        className="bg-tally-teal text-white flex border-b border-tally-hotkey h-[32px] overflow-x-auto"
+        role="tablist"
+        aria-label="Ratio categories"
+      >
+        {CATEGORY_TABS.map((tab) => (
           <button
             key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex-shrink-0 flex items-center gap-1 px-3 border-r border-teal-900 transition-colors ${
               activeTab === tab.id ? 'bg-tally-accent text-black' : 'hover:bg-teal-700'
             } text-[11px] font-bold`}
           >
             {tab.icon} {tab.label}
+            <span className={`text-[9px] ml-1 ${activeTab === tab.id ? 'text-black/60' : 'text-white/50'}`}>
+              ({tab.key})
+            </span>
           </button>
         ))}
       </div>
@@ -350,10 +413,13 @@ export default function RatioAnalysisScreen({ onBack, branchId }: { onBack: () =
       </div>
 
       {/* Footer */}
-      <div className="bg-tally-bg p-2 border-t border-tally-hotkey flex justify-end">
+      <div className="bg-tally-bg p-2 border-t border-tally-hotkey flex justify-between items-center gap-4">
+        <span className="text-[10px] font-bold text-gray-500 uppercase">
+          Tab / ← → : Categories &nbsp;|&nbsp; 1–4 : Liquidity · Profitability · Solvency · Efficiency
+        </span>
         <button
           onClick={onBack}
-          className="bg-tally-teal text-white px-4 py-1 text-[11px] font-bold hover:bg-teal-700 transition-colors"
+          className="bg-tally-teal text-white px-4 py-1 text-[11px] font-bold hover:bg-teal-700 transition-colors shrink-0"
         >
           ESC: Back
         </button>
