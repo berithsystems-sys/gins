@@ -397,7 +397,7 @@ function AddPeriodModal({ onAdd, onCancel }: {
 }
 
 // ── Main BalanceSheetScreen ──────────────────────────────────────────────────
-export function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
+function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
   const [ledgers, setLedgers]               = useState<Ledger[]>([]);
   const [allVouchers, setAllVouchers]     = useState<any[]>([]);
   const [allEntries, setAllEntries]       = useState<any[]>([]);
@@ -962,4 +962,3 @@ function BalanceSheetScreenSafe(props: BSProps) {
 }
 
 export default BalanceSheetScreenSafe;
-export { BalanceSheetScreen };
