@@ -675,11 +675,15 @@ export default function App() {
             </div>
           </div>
         ) : (
-          <div className={`flex-1 overflow-auto bg-tally-bg ${currentScreen === 'VOUCHER' ? 'p-0' : 'p-4'}`}>
-            <div className={currentScreen === 'VOUCHER' ? 'h-full w-full' : 'max-w-7xl mx-auto'}>
+          <div className={`flex-1 overflow-auto bg-tally-bg ${['VOUCHER', 'DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL'].includes(currentScreen) ? 'p-0' : 'p-4'}`}>
+            <div className={['VOUCHER', 'DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL'].includes(currentScreen) ? 'h-full w-full' : 'max-w-7xl mx-auto'}>
               {currentScreen !== 'VOUCHER' && (
-                <div className="bg-white border-2 border-tally-teal rounded-sm p-4 shadow-lg mb-4">
-                  <div className="flex justify-between items-center mb-6 border-b border-tally-teal/20 pb-2">
+                <div className={
+                  ['DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL'].includes(currentScreen)
+                  ? "bg-white border-b-2 border-tally-teal px-4 py-2 shadow-sm"
+                  : "bg-white border-2 border-tally-teal rounded-sm p-4 shadow-lg mb-4"
+                }>
+                  <div className={`flex justify-between items-center ${['DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL'].includes(currentScreen) ? 'mb-0' : 'mb-6 border-b border-tally-teal/20 pb-2'}`}>
                     <h1 className="text-lg font-bold text-tally-teal uppercase flex items-center gap-2">
                       <div className={`w-1 h-6 ${
                         voucherType === 'Payment' ? 'bg-red-600' :
@@ -734,7 +738,12 @@ export default function App() {
                   />
                 </div>
               )}
-              <div className={currentScreen !== 'VOUCHER' ? "bg-white border-2 border-tally-teal rounded-sm p-4 shadow-lg" : ""}>
+              <div className={
+                currentScreen === 'VOUCHER' ? "h-full" : 
+                ['DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL'].includes(currentScreen) 
+                  ? "flex-1 flex flex-col min-h-0 h-full" 
+                  : "bg-white border-2 border-tally-teal rounded-sm p-4 shadow-lg flex-1 flex flex-col min-h-0"
+              }>
                 {currentScreen === 'LEDGER' && <MastersDashboard branchId={selectedBranchId} />}
                 {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} onSelectLedger={(id) => { setSelectedLedgerId(id); setCurrentScreen('LEDGER_DETAIL'); }} />}
                 {currentScreen === 'CHART' && <ChartOfAccountsScreen branchId={selectedBranchId} />}
