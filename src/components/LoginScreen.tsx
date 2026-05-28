@@ -156,7 +156,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
                   <div className="bg-white/20 w-12 h-12 rounded-2xl flex items-center justify-center mb-4">
                     <Download className="w-6 h-6" />
                   </div>
-                  <h3 className="text-xl font-black uppercase tracking-tight">Install GINS ERP</h3>
+                  <h3 className="text-xl font-black uppercase tracking-tight">Install EBC Accounting</h3>
                   <p className="text-white/70 text-xs mt-1 font-medium">Get the best experience on your desktop or mobile device.</p>
                 </div>
 
