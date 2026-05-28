@@ -46,14 +46,6 @@ function VoucherDetail({ voucherId, onBack }: any) {
       .catch(() => setLoading(false));
   }, [voucherId]);
 
-  useEffect(() => {
-    const handleKeys = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); onBack(); }
-    };
-    window.addEventListener('keydown', handleKeys);
-    return () => window.removeEventListener('keydown', handleKeys);
-  }, [onBack]);
-
   if (loading) return <div style={{...ds.root, padding: 20}}>Loading Voucher...</div>;
   if (!voucher) return <div style={{...ds.root, padding: 20}}>Voucher not found. <button onClick={onBack}>Back</button></div>;
 
@@ -133,11 +125,10 @@ function VoucherRegister({ ledger, monthIdx, branchId, onBack, onDrill }: any) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setSelIdx(s => Math.min(vouchers.length - 1, s + 1)); }
       if (e.key === 'ArrowUp')   { e.preventDefault(); setSelIdx(s => Math.max(0, s - 1)); }
       if (e.key === 'Enter')     { e.preventDefault(); if (vouchers[selIdx]) onDrill(vouchers[selIdx].id); }
-      if (e.key === 'Escape')    { e.preventDefault(); e.stopPropagation(); onBack(); }
     };
     window.addEventListener('keydown', handleKeys, true);
     return () => window.removeEventListener('keydown', handleKeys, true);
-  }, [vouchers, selIdx, onBack, onDrill]);
+  }, [vouchers, selIdx, onDrill]);
 
   const totals = useMemo(() => {
     return vouchers.reduce((acc, v) => {
@@ -213,11 +204,10 @@ function LedgerMonthlySummary({ ledger, branchId, onBack, onDrill }: any) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setSelIdx(s => Math.min(11, s + 1)); }
       if (e.key === 'ArrowUp')   { e.preventDefault(); setSelIdx(s => Math.max(0, s - 1)); }
       if (e.key === 'Enter')     { e.preventDefault(); onDrill(data[selIdx]?.monthIdx); }
-      if (e.key === 'Escape')    { e.preventDefault(); e.stopPropagation(); onBack(); }
     };
     window.addEventListener('keydown', handleKeys, true);
     return () => window.removeEventListener('keydown', handleKeys, true);
-  }, [selIdx, data, onBack, onDrill]);
+  }, [selIdx, data, onDrill]);
 
   const totals = useMemo(() => {
     const dr = data.reduce((a, b) => a + b.dr, 0);
@@ -352,8 +342,29 @@ export default function TrialBalanceScreen({ branchId }: { branchId?: string }) 
 
   // Restored Keyboard Handler
   useEffect(() => {
-    if (viewLevel !== 'trial') return;
     const handleKeys = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (viewLevel === 'voucher_detail') {
+          e.preventDefault();
+          e.stopPropagation();
+          setViewLevel('vouchers');
+          return;
+        }
+        if (viewLevel === 'vouchers') {
+          e.preventDefault();
+          e.stopPropagation();
+          setViewLevel('monthly');
+          return;
+        }
+        if (viewLevel === 'monthly') {
+          e.preventDefault();
+          e.stopPropagation();
+          setViewLevel('trial');
+          return;
+        }
+      }
+
+      if (viewLevel !== 'trial') return;
       const idx = flatList.findIndex(x => x.key === selectedKey);
       
       // Detailed View Toggle (Alt+F1 or Alt+F5)
