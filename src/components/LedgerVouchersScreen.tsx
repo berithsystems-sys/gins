@@ -94,27 +94,36 @@ export default function LedgerVouchersScreen({ branchId, ledgerId, onBack }: Led
 
               {loading ? (
                 <tr><td colSpan={6} className="p-8 text-center italic text-gray-400">Loading vouchers...</td></tr>
-              ) : reportData.map((row, idx) => (
-                <tr key={row.id} className="hover:bg-tally-accent cursor-pointer">
-                  <td className="px-4 py-2 border-r border-gray-100 align-top whitespace-normal">{format(new Date(row.date), 'dd-MMM-yy')}</td>
-                  <td className="px-4 py-2 border-r border-gray-100 align-top whitespace-normal">
-                    <div className="flex flex-col">
-                      <span className="font-bold">
-                        {row.entries.find((e: any) => e.ledgerId !== ledgerId)?.ledger_name || '(Multiple Ledgers)'}
-                      </span>
-                      {row.narration && (
-                        <span className="text-[10px] text-gray-500 italic mt-1 leading-tight">
-                          {row.narration}
+              ) : reportData.map((row, idx) => {
+                const otherEntries = row.entries.filter((e: any) => e.ledgerId !== ledgerId);
+                const particulars = otherEntries.length === 1 
+                  ? otherEntries[0].ledger_name 
+                  : otherEntries.length > 1 
+                    ? '(Multiple Ledgers)' 
+                    : 'Self';
+                
+                return (
+                  <tr key={row.id} className="hover:bg-tally-accent cursor-pointer">
+                    <td className="px-4 py-2 border-r border-gray-100 align-top whitespace-normal">{format(new Date(row.date), 'dd-MMM-yy')}</td>
+                    <td className="px-4 py-2 border-r border-gray-100 align-top whitespace-normal">
+                      <div className="flex flex-col">
+                        <span className="font-bold">
+                          {particulars}
                         </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-2 italic border-r border-gray-100 align-top whitespace-normal">{row.type}</td>
-                  <td className="px-4 py-2 text-center border-r border-gray-100 align-top whitespace-normal">{row.number || idx + 1}</td>
-                  <td className="px-4 py-2 text-right border-r border-gray-100 align-top whitespace-normal">{row.entry.type === 'Dr' ? row.entry.amount.toLocaleString() : ''}</td>
-                  <td className="px-4 py-2 text-right align-top whitespace-normal">{row.entry.type === 'Cr' ? row.entry.amount.toLocaleString() : ''}</td>
-                </tr>
-              ))}
+                        {row.narration && (
+                          <span className="text-[10px] text-gray-500 italic mt-1 leading-tight">
+                            {row.narration}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 italic border-r border-gray-100 align-top whitespace-normal">{row.type}</td>
+                    <td className="px-4 py-2 text-center border-r border-gray-100 align-top whitespace-normal">{row.number || idx + 1}</td>
+                    <td className="px-4 py-2 text-right border-r border-gray-100 align-top whitespace-normal">{row.entry.type === 'Dr' ? row.entry.amount.toLocaleString() : ''}</td>
+                    <td className="px-4 py-2 text-right align-top whitespace-normal">{row.entry.type === 'Cr' ? row.entry.amount.toLocaleString() : ''}</td>
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot className="border-t-2 border-tally-teal bg-tally-light">
               <tr className="font-bold uppercase text-[10px]">
