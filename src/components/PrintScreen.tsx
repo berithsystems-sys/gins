@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Printer, FileText, CheckCircle2 } from 'lucide-react';
+import { PrintData, generateTallyPrintHTML } from '../lib/PrintUtils';
 
 interface PrintOption {
   id: string;
@@ -9,7 +10,7 @@ interface PrintOption {
   selected: boolean;
 }
 
-export default function PrintScreen({ onBack, currentScreen }: { onBack: () => void; currentScreen: string }) {
+export default function PrintScreen({ onBack, currentScreen, printData }: { onBack: () => void; currentScreen: string; printData?: PrintData }) {
   const [printOptions, setPrintOptions] = useState<PrintOption[]>([
     { id: 'include_header', label: 'Include Header', description: 'Print company header info', selected: true },
     { id: 'include_footer', label: 'Include Footer', description: 'Print page number and date', selected: true },
@@ -29,20 +30,26 @@ export default function PrintScreen({ onBack, currentScreen }: { onBack: () => v
   const handlePrint = async () => {
     setIsPrinting(true);
     // Simulate printing delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 500));
     
-    const printContent = generatePrintContent();
+    const printContent = printData ? generateTallyPrintHTML(printData) : generateDummyPrintContent();
     const printWindow = window.open('', '', 'width=800,height=600');
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
-      printWindow.print();
+      // Wait for resources to load if any
+      printWindow.onload = () => {
+        printWindow.print();
+        // Close after print dialog is handled
+        setTimeout(() => printWindow.close(), 100);
+      };
     }
     
     setIsPrinting(false);
   };
 
-  const generatePrintContent = () => {
+  const generateDummyPrintContent = () => {
+    // ... (previous logic for dummy content)
     const orientation = printOptions.find(o => o.id === 'landscape')?.selected ? 'landscape' : 'portrait';
     const html = `
       <html>
