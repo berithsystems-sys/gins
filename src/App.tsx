@@ -1,5 +1,5 @@
 /**
- * @license
+ * @license: ginom
  * SPDX-License-Identifier: Apache-2.0
  */
 
