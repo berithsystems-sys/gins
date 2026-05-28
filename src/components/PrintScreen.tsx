@@ -28,11 +28,11 @@ export default function PrintScreen({ onBack, currentScreen, printData }: { onBa
   };
 
   const handlePrint = async () => {
+    if (!printData) return;
     setIsPrinting(true);
-    // Simulate printing delay
     await new Promise(resolve => setTimeout(resolve, 500));
     
-    const printContent = printData ? generateTallyPrintHTML(printData) : generateDummyPrintContent();
+    const printContent = generateTallyPrintHTML(printData);
     const printWindow = window.open('', '_blank', 'width=850,height=650');
     if (printWindow) {
       printWindow.document.write(printContent);
@@ -46,62 +46,15 @@ export default function PrintScreen({ onBack, currentScreen, printData }: { onBa
     setIsPrinting(false);
   };
 
-  const generateDummyPrintContent = () => {
-    // ... (previous logic for dummy content)
-    const orientation = printOptions.find(o => o.id === 'landscape')?.selected ? 'landscape' : 'portrait';
-    const html = `
-      <html>
-        <head>
-          <title>Print Report</title>
-          <style>
-            @media print { @page { margin: 10mm; orientation: ${orientation}; } }
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
-            .company-name { font-size: 16px; font-weight: bold; }
-            .report-title { font-size: 14px; margin-top: 10px; }
-            .content { margin: 20px 0; }
-            .footer { text-align: center; margin-top: 30px; border-top: 2px solid #000; padding-top: 10px; font-size: 12px; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background-color: #f5f5f5; font-weight: bold; }
-          </style>
-        </head>
-        <body>
-          ${printOptions.find(o => o.id === 'include_header')?.selected ? `
-            <div class="header">
-              <div class="company-name">BERITHSYSTEMS</div>
-              <div class="report-title">Financial Report - ${new Date().toLocaleDateString()}</div>
-            </div>
-          ` : ''}
-          
-          <div class="content">
-            <table>
-              <thead>
-                <tr>
-                  <th>Account</th>
-                  <th>Debit</th>
-                  <th>Credit</th>
-                  <th>Balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td>Cash in Hand</td><td>50,000</td><td>-</td><td>50,000</td></tr>
-                <tr><td>Bank Account</td><td>100,000</td><td>-</td><td>100,000</td></tr>
-                <tr><td>Sales</td><td>-</td><td>200,000</td><td>200,000</td></tr>
-              </tbody>
-            </table>
-          </div>
-          
-          ${printOptions.find(o => o.id === 'include_footer')?.selected ? `
-            <div class="footer">
-              Page 1 of 1 | Printed on ${new Date().toLocaleDateString()}
-            </div>
-          ` : ''}
-        </body>
-      </html>
-    `;
-    return html;
-  };
+  if (!printData) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center bg-tally-bg p-8 text-center">
+        <p className="text-sm font-bold text-tally-teal uppercase">No report loaded for printing</p>
+        <p className="text-[11px] text-gray-500 mt-2">Open Balance Sheet, P&amp;L, Trial Balance, or Day Book and use Alt+P there.</p>
+        <button onClick={onBack} className="mt-4 bg-tally-teal text-white px-4 py-1 text-[11px] font-bold">ESC: Back</button>
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -183,21 +136,14 @@ export default function PrintScreen({ onBack, currentScreen, printData }: { onBa
               Preview
             </h3>
             <div className="bg-gray-100 border border-gray-300 p-4 text-[10px] font-mono space-y-1">
-              {printOptions.find(o => o.id === 'include_header')?.selected && (
-                <>
-                  <div className="text-center font-bold">BERITHSYSTEMS</div>
-                  <div className="text-center">Financial Report</div>
-                  <div className="border-t border-gray-400 my-2"></div>
-                </>
-              )}
-              <div>Account                          Debit      Credit    Balance</div>
-              <div>Cash in Hand                   50,000         -      50,000</div>
-              <div>Bank Account                  100,000         -     100,000</div>
-              {printOptions.find(o => o.id === 'include_footer')?.selected && (
-                <div className="border-t border-gray-400 mt-4 pt-2 text-center text-[9px]">
-                  Page 1 of 1
-                </div>
-              )}
+              <div className="text-center font-bold">{printData.companyName || 'Company'}</div>
+              <div className="text-center">
+                {printData.type === 'voucher'
+                  ? `${printData.voucherType} — ${printData.voucherNo}`
+                  : `${printData.ledgerName} (${printData.period})`}
+              </div>
+              <div className="border-t border-gray-400 my-2"></div>
+              <div className="text-gray-500 italic">Preview uses report data from the screen you opened.</div>
             </div>
           </div>
         </div>
