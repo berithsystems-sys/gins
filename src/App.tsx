@@ -1,5 +1,5 @@
 /**
- * @licenses
+ * @license
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -84,6 +84,7 @@ const GATEWAY_MENU = [
     { id: 'pl_account', label: 'Profit & Loss A/c', key: 'P' },
     { id: 'ratio_analysis', label: 'Ratio Analysis', key: 'R' },
     { id: 'trial_balance', label: 'Trial Balance', key: 'T' },
+    { id: 'cash_bank_book', label: 'Cash/Bank Book', key: 'U' },
   ]}
 ];
 
@@ -187,6 +188,7 @@ export default function App() {
     pl_account: 'PL_ACCOUNT',
     ratio_analysis: 'RATIO',
     trial_balance: 'TRIAL_BALANCE',
+    cash_bank_book: 'CASH_BANK_BOOK',
     audit: 'AUDIT',
   };
 
@@ -293,6 +295,7 @@ export default function App() {
       if (selectedId === 'pl_account') setCurrentScreen('PL_ACCOUNT');
       if (selectedId === 'ratio_analysis') setCurrentScreen('RATIO');
       if (selectedId === 'trial_balance') setCurrentScreen('TRIAL_BALANCE');
+      if (selectedId === 'cash_bank_book') setCurrentScreen('CASH_BANK_BOOK');
       if (selectedId === 'chart') setCurrentScreen('CHART');
       if (selectedId === 'audit') setCurrentScreen('AUDIT');
       if (selectedId === 'debug') setCurrentScreen('DEBUG');
@@ -354,6 +357,7 @@ export default function App() {
   useHotkeys('p', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('PL_ACCOUNT'); });
   useHotkeys('r', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('RATIO'); });
   useHotkeys('t', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('TRIAL_BALANCE'); });
+  useHotkeys('u', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('CASH_BANK_BOOK'); });
   useHotkeys('h', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('CHART'); });
   useHotkeys('l', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('AUDIT'); });
   // useHotkeys('d', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('DEBUG'); });
@@ -379,7 +383,7 @@ export default function App() {
   useHotkeys('alt+m', () => setCurrentScreen('EXPORT'), { enableOnFormTags: true });
   useHotkeys('alt+e', () => setCurrentScreen('EXPORT'), { enableOnFormTags: true });
   useHotkeys('alt+p', () => {
-    const screensWithOwnPrint = ['BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'DAYBOOK', 'CASH_BANK_BOOK'];
+    const screensWithOwnPrint = ['BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'DAYBOOK'];
     if (!screensWithOwnPrint.includes(currentScreen)) setCurrentScreen('PRINT');
   }, { enableOnFormTags: true }, [currentScreen]);
   useHotkeys('alt+s', () => setCurrentScreen('SETTINGS'), { enableOnFormTags: true });
