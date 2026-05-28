@@ -63,7 +63,7 @@ async function seedDatabase() {
       // Other
       { id: 'g_014', name: 'Suspense Account', branchId: '1' },
       { id: 'g_015', name: 'Bank Accounts', branchId: '1' },
-      { id: 'g_016', name: 'Cash', branchId: '1' }
+      { id: 'g_016', name: 'Cash-in-hand', branchId: '1' }
     ];
 
     // Check if groups already exist
@@ -79,7 +79,7 @@ async function seedDatabase() {
     // 4. Seed default ledgers under each group
     const defaultLedgers = [
       // Cash & Bank (g_016 - Cash, g_015 - Bank)
-      { id: 'l_001', name: 'Cash', groupId: 'g_016', group_name: 'Cash', openingBalance: 0, balanceType: 'Dr', branchId: '1' },
+      { id: 'l_001', name: 'Cash', groupId: 'g_016', group_name: 'Cash-in-hand', openingBalance: 0, balanceType: 'Dr', branchId: '1' },
       { id: 'l_002', name: 'Bank Account', groupId: 'g_015', group_name: 'Bank Accounts', openingBalance: 0, balanceType: 'Dr', branchId: '1' },
       
       // Income (g_008 - Direct, g_009 - Indirect, g_010 - Sales)
