@@ -205,11 +205,11 @@ INSERT INTO `account_groups` (`id`, `name`, `under`, `branchId`) VALUES
 ('g_013', 'Purchase Account', NULL, '1'),
 ('g_014', 'Suspense Account', NULL, '1'),
 ('g_015', 'Bank Accounts', NULL, '1'),
-('g_016', 'Cash', NULL, '1');
+('g_016', 'Cash-in-hand', NULL, '1');
 
 -- Insert default Ledgers (Master Accounts)
 INSERT INTO `ledgers` (`id`, `name`, `groupId`, `group_name`, `openingBalance`, `balanceType`, `branchId`) VALUES
-('l_001', 'Cash', 'g_016', 'Cash', 0, 'Dr', '1'),
+('l_001', 'Cash', 'g_016', 'Cash-in-hand', 0, 'Dr', '1'),
 ('l_002', 'Bank Account', 'g_015', 'Bank Accounts', 0, 'Dr', '1'),
 ('l_003', 'Service Income', 'g_008', 'Direct Income', 0, 'Cr', '1'),
 ('l_004', 'Consulting Income', 'g_008', 'Direct Income', 0, 'Cr', '1'),
