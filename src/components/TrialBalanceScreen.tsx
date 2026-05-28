@@ -31,12 +31,12 @@ const fmtDate = (iso: string) => {
 const isVoided = (v: any): boolean => v.voided === true || v.voided === 1 || v.voided === '1';
 
 // ─── LEVEL 4: VOUCHER DETAIL ────────────────────────────────────────────────
-function VoucherDetail({ voucherId, onBack, onPrint, companyName }: any) {
+function VoucherDetail({ voucherId, onBack, companyName }: any) {
   const [voucher, setVoucher] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/vouchers`) // The current API returns all vouchers with entries
+    fetch(`/api/vouchers`)
       .then(r => r.json())
       .then(data => {
         const found = data.find((v: any) => v.id === voucherId);
@@ -47,30 +47,54 @@ function VoucherDetail({ voucherId, onBack, onPrint, companyName }: any) {
   }, [voucherId]);
 
   const handlePrint = () => {
-    if (voucher && onPrint) {
-      onPrint({
-        type: 'voucher',
-        companyName: companyName,
-        voucherType: voucher.type,
-        voucherNo: voucher.number,
-        date: fmtDate(voucher.date),
-        narration: voucher.narration,
-        entries: (voucher.entries || []).map((e: any) => ({
-          ledgerName: e.ledger_name || e.ledgerId,
-          type: e.type,
-          amount: e.amount
-        }))
-      });
-    }
+    if (!voucher) return;
+    const fmt = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+    const drTotal = (voucher.entries || []).filter((e: any) => e.type === 'Dr').reduce((a: number, b: any) => a + Number(b.amount), 0);
+    const crTotal = (voucher.entries || []).filter((e: any) => e.type === 'Cr').reduce((a: number, b: any) => a + Number(b.amount), 0);
+    const html = `<!DOCTYPE html><html><head>
+      <title>${voucher.type} – ${voucher.number}</title><meta charset="utf-8"/>
+      <style>
+        @page { margin: 12mm; size: A4 portrait; }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 12px; }
+        .hdr { background: #1f4e79; color: #fff; text-align: center; padding: 8px 12px; }
+        .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+        .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; }
+        .info { display: flex; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #ccc; background: #f0f4f8; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #edf1f5; padding: 5px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; border-bottom: 2px solid #ccc; text-align: left; }
+        td { padding: 5px 10px; border-bottom: 1px solid #eee; font-size: 12px; }
+        .tr td { border-top: 2px solid #555; font-weight: 700; background: #f2f6fa; }
+        .narr { padding: 8px 12px; font-size: 11px; font-style: italic; color: #555; border-top: 1px solid #eee; }
+        .sig { display: flex; justify-content: space-between; padding: 40px 20px 10px; }
+        .sig-box { text-align: center; border-top: 1px solid #000; width: 140px; font-size: 10px; padding-top: 4px; }
+        .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; }
+      </style>
+    </head><body>
+      <div class="hdr"><h1>${companyName || 'Company'}</h1><div class="sub">${voucher.type?.toUpperCase()} VOUCHER</div></div>
+      <div class="info"><div><b>${voucher.type}</b> No. <b>${voucher.number || '—'}</b></div><div>Date: <b>${fmtDate(voucher.date)}</b></div></div>
+      <table>
+        <thead><tr><th style="width:60%">Particulars</th><th style="width:20%;text-align:right">Debit</th><th style="width:20%;text-align:right">Credit</th></tr></thead>
+        <tbody>
+          ${(voucher.entries || []).map((e: any) => `<tr><td>${e.ledger_name || e.ledgerId}</td><td style="text-align:right">${e.type === 'Dr' ? fmt(e.amount) : ''}</td><td style="text-align:right">${e.type === 'Cr' ? fmt(e.amount) : ''}</td></tr>`).join('')}
+          <tr class="tr"><td>Total</td><td style="text-align:right">${fmt(drTotal)}</td><td style="text-align:right">${fmt(crTotal)}</td></tr>
+        </tbody>
+      </table>
+      ${voucher.narration ? `<div class="narr"><b>Narration:</b> ${voucher.narration}</div>` : ''}
+      <div class="sig"><div class="sig-box">Prepared by</div><div class="sig-box">Verified by</div><div class="sig-box">Authorised Signatory</div></div>
+      <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} | ${companyName}</div>
+    </body></html>`;
+    const win = window.open('', '_blank', 'width=800,height=650');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
   };
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.altKey && e.key.toLowerCase() === 'p') { e.preventDefault(); handlePrint(); }
+      if (e.altKey && e.key.toLowerCase() === 'p') { e.preventDefault(); e.stopPropagation(); handlePrint(); }
     };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [voucher, onPrint, companyName]);
+    window.addEventListener('keydown', h, true);
+    return () => window.removeEventListener('keydown', h, true);
+  }, [voucher, companyName]);
 
   if (loading) return <div style={{...ds.root, padding: 20}}>Loading Voucher...</div>;
   if (!voucher) return <div style={{...ds.root, padding: 20}}>Voucher not found. <button onClick={onBack}>Back</button></div>;
@@ -136,7 +160,7 @@ function VoucherDetail({ voucherId, onBack, onPrint, companyName }: any) {
 }
 
 // ─── LEVEL 3: VOUCHER REGISTER ──────────────────────────────────────────────
-function VoucherRegister({ ledger, monthIdx, branchId, onBack, onDrill, onPrint, companyName }: any) {
+function VoucherRegister({ ledger, monthIdx, branchId, onBack, onDrill, companyName }: any) {
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [selIdx, setSelIdx] = useState(0);
 
@@ -153,34 +177,59 @@ function VoucherRegister({ ledger, monthIdx, branchId, onBack, onDrill, onPrint,
   }, [ledger.id, monthIdx, branchId]);
 
   const handlePrint = () => {
-    if (onPrint) {
-      let running = 0; // Simplified for monthly register print
-      onPrint({
-        type: 'ledger',
-        companyName: companyName,
-        ledgerName: ledger.name,
-        period: MONTHS[monthIdx],
-        openingBalance: 0,
-        balanceType: 'Dr',
-        rows: vouchers.map(v => {
-          const amt = Number(v.entry_amount);
-          const isDr = v.entry_type === 'Dr';
-          running += isDr ? amt : -amt;
-          return {
-            date: fmtDate(v.date),
-            particulars: v.other_ledger_name || 'Multiple Ledgers',
-            vchType: v.type || 'Journal',
-            vchNo: v.number || '-',
-            debit: isDr ? amt : undefined,
-            credit: !isDr ? amt : undefined,
-            balance: Math.abs(running),
-            runType: running >= 0 ? 'Dr' : 'Cr'
-          };
-        }),
-        closingBalance: Math.abs(running),
-        closingType: running >= 0 ? 'Dr' : 'Cr'
-      });
-    }
+    const fmt = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+    let running = 0;
+    const rows = vouchers.map(v => {
+      const amt = Number(v.entry_amount);
+      const isDr = v.entry_type === 'Dr';
+      running += isDr ? amt : -amt;
+      return `<tr>
+        <td style="padding:3px 8px;border-bottom:1px solid #eee">${fmtDate(v.date)}</td>
+        <td style="padding:3px 8px;border-bottom:1px solid #eee;font-weight:600">${v.other_ledger_name || 'Multiple Ledgers'}${v.narration ? `<div style="font-size:10px;font-style:italic;color:#777">${v.narration}</div>` : ''}</td>
+        <td style="padding:3px 8px;border-bottom:1px solid #eee">${v.type || 'Journal'}</td>
+        <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:center">${v.number || '-'}</td>
+        <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:right;color:#7a0000">${isDr ? fmt(amt) : ''}</td>
+        <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:right;color:#006b00">${!isDr ? fmt(amt) : ''}</td>
+        <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${fmt(running)} ${running >= 0 ? 'Dr' : 'Cr'}</td>
+      </tr>`;
+    }).join('');
+    const drTot = vouchers.filter(v => v.entry_type === 'Dr').reduce((a, v) => a + Number(v.entry_amount), 0);
+    const crTot = vouchers.filter(v => v.entry_type === 'Cr').reduce((a, v) => a + Number(v.entry_amount), 0);
+    const html = `<!DOCTYPE html><html><head>
+      <title>Ledger – ${ledger.name}</title><meta charset="utf-8"/>
+      <style>
+        @page { margin: 12mm; size: A4 landscape; }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 12px; }
+        .hdr { background: #1f4e79; color: #fff; text-align: center; padding: 8px 12px; }
+        .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+        .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; }
+        table { width: 100%; border-collapse: collapse; }
+        thead tr { background: #2c5f8a; color: #fff; }
+        th { padding: 5px 8px; font-size: 10px; font-weight: 800; letter-spacing: 1px; text-align: left; }
+        .tfoot td { border-top: 2px solid #1f4e79; font-weight: 900; font-size: 12px; background: #e8f0f8; padding: 5px 8px; }
+        .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
+      </style>
+    </head><body>
+      <div class="hdr"><h1>${companyName || 'Company'}</h1><div class="sub">LEDGER: ${ledger.name} &nbsp;·&nbsp; ${MONTHS[monthIdx]}</div></div>
+      <table>
+        <thead><tr>
+          <th style="width:80px">Date</th><th>Particulars</th><th style="width:80px">Vch Type</th>
+          <th style="width:70px;text-align:center">Vch No.</th>
+          <th style="width:110px;text-align:right">Debit</th><th style="width:110px;text-align:right">Credit</th>
+          <th style="width:120px;text-align:right">Balance</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr class="tfoot">
+          <td colspan="4" style="text-align:right;padding-right:12px">Grand Total</td>
+          <td style="text-align:right">${fmt(drTot)}</td><td style="text-align:right">${fmt(crTot)}</td>
+          <td style="text-align:right">${fmt(running)} ${running >= 0 ? 'Dr' : 'Cr'}</td>
+        </tr></tfoot>
+      </table>
+      <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} | ${companyName}</div>
+    </body></html>`;
+    const win = window.open('', '_blank', 'width=1000,height=700');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
   };
 
   useEffect(() => {
@@ -188,11 +237,11 @@ function VoucherRegister({ ledger, monthIdx, branchId, onBack, onDrill, onPrint,
       if (e.key === 'ArrowDown') { e.preventDefault(); setSelIdx(s => Math.min(vouchers.length - 1, s + 1)); }
       if (e.key === 'ArrowUp')   { e.preventDefault(); setSelIdx(s => Math.max(0, s - 1)); }
       if (e.key === 'Enter')     { e.preventDefault(); if (vouchers[selIdx]) onDrill(vouchers[selIdx].id); }
-      if (e.altKey && e.key.toLowerCase() === 'p') { e.preventDefault(); handlePrint(); }
+      if (e.altKey && e.key.toLowerCase() === 'p') { e.preventDefault(); e.stopPropagation(); handlePrint(); }
     };
     window.addEventListener('keydown', handleKeys, true);
     return () => window.removeEventListener('keydown', handleKeys, true);
-  }, [vouchers, selIdx, onDrill, onPrint, companyName]);
+  }, [vouchers, selIdx, onDrill, companyName]);
 
   const totals = useMemo(() => {
     return vouchers.reduce((acc, v) => {
@@ -553,10 +602,10 @@ export default function TrialBalanceScreen({ branchId, onBackToGateway, onPrint 
   };
 
   if (viewLevel === 'voucher_detail' && selectedVoucherId) {
-    return <VoucherDetail voucherId={selectedVoucherId} onBack={() => setViewLevel('vouchers')} onPrint={onPrint} companyName={ledgers.length > 0 ? (ledgers[0] as any).company_name || 'BERITHSYSTEMS' : 'BERITHSYSTEMS'} />;
+    return <VoucherDetail voucherId={selectedVoucherId} onBack={() => setViewLevel('vouchers')} companyName={ledgers.length > 0 ? (ledgers[0] as any).company_name || 'BERITHSYSTEMS' : 'BERITHSYSTEMS'} />;
   }
   if (viewLevel === 'vouchers' && selectedLedger) {
-    return <VoucherRegister ledger={selectedLedger} monthIdx={selectedMonthIdx} branchId={branchId} onBack={() => setViewLevel('monthly')} onDrill={(vId: string) => { setSelectedVoucherId(vId); setViewLevel('voucher_detail'); }} onPrint={onPrint} companyName={ledgers.length > 0 ? (ledgers[0] as any).company_name || 'BERITHSYSTEMS' : 'BERITHSYSTEMS'} />;
+    return <VoucherRegister ledger={selectedLedger} monthIdx={selectedMonthIdx} branchId={branchId} onBack={() => setViewLevel('monthly')} onDrill={(vId: string) => { setSelectedVoucherId(vId); setViewLevel('voucher_detail'); }} companyName={ledgers.length > 0 ? (ledgers[0] as any).company_name || 'BERITHSYSTEMS' : 'BERITHSYSTEMS'} />;
   }
   if (viewLevel === 'monthly' && selectedLedger) {
     return <LedgerMonthlySummary ledger={selectedLedger} branchId={branchId} onBack={() => setViewLevel('trial')} onDrill={(mIdx: number) => { setSelectedMonthIdx(mIdx); setViewLevel('vouchers'); }} />;
