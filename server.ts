@@ -391,7 +391,26 @@ async function startServer() {
   });
 
   app.put("/api/users/:id/password", async (req, res) => {
-    const { password } = req.body;
+    const { currentPassword, newPassword, password } = req.body;
+
+    if (newPassword) {
+      if (!currentPassword) {
+        return res.status(400).json({ error: "Current password is required" });
+      }
+
+      const user = await db('users').where({ id: req.params.id, password: currentPassword }).first();
+      if (!user) {
+        return res.status(401).json({ error: "Current password is incorrect" });
+      }
+
+      await db('users').where({ id: req.params.id }).update({ password: newPassword });
+      return res.json({ success: true });
+    }
+
+    if (!password) {
+      return res.status(400).json({ error: "Password is required" });
+    }
+
     await db('users').where({ id: req.params.id }).update({ password });
     res.json({ success: true });
   });
