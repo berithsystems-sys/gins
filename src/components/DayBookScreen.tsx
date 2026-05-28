@@ -124,7 +124,7 @@ function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
             <label style={eS.label}>Date</label>
             <span style={eS.colon}>:</span>
             <input type="date" value={date} onChange={e => setDate(e.target.value)}
-              style={{ ...eS.input, width: 130, fontWeight: 700 }} />
+              style={{ ...eS.input, width: 130, fontWeight: 700 }} autoFocus />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
             <label style={eS.label}>Narration</label>
@@ -244,8 +244,7 @@ const eS = {
 // ─────────────────────────────────────────────────────────────────────────────
 // Voucher Detail Side Panel
 // ─────────────────────────────────────────────────────────────────────────────
-function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSaved, panelRef }) {
-  const [mode, setMode]               = useState('view');
+function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSaved, onEdit, panelRef }) {
   const [voidConfirm, setVoidConfirm] = useState(false);
   const [voiding, setVoiding]         = useState(false);
   const [voidErr, setVoidErr]         = useState('');
@@ -289,18 +288,6 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
       setVoiding(false);
     }
   };
-
-  if (mode === 'edit') {
-    return (
-      <VoucherEditForm
-        voucher={voucher}
-        ledgers={ledgers}
-        branchId={branchId}
-        onSaved={() => { setMode('view'); onSaved(); }}
-        onCancel={() => setMode('view')}
-      />
-    );
-  }
 
   const isVoided = !!(voucher.voided || voucher.voided === 1);
 
@@ -363,7 +350,7 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
 
       {!isVoided && !voidConfirm && (
         <div style={{ padding: '10px 12px', display: 'flex', gap: 8, borderTop: `1px solid ${BORDER}`, background: vs.bodyBg }}>
-          <button onClick={() => setMode('edit')}
+          <button onClick={onEdit}
             style={{ background: vs.header, color: '#fff', border: 'none', borderRadius: 2, padding: '5px 16px', fontSize: 12, fontWeight: 700, fontFamily: FONT, cursor: 'pointer', flex: 1 }}>
             ✎ Edit Voucher
           </button>
@@ -433,6 +420,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
   const [fromDate, setFromDate]               = useState(propFrom || initialDate || today);
   const [toDate, setToDate]                   = useState(propTo   || initialDate || today);
   const [selectedVoucher, setSelectedVoucher] = useState(null);
+  const [isEditing, setIsEditing]             = useState(false);
   const [focusedIdx, setFocusedIdx]           = useState(-1);
   const [panelFocused, setPanelFocused]       = useState(false);
   const [companyName, setCompanyName]         = useState('');
@@ -519,7 +507,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
       if (e.altKey && e.key.toLowerCase() === 'p') { window.print(); return; }
       if (e.altKey && e.key.toLowerCase() === 'e') { handleExport(); return; }
 
-      if (!inInput && !showPeriod) {
+      if (!inInput && !showPeriod && !isEditing) {
         if (e.key === 'ArrowDown') {
           e.preventDefault();
           if (panelFocused) return;
@@ -558,6 +546,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
       }
 
       if (e.key === 'Escape') {
+        if (isEditing) { setIsEditing(false); return; }
         if (panelFocused) { setPanelFocused(false); tableBodyRef.current?.querySelector(`[data-row-idx="${focusedIdx}"]`)?.focus(); return; }
         if (selectedVoucher) { setSelectedVoucher(null); setPanelFocused(false); return; }
         if (showPeriod) { setShowPeriod(false); return; }
@@ -640,6 +629,17 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
           border-collapse: collapse;
           width: 100%;
           table-layout: fixed;
+        }
+        .db-table-wrap th, .db-table-wrap td {
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          white-space: normal !important;
+          vertical-align: top;
+        }
+        /* Ensure consistent row height or at least smart wrapping */
+        .db-row td {
+          height: 1.5rem; /* Minimum height */
+          padding: 4px 8px !important;
         }
         /* Make the tbody grow to fill remaining table space visually */
         .db-table-wrap tbody::after {
@@ -788,7 +788,18 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
                     >
                       <td style={{ ...s.td, color: '#333' }}>{fmtDate(v.date)}</td>
                       <td style={{ ...s.td, fontWeight: 600, color: '#1a1a1a' }}>
-                        {v.narration || <span style={{ fontStyle: 'italic', color: '#aaa' }}>(Blank)</span>}
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ color: '#1a1a1a' }}>
+                            {v.entries?.filter(e => e.type === 'Dr').map(e => e.ledger_name || ledgers.find(l => l.id === e.ledgerId)?.name).join(', ') || 
+                             v.entries?.filter(e => e.type === 'Cr').map(e => e.ledger_name || ledgers.find(l => l.id === e.ledgerId)?.name).join(', ') || 
+                             <span style={{ fontStyle: 'italic', color: '#aaa' }}>(No Ledger)</span>}
+                          </span>
+                          {v.narration && (
+                            <span style={{ fontSize: 10, color: '#666', fontStyle: 'italic', marginTop: 2 }}>
+                              {v.narration}
+                            </span>
+                          )}
+                        </div>
                         {voided && <span style={{ marginLeft: 6, fontSize: 9, color: '#c00', fontWeight: 700, border: '1px solid #f5a0a0', padding: '0 3px', borderRadius: 2, verticalAlign: 'middle' }}>VOID</span>}
                       </td>
                       <td style={{ ...s.td, color: '#555', fontStyle: 'italic' }}>{v.type}</td>
@@ -840,7 +851,23 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
               onClose={() => { setSelectedVoucher(null); setPanelFocused(false); }}
               onVoid={() => { setSelectedVoucher(null); setPanelFocused(false); fetchData(); }}
               onSaved={handleSaved}
+              onEdit={() => setIsEditing(true)}
             />
+          </div>
+        )}
+
+        {/* Edit Voucher Modal */}
+        {isEditing && selectedVoucher && (
+          <div style={s.modalOverlay} className="no-print">
+            <div style={{ ...s.modal, width: 850 }}>
+              <VoucherEditForm
+                voucher={selectedVoucher}
+                ledgers={ledgers}
+                branchId={branchId}
+                onSaved={() => { setIsEditing(false); fetchData(); setSelectedVoucher(null); }}
+                onCancel={() => setIsEditing(false)}
+              />
+            </div>
           </div>
         )}
       </div>
