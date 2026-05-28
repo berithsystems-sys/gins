@@ -3,6 +3,22 @@ import "dotenv/config";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { db, initDB } from "./src/db.ts";
+import { REQUIRED_ACCOUNT_GROUPS } from "./src/lib/accountGroups.ts";
+
+async function ensureStandardAccountGroups(branchId: string) {
+  const existing = await db('account_groups').where({ branchId }).select('name');
+  const names = new Set(existing.map((g: { name: string }) => g.name));
+  const missing = REQUIRED_ACCOUNT_GROUPS.filter((name) => !names.has(name));
+  if (missing.length === 0) return;
+
+  const toInsert = missing.map((name, index) => ({
+    id: `${branchId}_std_${Date.now()}_${index}`,
+    name,
+    branchId,
+  }));
+  await db('account_groups').insert(toInsert);
+  console.log(`[account-groups] Added ${missing.length} group(s) for branch ${branchId}: ${missing.join(', ')}`);
+}
 
 process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION:', err);
@@ -271,13 +287,12 @@ async function startServer() {
           branchId: branchId
         });
 
-        const defaultGroups = [
-          'Capital Account', 'Current Assets', 'Current Liabilities', 'Fixed Assets', 
-          'Investments', 'Loans (Liability)', 'Suspense Account', 'Sales Account', 
-          'Purchase Account', 'Direct Income', 'Indirect Income', 'Direct Expenses', 
-          'Indirect Expenses'
-        ].map((name, index) => ({ id: `${branchId}_g_${index}`, name, branchId }));
-        
+        const defaultGroups = REQUIRED_ACCOUNT_GROUPS.map((name, index) => ({
+          id: `${branchId}_g_${index}`,
+          name,
+          branchId,
+        }));
+
         await trx('account_groups').insert(defaultGroups);
       });
       
@@ -325,6 +340,9 @@ async function startServer() {
   // Account Groups
   app.get("/api/account-groups", async (req, res) => {
     const { branchId } = req.query;
+    if (branchId) {
+      await ensureStandardAccountGroups(String(branchId));
+    }
     let query = db('account_groups').select('*');
     if (branchId) query = query.where({ branchId });
     res.json(await query);
