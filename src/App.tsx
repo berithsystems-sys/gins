@@ -75,9 +75,9 @@ const GATEWAY_MENU = [
     { id: 'daybook', label: 'Day Book', key: 'K' },
   ]},
   { section: 'Utilities', items: [
-    { id: 'banking', label: 'Banking', key: 'N' },
+    // { id: 'banking', label: 'Banking', key: 'N' },
     { id: 'payroll', label: 'Payroll', key: 'Y' },
-    { id: 'debug', label: 'Diagnostics', key: 'D' },
+    // { id: 'debug', label: 'Diagnostics', key: 'D' },
   ]},
   { section: 'Reports', items: [
     { id: 'balance_sheet', label: 'Balance Sheet', key: 'B' },
@@ -348,14 +348,14 @@ export default function App() {
   useHotkeys('c', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('LEDGER'); });
   useHotkeys('a', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('ALTER'); });
   useHotkeys('k', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('DAYBOOK'); });
-  useHotkeys('n', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('BANKING'); });
+  // useHotkeys('n', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('BANKING'); });
   useHotkeys('b', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('BALANCE_SHEET'); });
   useHotkeys('p', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('PL_ACCOUNT'); });
   useHotkeys('r', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('RATIO'); });
   useHotkeys('t', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('TRIAL_BALANCE'); });
   useHotkeys('h', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('CHART'); });
   useHotkeys('l', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('AUDIT'); });
-  useHotkeys('d', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('DEBUG'); });
+  // useHotkeys('d', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('DEBUG'); });
   useHotkeys('alt+c', () => setShowCalculator(true), { enableOnFormTags: true });
   const handleLogout = () => {
     localStorage.removeItem('tally_user');
