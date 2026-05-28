@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Lock, User, Hash, Download, ArrowRight, ShieldCheck, Globe, Database } from 'lucide-react';
+import { Lock, User, Hash, Download, ArrowRight, ShieldCheck, Globe, Database, Monitor, Smartphone, X } from 'lucide-react';
 
 interface LoginScreenProps {
   onLogin: (user: any) => void;
@@ -18,17 +18,23 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showInstallBtn, setShowInstallBtn] = useState(false);
+  const [showInstallModal, setShowInstallModal] = useState(false);
 
   useEffect(() => {
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setShowInstallBtn(true);
-    });
+    // Check if app is already installed or running in standalone mode
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+    
+    if (!isStandalone) {
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        setDeferredPrompt(e);
+        // Automatically show the modal after a short delay to invite users
+        setTimeout(() => setShowInstallModal(true), 2000);
+      });
+    }
 
     window.addEventListener('appinstalled', () => {
-      setShowInstallBtn(false);
+      setShowInstallModal(false);
       setDeferredPrompt(null);
     });
   }, []);
@@ -38,7 +44,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
       if (outcome === 'accepted') {
-        setShowInstallBtn(false);
+        setShowInstallModal(false);
       }
       setDeferredPrompt(null);
     }
@@ -86,7 +92,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
             <div className="bg-tally-accent p-2 rounded-lg">
               <Database className="w-8 h-8 text-tally-header" />
             </div>
-            <h1 className="text-2xl font-black text-white tracking-tighter">GINS ERP</h1>
+            <h1 className="text-2xl font-black text-white tracking-tighter">EBC Accounting</h1>
           </div>
           
           <h2 className="text-5xl font-black text-white leading-tight mb-6">
@@ -124,7 +130,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         </motion.div>
 
         <div className="relative z-10 flex items-center justify-between text-white/30 text-[10px] font-bold uppercase tracking-[0.2em]">
-          <span>© 2026 BERITHSYSTEMS</span>
+          <span>© 2026 BERITHSYSTEMS.com</span>
           <span>Version 4.0.2-RELEASE</span>
         </div>
       </div>
@@ -132,17 +138,67 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
       {/* Right Side: Login Form */}
       <div className="flex-1 flex items-center justify-center p-6 bg-gray-50 relative">
         <AnimatePresence>
-          {showInstallBtn && (
-            <motion.button
-              initial={{ y: -50, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: -50, opacity: 0 }}
-              onClick={handleInstall}
-              className="absolute top-6 right-6 bg-tally-accent hover:bg-yellow-500 text-black px-4 py-2 rounded-full text-[11px] font-black uppercase flex items-center gap-2 shadow-lg transition-all z-20"
-            >
-              <Download className="w-4 h-4" />
-              Install Desktop App
-            </motion.button>
+          {showInstallModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-tally-header/60 backdrop-blur-sm">
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden border border-white/20"
+              >
+                <div className="bg-tally-teal p-6 text-white relative">
+                  <button 
+                    onClick={() => setShowInstallModal(false)}
+                    className="absolute top-4 right-4 p-1 hover:bg-white/20 rounded-full transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                  <div className="bg-white/20 w-12 h-12 rounded-2xl flex items-center justify-center mb-4">
+                    <Download className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-xl font-black uppercase tracking-tight">Install GINS ERP</h3>
+                  <p className="text-white/70 text-xs mt-1 font-medium">Get the best experience on your desktop or mobile device.</p>
+                </div>
+
+                <div className="p-6 space-y-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                        <Monitor className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-black text-gray-700 uppercase">Desktop App</p>
+                        <p className="text-[10px] text-gray-400 font-bold uppercase">Launch from taskbar & keyboard shortcuts</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
+                        <Smartphone className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-black text-gray-700 uppercase">Mobile Experience</p>
+                        <p className="text-[10px] text-gray-400 font-bold uppercase">Native feel & offline capabilities</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button 
+                      onClick={() => setShowInstallModal(false)}
+                      className="flex-1 py-3 text-[11px] font-black text-gray-400 uppercase hover:bg-gray-50 rounded-xl transition-colors"
+                    >
+                      Maybe Later
+                    </button>
+                    <button 
+                      onClick={handleInstall}
+                      className="flex-1 bg-tally-teal hover:bg-tally-header text-white py-3 text-[11px] font-black uppercase rounded-xl shadow-lg shadow-tally-teal/20 transition-all flex items-center justify-center gap-2"
+                    >
+                      Install Now
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
           )}
         </AnimatePresence>
 
