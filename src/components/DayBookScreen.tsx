@@ -244,7 +244,7 @@ const eS = {
 // ─────────────────────────────────────────────────────────────────────────────
 // Voucher Detail Side Panel
 // ─────────────────────────────────────────────────────────────────────────────
-function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSaved, onEdit, panelRef }) {
+function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSaved, onEdit, panelRef, editBtnRef }) {
   const [voidConfirm, setVoidConfirm] = useState(false);
   const [voiding, setVoiding]         = useState(false);
   const [voidErr, setVoidErr]         = useState('');
@@ -364,7 +364,7 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
 
       {!isVoided && !voidConfirm && (
         <div style={{ padding: '10px 12px', display: 'flex', gap: 8, borderTop: `1px solid ${BORDER}`, background: vs.bodyBg }}>
-          <button onClick={onEdit}
+          <button ref={editBtnRef} onClick={onEdit}
             style={{ background: vs.header, color: '#fff', border: 'none', borderRadius: 2, padding: '5px 16px', fontSize: 12, fontWeight: 700, fontFamily: FONT, cursor: 'pointer', flex: 1 }}>
             ✎ Edit Voucher
           </button>
@@ -443,6 +443,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
 
   const tableBodyRef = useRef(null);
   const panelRef     = useRef(null);
+  const editBtnRef   = useRef(null);
   const fromRef      = useRef(null);
   const toRef        = useRef(null);
 
@@ -504,7 +505,9 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
   }, [focusedIdx]);
 
   useEffect(() => {
-    if (panelFocused && selectedVoucher) panelRef.current?.focus();
+    if (panelFocused && selectedVoucher) {
+      editBtnRef.current?.focus() || panelRef.current?.focus();
+    }
   }, [panelFocused, selectedVoucher]);
 
   useEffect(() => {
@@ -1051,6 +1054,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
               ledgers={ledgers}
               branchId={branchId}
               panelRef={panelRef}
+              editBtnRef={editBtnRef}
               onClose={() => { setSelectedVoucher(null); setPanelFocused(false); }}
               onVoid={() => { setSelectedVoucher(null); setPanelFocused(false); fetchData(); }}
               onSaved={handleSaved}
