@@ -1,5 +1,5 @@
 /**
- * @license: ginom
+ * @license
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -675,10 +675,10 @@ export default function App() {
             </div>
           </div>
         ) : (
-          <div className={`flex-1 overflow-auto bg-tally-bg ${currentScreen === 'VOUCHER' ? 'p-0' : 'p-4'}`}>
-            <div className={currentScreen === 'VOUCHER' ? 'h-full w-full' : 'max-w-7xl mx-auto'}>
+          <div className={`flex-1 overflow-auto bg-tally-bg ${currentScreen === 'VOUCHER' ? 'p-0' : 'p-4'} min-h-0`}>
+            <div className={currentScreen === 'VOUCHER' ? 'h-full w-full' : 'max-w-7xl mx-auto h-full flex flex-col min-h-0'}>
               {currentScreen !== 'VOUCHER' && (
-                <div className="bg-white border-2 border-tally-teal rounded-sm p-4 shadow-lg mb-4">
+                <div className="h-full bg-white border-2 border-tally-teal rounded-sm p-4 shadow-lg mb-4 flex flex-col min-h-0">
                   <div className="flex justify-between items-center mb-6 border-b border-tally-teal/20 pb-2">
                     <h1 className="text-lg font-bold text-tally-teal uppercase flex items-center gap-2">
                       <div className={`w-1 h-6 ${
@@ -734,7 +734,7 @@ export default function App() {
                   />
                 </div>
               )}
-              <div className={currentScreen !== 'VOUCHER' ? "bg-white border-2 border-tally-teal rounded-sm p-4 shadow-lg" : ""}>
+              <div className={currentScreen !== 'VOUCHER' ? "bg-white border-2 border-tally-teal rounded-sm p-4 shadow-lg h-full flex flex-col" : ""}>
                 {currentScreen === 'LEDGER' && <MastersDashboard branchId={selectedBranchId} />}
                 {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} onSelectLedger={(id) => { setSelectedLedgerId(id); setCurrentScreen('LEDGER_DETAIL'); }} />}
                 {currentScreen === 'CHART' && <ChartOfAccountsScreen branchId={selectedBranchId} />}
