@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 
 export default function CompanyScreen({ branchId }: { branchId?: string }) {
   const [company, setCompany] = useState<any>(null);
@@ -28,7 +29,17 @@ export default function CompanyScreen({ branchId }: { branchId?: string }) {
     name: 'BERITHSYSTEMS HQ',
     code: 'HQ',
     location: 'Headquarters',
-    registrationType: 'Regular'
+    registrationType: 'Regular',
+    fy_start: '2026-04-01',
+    books_start: '2026-04-01'
+  };
+
+  const formatDate = (dateStr: string) => {
+    try {
+      return format(new Date(dateStr), 'dd-MMM-yyyy');
+    } catch (e) {
+      return dateStr;
+    }
   };
 
   return (
@@ -36,7 +47,7 @@ export default function CompanyScreen({ branchId }: { branchId?: string }) {
       <div className="border-2 border-tally-teal p-6 bg-white shadow-xl max-w-2xl mx-auto">
         <h2 className="text-xl font-bold text-tally-teal uppercase mb-6 flex items-center gap-2">
           <div className="w-1 h-6 bg-tally-teal"></div>
-          Church Information
+          Company Information
         </h2>
         
         <div className="grid grid-cols-2 gap-8 text-sm">
@@ -61,11 +72,11 @@ export default function CompanyScreen({ branchId }: { branchId?: string }) {
           <div className="space-y-4">
             <div>
               <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Financial Year Begin</label>
-              <div className="font-black border-b border-gray-100 py-1">01-Apr-2026</div>
+              <div className="font-black border-b border-gray-100 py-1 uppercase">{formatDate(displayData.fy_start)}</div>
             </div>
             <div>
               <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Books Beginning From</label>
-              <div className="font-black border-b border-gray-100 py-1">01-Apr-2026</div>
+              <div className="font-black border-b border-gray-100 py-1 uppercase">{formatDate(displayData.books_start)}</div>
             </div>
             <div>
               <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Registration Type</label>
