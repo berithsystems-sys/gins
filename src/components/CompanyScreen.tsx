@@ -75,7 +75,7 @@ export default function CompanyScreen({ branchId }: { branchId?: string }) {
               <div className="font-black border-b border-gray-100 py-1 uppercase">{formatDate(displayData.fy_start)}</div>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Books beginning from</label>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Books end in</label>
               <div className="font-black border-b border-gray-100 py-1 uppercase">{formatDate(displayData.books_start)}</div>
             </div>
             <div>
