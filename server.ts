@@ -467,7 +467,19 @@ async function startServer() {
   });
 
   app.delete("/api/ledgers/:id", async (req, res) => {
-    await db('ledgers').where({ id: req.params.id }).delete();
+    const id = req.params.id;
+    const ledger = await db('ledgers').where({ id }).first();
+    if (!ledger) {
+      return res.status(404).json({ error: 'Ledger not found.' });
+    }
+    const entryRow = await db('voucher_entries').where({ ledgerId: id }).count('* as count').first();
+    const entryCount = Number((entryRow as { count?: number | string })?.count ?? 0);
+    if (entryCount > 0) {
+      return res.status(400).json({
+        error: `Cannot delete "${ledger.name}": it has ${entryCount} voucher line(s). Void or remove those transactions first.`,
+      });
+    }
+    await db('ledgers').where({ id }).delete();
     res.json({ success: true });
   });
 
