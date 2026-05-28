@@ -23,8 +23,13 @@ export default function LedgerScreen({ branchId }: { branchId?: string }) {
         return res.json();
       })
       .then(data => {
-        setGroups(data);
-        if (data.length > 0) setGroupId(data[0].id);
+        const list = Array.isArray(data) ? data : [];
+        setGroups(list);
+        const preferred =
+          list.find((g: { name: string }) => g.name === 'Cash-in-hand') ||
+          list.find((g: { name: string }) => g.name === 'Bank Accounts') ||
+          list[0];
+        if (preferred) setGroupId(preferred.id);
       })
       .catch(err => console.error('Account groups fetch error:', err));
   }, [branchId]);
@@ -108,10 +113,21 @@ export default function LedgerScreen({ branchId }: { branchId?: string }) {
                   value={groupId}
                   onChange={(e) => setGroupId(e.target.value)}
                   className="w-full border-b-2 border-tally-teal focus:bg-tally-accent/10 p-1 font-bold text-sm outline-none"
+                  required
                 >
-                  <option value="">Primary</option>
-                  {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  {groups.length === 0 ? (
+                    <option value="">Loading groups…</option>
+                  ) : (
+                    groups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))
+                  )}
                 </select>
+                <p className="text-[9px] text-gray-500 mt-1 uppercase">
+                  For cash use <strong>Cash-in-hand</strong>, for bank use <strong>Bank Accounts</strong>
+                </p>
               </div>
 
               <div className="pt-4">
