@@ -426,7 +426,7 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Day Book Screen
 // ─────────────────────────────────────────────────────────────────────────────
-export default function DayBookScreen({ branchId, initialDate, fromDate: propFrom, toDate: propTo, user, onBackToGateway }) {
+export default function DayBookScreen({ branchId, initialDate, fromDate: propFrom, toDate: propTo, user, onBackToGateway, onPrint }) {
   const today = new Date().toISOString().slice(0, 10);
   const [vouchers, setVouchers]               = useState([]);
   const [ledgers, setLedgers]                 = useState([]);
@@ -518,7 +518,25 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
 
       if (e.key === 'F2') { setShowPeriod(p => !p); return; }
       if (e.key === 'F5') { fetchData(); return; }
-      if (e.altKey && e.key.toLowerCase() === 'p') { window.print(); return; }
+      if (e.altKey && e.key.toLowerCase() === 'p') { 
+        e.preventDefault();
+        if (selectedVoucher && onPrint) {
+          onPrint({
+            type: 'voucher',
+            companyName: companyName,
+            voucherType: selectedVoucher.type,
+            voucherNo: selectedVoucher.number,
+            date: fmtDate(selectedVoucher.date),
+            narration: selectedVoucher.narration,
+            entries: (selectedVoucher.entries || []).map(e => ({
+              ledgerName: e.ledger_name || ledgers.find(l => l.id === e.ledgerId)?.name || e.ledgerId,
+              type: e.type,
+              amount: e.amount
+            }))
+          });
+        }
+        return; 
+      }
       if (e.altKey && e.key.toLowerCase() === 'e') { handleExport(); return; }
       if (e.altKey && e.key.toLowerCase() === 'd' && selectedVoucher && !isEditing) {
         e.preventDefault();
