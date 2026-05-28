@@ -305,15 +305,10 @@ export default function App() {
   }, { enableOnFormTags: true }, [currentScreen, selectedIndex, gotoHighlightedIdx, gotoSearch]);
 
   const handleBack = () => {
-    if (showCalculator) {
-      setShowCalculator(false);
-      return;
-    }
-
-    if (showDateModal) {
-      setShowDateModal(false);
-      return;
-    }
+    if (showCalculator) { setShowCalculator(false); return; }
+    if (showDateModal) { setShowDateModal(false); return; }
+    if (showHelp) { setShowHelp(false); return; }
+    if (showQuit) { setShowQuit(false); return; }
 
     if (currentScreen === 'GOTO') {
       setCurrentScreen('GATEWAY');
@@ -324,7 +319,13 @@ export default function App() {
       return;
     }
 
-    if (['VOUCHER', 'LEDGER', 'ALTER', 'DAYBOOK', 'BANKING', 'BALANCE_SHEET', 'PL_ACCOUNT', 'RATIO', 'CHART', 'AUDIT', 'COMPANY', 'DATA', 'IMPORT', 'EXPORT', 'PRINT', 'EMAIL', 'SETTINGS', 'ADMIN', 'TRIAL_BALANCE', 'CASH_BANK_BOOK'].includes(currentScreen)) {
+    if (currentScreen === 'TRIAL_BALANCE' || currentScreen === 'DAYBOOK') {
+      // These screens handle their own internal navigation and back-to-gateway.
+      // We don't want to force-redirect to GATEWAY here.
+      return;
+    }
+
+    if (['VOUCHER', 'LEDGER', 'ALTER', 'BANKING', 'BALANCE_SHEET', 'PL_ACCOUNT', 'RATIO', 'CHART', 'AUDIT', 'COMPANY', 'DATA', 'IMPORT', 'EXPORT', 'PRINT', 'EMAIL', 'SETTINGS', 'ADMIN', 'CASH_BANK_BOOK'].includes(currentScreen)) {
       setCurrentScreen('GATEWAY');
     } else {
       if (user?.role === 'HQ') setCurrentScreen('HQ');
@@ -333,22 +334,28 @@ export default function App() {
   };
 
   useHotkeys('esc', (e) => {
+    if (currentScreen === 'TRIAL_BALANCE' || currentScreen === 'DAYBOOK') {
+      // These screens handle their own ESC logic. 
+      // We only want App to handle it if they aren't active or if we're at their top level.
+      // For now, let's just return and let the components handle it.
+      return;
+    }
     e.preventDefault();
     handleBack();
   }, { enableOnFormTags: true }, [showCalculator, showDateModal, currentScreen, user]);
 
-  useHotkeys('v', () => setCurrentScreen('VOUCHER'));
-  useHotkeys('c', () => setCurrentScreen('LEDGER'));
-  useHotkeys('a', () => setCurrentScreen('ALTER'));
-  useHotkeys('k', () => setCurrentScreen('DAYBOOK'));
-  useHotkeys('n', () => setCurrentScreen('BANKING'));
-  useHotkeys('b', () => setCurrentScreen('BALANCE_SHEET'));
-  useHotkeys('p', () => setCurrentScreen('PL_ACCOUNT'));
-  useHotkeys('r', () => setCurrentScreen('RATIO'));
-  useHotkeys('t', () => setCurrentScreen('TRIAL_BALANCE'));
-  useHotkeys('h', () => setCurrentScreen('CHART'));
-  useHotkeys('l', () => setCurrentScreen('AUDIT'));
-  useHotkeys('d', () => setCurrentScreen('DEBUG'));
+  useHotkeys('v', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('VOUCHER'); });
+  useHotkeys('c', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('LEDGER'); });
+  useHotkeys('a', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('ALTER'); });
+  useHotkeys('k', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('DAYBOOK'); });
+  useHotkeys('n', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('BANKING'); });
+  useHotkeys('b', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('BALANCE_SHEET'); });
+  useHotkeys('p', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('PL_ACCOUNT'); });
+  useHotkeys('r', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('RATIO'); });
+  useHotkeys('t', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('TRIAL_BALANCE'); });
+  useHotkeys('h', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('CHART'); });
+  useHotkeys('l', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('AUDIT'); });
+  useHotkeys('d', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('DEBUG'); });
   useHotkeys('ctrl+n', () => setShowCalculator(true));
   const handleLogout = () => {
     localStorage.removeItem('tally_user');
@@ -372,7 +379,11 @@ export default function App() {
   useHotkeys('alt+e', () => setCurrentScreen('EXPORT'), { enableOnFormTags: true });
   useHotkeys('alt+p', () => setCurrentScreen('PRINT'), { enableOnFormTags: true });
   useHotkeys('alt+s', () => setCurrentScreen('SETTINGS'), { enableOnFormTags: true });
-  useHotkeys('alt+d', (e) => { e.preventDefault(); setCurrentScreen('DEBUG'); }, { enableOnFormTags: true });
+  useHotkeys('alt+d', (e) => { 
+    if (currentScreen === 'DAYBOOK') return;
+    e.preventDefault(); 
+    setCurrentScreen('DEBUG'); 
+  }, { enableOnFormTags: true }, [currentScreen]);
 
   // Global Function Keys (Tally Style)
   useHotkeys('f2', (e) => {
@@ -749,11 +760,11 @@ export default function App() {
                 {currentScreen === 'CHART' && <ChartOfAccountsScreen branchId={selectedBranchId} />}
                 {currentScreen === 'BALANCE_SHEET' && <BalanceSheetScreen branchId={selectedBranchId} onBack={handleBack} />}
                 {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} onBack={handleBack} />}
-                {currentScreen === 'TRIAL_BALANCE' && <TrialBalanceScreen branchId={selectedBranchId} />}
+                {currentScreen === 'TRIAL_BALANCE' && <TrialBalanceScreen branchId={selectedBranchId} onBackToGateway={() => setCurrentScreen('GATEWAY')} />}
                 {currentScreen === 'CASH_BANK_BOOK' && <CashBankBookScreen branchId={selectedBranchId} />}
                 {currentScreen === 'RATIO' && <RatioAnalysisScreen onBack={handleBack} branchId={selectedBranchId} />}
                 {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} />}
-                {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} initialDate={currentDate} />}
+                {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} initialDate={currentDate} onBackToGateway={() => setCurrentScreen('GATEWAY')} />}
                 {currentScreen === 'LEDGER_DETAIL' && <LedgerVouchersScreen branchId={selectedBranchId} ledgerId={selectedLedgerId} onBack={() => setCurrentScreen('GATEWAY')} />}
                 {currentScreen === 'HQ' && user?.role === 'HQ' && <HQDashboard onSelectBranch={(id) => { setSelectedBranchId(id); setCurrentScreen('GATEWAY'); }} />}
                 {currentScreen === 'ANALYTICS' && <AnalyticsScreen branches={branches} ledgers={allLedgers} vouchers={allVouchers} />}
