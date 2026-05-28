@@ -184,6 +184,20 @@ export default function VoucherScreen({
     return `${cb.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${cb.type}`;
   };
 
+  const getAdjustedBalance = (ledgerId, amountValue, entryType) => {
+    const cb = currentBalances[ledgerId];
+    const amount = Number(amountValue || 0);
+    if (!cb || !amount) return null;
+
+    const signed = cb.type === 'Dr' ? cb.balance : -cb.balance;
+    const delta = entryType === 'Dr' ? amount : -amount;
+    const next = signed + delta;
+    return {
+      balance: Math.abs(next),
+      type: next >= 0 ? 'Dr' : 'Cr',
+    };
+  };
+
   const calcTotal = (side) =>
     entries.filter(e => !side || e.type === side).reduce((acc, e) => acc + Number(e.amount || 0), 0);
 
@@ -516,6 +530,16 @@ export default function VoucherScreen({
                           {isLoad ? <span style={{ color: '#666' }}>...</span> : cb ? <span style={{ color: '#555' }}>{cb.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })} {cb.type}</span> : null}
                         </div>
                       )}
+
+                      {entry.ledgerId && !isLoad && cb && Number(entry.amount || 0) > 0 && (() => {
+                        const adjusted = getAdjustedBalance(entry.ledgerId, entry.amount, entry.type);
+                        return adjusted ? (
+                          <div style={{ ...S.curBalLine, color: '#333', fontSize: 11 }}>
+                            <span style={S.curBalLabel}>New Bal: </span>
+                            <span>{adjusted.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })} {adjusted.type}</span>
+                          </div>
+                        ) : null;
+                      })()}
 
                       {config.showBillWise && entry.ledgerId && (
                         <div style={S.billWiseRow}>
