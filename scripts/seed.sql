@@ -38,12 +38,12 @@ INSERT INTO `account_groups` (`id`, `name`, `under`, `branchId`) VALUES
 -- Other
 ('g_014', 'Suspense Account', NULL, '1'),
 ('g_015', 'Bank Accounts', NULL, '1'),
-('g_016', 'Cash', NULL, '1');
+('g_016', 'Cash-in-hand', NULL, '1');
 
 -- 4. Create default Ledgers (Master accounts)
 INSERT INTO `ledgers` (`id`, `name`, `groupId`, `group_name`, `openingBalance`, `balanceType`, `branchId`) VALUES
 -- Cash & Bank
-('l_001', 'Cash', 'g_016', 'Cash', 0, 'Dr', '1'),
+('l_001', 'Cash', 'g_016', 'Cash-in-hand', 0, 'Dr', '1'),
 ('l_002', 'Bank Account', 'g_015', 'Bank Accounts', 0, 'Dr', '1'),
 
 -- Income
