@@ -253,7 +253,7 @@ function LedgerMonthlySummary({ ledger, branchId, onBack, onDrill }: any) {
 }
 
 // ─── LEVEL 1: TRIAL BALANCE ─────────────────────────────────────────────────
-export default function TrialBalanceScreen({ branchId }: { branchId?: string }) {
+export default function TrialBalanceScreen({ branchId, onBackToGateway }: { branchId?: string; onBackToGateway?: () => void }) {
   const [ledgers, setLedgers]               = useState<Ledger[]>([]);
   const [vouchers, setVouchers]             = useState<any[]>([]);
   const [viewLevel, setViewLevel]           = useState<'trial' | 'monthly' | 'vouchers' | 'voucher_detail'>('trial');
@@ -344,22 +344,25 @@ export default function TrialBalanceScreen({ branchId }: { branchId?: string }) 
   useEffect(() => {
     const handleKeys = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.stopImmediatePropagation();
         if (viewLevel === 'voucher_detail') {
           e.preventDefault();
-          e.stopPropagation();
           setViewLevel('vouchers');
           return;
         }
         if (viewLevel === 'vouchers') {
           e.preventDefault();
-          e.stopPropagation();
           setViewLevel('monthly');
           return;
         }
         if (viewLevel === 'monthly') {
           e.preventDefault();
-          e.stopPropagation();
           setViewLevel('trial');
+          return;
+        }
+        if (viewLevel === 'trial') {
+          e.preventDefault();
+          if (onBackToGateway) onBackToGateway();
           return;
         }
       }
@@ -387,9 +390,9 @@ export default function TrialBalanceScreen({ branchId }: { branchId?: string }) 
         }
       }
     };
-    window.addEventListener('keydown', handleKeys);
-    return () => window.removeEventListener('keydown', handleKeys);
-  }, [selectedKey, flatList, expandedGroups, viewLevel, isDetailed]);
+    window.addEventListener('keydown', handleKeys, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeys, { capture: true });
+  }, [selectedKey, flatList, expandedGroups, viewLevel, isDetailed, onBackToGateway]);
 
   const handleExport = () => {
     const exportData = sortedGroups.flatMap(grp => {
