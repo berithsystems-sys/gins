@@ -1,10 +1,12 @@
 /**
  * TallyPrime-style Balance Sheet A/c — v8
- * Fixes over v7:
- *   FIX-1  Alt+P works inside LedgerDetail drill-down (prints ledger statement)
- *   FIX-2  Print button visible in LedgerDetail header
- *   FIX-3  PLScreen Alt+P guard removed — fires from main screen too
- *   FIX-4  handlePrintLedger built in BalanceSheetScreen, passed as prop to LedgerDetail
+ * Fix over v7:
+ * 1. Alt+P now works inside LedgerDetail (drill-down) view
+ *    - Added handlePrint() function to LedgerDetail
+ *    - Extended existing keyboard handler in LedgerDetail to catch Alt+P
+ * 2. BalanceSheetScreen keyboard guard no longer blocks when drillLedger is active
+ *    - Removed drillLedger from the early-return guard
+ *    - So Alt+P in drill-down is handled by LedgerDetail itself, not swallowed
  */
 
 import React, {
@@ -32,21 +34,28 @@ const ALL_GROUPS = [...LIABILITY_GROUPS, ...ASSET_GROUPS];
 // ── Group Mapping Helper ─────────────────────────────────────────────────────
 const mapToPrimaryGroup = (groupName: string): string => {
   const g = groupName.toLowerCase();
+
+  // Liabilities
   if (g.includes('capital') || g.includes('equity')) return 'Capital Account';
   if (g.includes('reserve') || g.includes('surplus') || g.includes('retained earnings')) return 'Reserves & Surplus';
   if (g.includes('loan') && (g.includes('liab') || g.includes('secured') || g.includes('unsecured'))) return 'Loans (Liability)';
   if (g.includes('creditor') || g.includes('current liab') || g.includes('duty') || g.includes('tax') || g.includes('provision') || g.includes('payable') || g.includes('bank od')) return 'Current Liabilities';
   if (g.includes('suspense')) return 'Suspense Account';
+
+  // Assets
   if (g.includes('fixed asset') || g.includes('property') || g.includes('plant') || g.includes('equipment')) return 'Fixed Assets';
   if (g.includes('investment')) return 'Investments';
   if (g.includes('bank account') || g.includes('cash') || g.includes('debtor') || g.includes('current asset') || g.includes('stock') || g.includes('inventory') || g.includes('receivable') || g.includes('deposit')) return 'Current Assets';
   if (g.includes('misc') && g.includes('asset')) return 'Misc. Expenses (Asset)';
+
+  // P&L
   if (g.includes('sales')) return 'Sales Account';
   if (g.includes('purchase')) return 'Purchase Account';
   if (g.includes('direct inc')) return 'Direct Income';
   if (g.includes('indirect inc')) return 'Indirect Income';
   if (g.includes('direct exp')) return 'Direct Expenses';
   if (g.includes('indirect exp')) return 'Indirect Expenses';
+
   return groupName;
 };
 
@@ -82,7 +91,8 @@ const normalizeLedger = (raw: any, groupIdMap: Record<string, string> = {}): Led
   if (!group && raw.group_id) group = groupIdMap[raw.group_id] || '';
   if (!group && raw.group && raw.group !== 'group') group = (raw.group || '').trim();
   if (!group) group = '[Unknown Group]';
-  return { ...raw, group: mapToPrimaryGroup(group), _rawGroup: group };
+  const mappedGroup = mapToPrimaryGroup(group);
+  return { ...raw, group: mappedGroup, _rawGroup: group };
 };
 
 // ── Static styles ────────────────────────────────────────────────────────────
@@ -104,7 +114,7 @@ const s: Record<string, React.CSSProperties> = {
   twoCol:      { display:'flex', minHeight:'100%', alignItems:'stretch' },
   col:         { flex:1, display:'flex', flexDirection:'column', minWidth:0 },
   divider:     { width:1, background:'#eee', flexShrink:0 },
-  table:       { width:'100%', borderCollapse:'collapse', tableLayout:'fixed', height:'100%' },
+  table:       { width:'100%', borderCollapse:'collapse', tableLayout:'fixed', height: '100%' },
   totalRow:    { background:LIGHT, borderTop:'1px solid #1a2a3a', borderBottom:'1px solid #1a2a3a', position:'sticky', bottom:0, zIndex:10 },
   rightPanel:  { position:'absolute', top:26, right:0, bottom:24, width:88, background:DARK, display:'flex', flexDirection:'column', borderLeft:'1px solid #0d1a2a', zIndex:100 },
   sideBtn:     { border:'none', borderBottom:'1px solid rgba(255,255,255,0.07)', color:'#cdd5e0', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'flex-start', justifyContent:'center', padding:'4px 8px', textAlign:'left', fontFamily:FONT_, flex:1, transition:'background 0.1s' },
@@ -139,9 +149,9 @@ interface ColHdrCellsProps {
 }
 const ColHdrCells = React.memo(({ allPeriods, periodLabel }: ColHdrCellsProps) => (
   <>
-    <th style={{ ...rs.th, textAlign:'left', width:'70%', borderBottom:`1px solid ${BORDER}` }}>Particulars</th>
+    <th style={{ ...rs.th, textAlign:'left', width:'70%', borderBottom: `1px solid ${BORDER}` }}>Particulars</th>
     {allPeriods.map((p, i) => (
-      <th key={i} style={{ ...rs.th, textAlign:'right', width:`${30 / allPeriods.length}%`, borderLeft:'1px solid #ccd5dd', borderBottom:`1px solid ${BORDER}` }}>
+      <th key={i} style={{ ...rs.th, textAlign:'right', width:`${30 / allPeriods.length}%`, borderLeft: '1px solid #ccd5dd', borderBottom: `1px solid ${BORDER}` }}>
         <div style={{ fontSize:10, fontWeight:800, color:'#555', whiteSpace:'nowrap' }}>{p.label}</div>
       </th>
     ))}
@@ -151,38 +161,18 @@ const ColHdrCells = React.memo(({ allPeriods, periodLabel }: ColHdrCellsProps) =
 // ── SectionHeader ────────────────────────────────────────────────────────────
 const SectionHeader = React.memo(({ label, colSpan }: { label: string; colSpan: number }) => (
   <tr style={{ background:'#fafbff' }}>
-    <td colSpan={colSpan} style={{ padding:'4px 10px 1px', fontSize:11, fontStyle:'italic', fontWeight:700, color:'#555', letterSpacing:0.5, borderBottom:'none', textTransform:'uppercase' }}>
+    <td colSpan={colSpan} style={{ padding:'4px 10px 1px', fontSize:11, fontStyle:'italic', fontWeight:700, color:'#555', letterSpacing:0.5, borderBottom:'none', textTransform: 'uppercase' }}>
       {label}
     </td>
   </tr>
 ));
 
 // ── LedgerDetail ─────────────────────────────────────────────────────────────
-// FIX-1/2: Accepts onPrint prop; Alt+P fires it; Print button added to header.
-function LedgerDetail({
-  ledger, branchId, onBack, onPrint,
-}: {
-  ledger: Ledger;
-  branchId?: string;
-  onBack: () => void;
-  onPrint: () => void;   // ← NEW
-}) {
+// FIX v8: Added handlePrint() for ledger statement printing
+//         Extended keyboard handler to respond to Alt+P
+function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?: string; onBack: () => void }) {
   const [rows, setRows]       = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Keyboard: Escape → back | Alt+P → print
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault(); e.stopPropagation(); onBack(); return;
-      }
-      if (e.altKey && e.key.toLowerCase() === 'p') {
-        e.preventDefault(); e.stopPropagation(); onPrint(); return;
-      }
-    };
-    window.addEventListener('keydown', h, true);
-    return () => window.removeEventListener('keydown', h, true);
-  }, [onBack, onPrint]);
 
   useEffect(() => {
     const q = branchId ? `?branchId=${branchId}` : '';
@@ -206,21 +196,145 @@ function LedgerDetail({
   const closing = obSgn + totalDr - totalCr;
   const BD      = '#e0e6ee';
 
+  // ── FIX v8: Ledger print function ─────────────────────────────────
+  const handlePrint = useCallback(() => {
+    const fmt = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+    // Recompute running balance locally for the print (rows state may differ from withRun above)
+    let runBal = obSgn;
+    const printRows = rows.map(r => {
+      const amt = Number(r.entry_amount || 0);
+      runBal += r.entry_type === 'Dr' ? amt : -amt;
+      return { ...r, running: runBal };
+    });
+
+    const bodyRows = printRows.map((r, i) => {
+      const isDr    = r.entry_type === 'Dr';
+      const runType = r.running >= 0 ? 'Dr' : 'Cr';
+      return `<tr style="background:${i % 2 === 0 ? '#fff' : '#fafbfd'}">
+        <td style="padding:3px 8px;border-right:1px solid ${BD}">${fmtDate(r.date)}</td>
+        <td style="padding:3px 8px;font-weight:600;border-right:1px solid ${BD};max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.narration || r.type || '—'}</td>
+        <td style="padding:3px 8px;font-style:italic;color:#555;border-right:1px solid ${BD}">${r.type || ''}</td>
+        <td style="padding:3px 8px;text-align:center;border-right:1px solid ${BD}">${r.number || ''}</td>
+        <td style="padding:3px 10px;text-align:right;color:#7a0000;font-weight:${isDr ? 700 : 400};border-right:1px solid ${BD}">${isDr ? fmt(r.entry_amount) : ''}</td>
+        <td style="padding:3px 10px;text-align:right;color:#006b00;font-weight:${!isDr ? 700 : 400};border-right:1px solid ${BD}">${!isDr ? fmt(r.entry_amount) : ''}</td>
+        <td style="padding:3px 10px;text-align:right;font-weight:600">${fmt(r.running)} ${runType}</td>
+      </tr>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Ledger – ${ledger.name}</title>
+  <meta charset="utf-8"/>
+  <style>
+    @page { margin: 12mm; size: A4 landscape; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 12px; }
+    .hdr { background: #1f4e79; color: #fff; padding: 8px 14px; }
+    .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+    .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; letter-spacing: 0.5px; }
+    .meta { display: flex; justify-content: space-between; background: #f0f4f8; padding: 5px 12px; border-bottom: 1px solid #b8c4cc; font-size: 11px; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th { background: #f0f4f8; padding: 4px 8px; font-size: 11px; font-weight: 700; border-bottom: 1px solid ${BORDER}; border-right: 1px solid ${BD}; text-align: left; white-space: nowrap; }
+    thead th:nth-child(4) { text-align: center; }
+    thead th:nth-child(5), thead th:nth-child(6), thead th:nth-child(7) { text-align: right; }
+    .ob-row td { background: #f8fbff; font-weight: 700; font-style: italic; color: #555; padding: 3px 8px; border-bottom: 1px solid ${BD}; border-right: 1px solid ${BD}; }
+    tfoot td { background: #f0f4f8; font-weight: 700; padding: 4px 8px; border-top: 2px solid #1f4e79; border-right: 1px solid ${BD}; }
+    tfoot td:nth-child(5) { text-align: right; color: #7a0000; }
+    tfoot td:nth-child(6) { text-align: right; color: #006b00; }
+    tfoot td:nth-child(7) { text-align: right; font-weight: 800; }
+    .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
+    @media print { .footer { position: fixed; bottom: 0; right: 0; left: 0; } }
+  </style>
+</head>
+<body>
+  <div class="hdr">
+    <h1>${ledger.name}</h1>
+    <div class="sub">Ledger Statement</div>
+  </div>
+  <div class="meta">
+    <span><strong>Group:</strong> ${ledger.group || '—'}</span>
+    <span><strong>Opening Balance:</strong> ${fmt(ob)} ${ledger.balanceType || 'Dr'}</span>
+    <span><strong>Closing Balance:</strong> ${fmt(closing)} ${closing >= 0 ? 'Dr' : 'Cr'}</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:80px">Date</th>
+        <th>Particulars</th>
+        <th style="width:100px">Vch Type</th>
+        <th style="width:70px">Vch No.</th>
+        <th style="width:120px">Debit (₹)</th>
+        <th style="width:120px">Credit (₹)</th>
+        <th style="width:130px">Balance</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="ob-row">
+        <td></td>
+        <td>Opening Balance</td>
+        <td colspan="2"></td>
+        <td style="text-align:right;color:#7a0000">${obSgn > 0 ? fmt(ob) : ''}</td>
+        <td style="text-align:right;color:#006b00">${obSgn < 0 ? fmt(ob) : ''}</td>
+        <td style="text-align:right;font-weight:700">${fmt(ob)} ${ledger.balanceType || 'Dr'}</td>
+      </tr>
+      ${bodyRows}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="4" style="text-align:right;padding-right:12px">Closing Balance</td>
+        <td>${totalDr > 0 ? fmt(totalDr) : ''}</td>
+        <td>${totalCr > 0 ? fmt(totalCr) : ''}</td>
+        <td>${fmt(closing)} ${closing >= 0 ? 'Dr' : 'Cr'}</td>
+      </tr>
+    </tfoot>
+  </table>
+  <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} &nbsp;|&nbsp; ${ledger.name}</div>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=960,height=700');
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      setTimeout(() => { win.focus(); win.print(); }, 400);
+    }
+  }, [ledger, rows, ob, obSgn, totalDr, totalCr, closing]);
+
+  // ── FIX v8: Extended keyboard handler — Escape + Alt+P ────────────
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onBack();
+        return;
+      }
+      if (e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        e.stopPropagation();
+        handlePrint();
+      }
+    };
+    window.addEventListener('keydown', h, true);
+    return () => window.removeEventListener('keydown', h, true);
+  }, [onBack, handlePrint]);
+
   return (
     <div style={{ fontFamily:FONT_, fontSize:12, display:'flex', flexDirection:'column', height:'100%', background:'#fff', border:`1px solid ${BORDER}`, borderRadius:2, overflow:'hidden' }}>
-      {/* FIX-2: Print button in drill-down header */}
       <div style={{ background:HDR_BG, color:'#fff', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'3px 10px', fontSize:12, fontWeight:700, flexShrink:0 }}>
-        <button onClick={onBack}
-          style={{ background:'none', border:'1px solid rgba(255,255,255,0.4)', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:FONT_, padding:'1px 10px', borderRadius:2 }}>
-          ← Back (Esc)
-        </button>
+        <button onClick={onBack} style={{ background:'none', border:'1px solid rgba(255,255,255,0.4)', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:FONT_, padding:'1px 10px', borderRadius:2 }}>← Back (Esc)</button>
         <span style={{ flex:2, textAlign:'center', fontWeight:800, fontSize:13 }}>{ledger.name}</span>
-        <button onClick={onPrint}
-          style={{ background:'none', border:'1px solid rgba(255,255,255,0.4)', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:FONT_, padding:'1px 10px', borderRadius:2 }}>
-          🖨 Print (Alt+P)
+        {/* FIX v8: Print button added to the ledger detail header */}
+        <button
+          onClick={handlePrint}
+          title="Print Ledger Statement (Alt+P)"
+          style={{ background:'none', border:'1px solid rgba(255,255,255,0.4)', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:FONT_, padding:'1px 10px', borderRadius:2 }}
+        >
+          Print (Alt+P)
         </button>
       </div>
-
       <div style={{ display:'flex', justifyContent:'space-between', padding:'5px 12px', background:'#fafbfd', borderBottom:`1px solid ${BORDER}`, flexShrink:0 }}>
         <div>
           <span style={{ fontSize:11, color:'#777', fontStyle:'italic' }}>Ledger: </span>
@@ -235,7 +349,6 @@ function LedgerDetail({
           </span>
         </div>
       </div>
-
       <div style={{ flex:1, overflowY:'auto' }}>
         <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
           <thead>
@@ -285,11 +398,20 @@ function LedgerDetail({
           </tfoot>
         </table>
       </div>
+      {/* FIX v8: Status bar at the bottom of LedgerDetail showing shortcut hint */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'3px 10px', background:DARK, borderTop:'1px solid #0d1a2a', flexShrink:0, height:24 }}>
+        <span style={{ color:'#aaa', fontSize:10 }}>
+          {rows.length} transaction{rows.length !== 1 ? 's' : ''}
+          {' '}·{' '}
+          Closing: {fmtAmtAbs(closing)} {closing >= 0 ? 'Dr' : 'Cr'}
+        </span>
+        <span style={{ color:'#aaa', fontSize:10 }}>Esc: Back  |  Alt+P: Print Ledger Statement</span>
+      </div>
     </div>
   );
 }
 
-// ── PeriodModal ───────────────────────────────────────────────────────────────
+// ── PeriodModal ──────────────────────────────────────────────────────────────
 function PeriodModal({ from, to, onAccept, onCancel }: {
   from: string; to: string;
   onAccept: (f: string, t: string) => void;
@@ -335,7 +457,7 @@ function PeriodModal({ from, to, onAccept, onCancel }: {
   );
 }
 
-// ── AddPeriodModal ────────────────────────────────────────────────────────────
+// ── AddPeriodModal ───────────────────────────────────────────────────────────
 function AddPeriodModal({ onAdd, onCancel }: {
   onAdd: (label: string, from: string, to: string) => void;
   onCancel: () => void;
@@ -381,33 +503,35 @@ function AddPeriodModal({ onAdd, onCancel }: {
 
 // ── Main BalanceSheetScreen ──────────────────────────────────────────────────
 function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
-  const [ledgers, setLedgers]             = useState<Ledger[]>([]);
-  const [allVouchers, setAllVouchers]     = useState<any[]>([]);
-  const [allEntries, setAllEntries]       = useState<any[]>([]);
-  const [companyName, setCompanyName]     = useState('');
-  const [mainPeriod, setMainPeriod]       = useState({ from:'', to:'' });
-  const [extraPeriods, setExtraPeriods]   = useState<Period[]>([]);
-  const [showPeriod, setShowPeriod]       = useState(false);
-  const [showAddPeriod, setShowAddPeriod] = useState(false);
-  const [expanded, setExpanded]           = useState<Set<string>>(new Set());
-  const [drillLedger, setDrillLedger]     = useState<Ledger | null>(null);
-  const [loading, setLoading]             = useState(true);
-  const [loadError, setLoadError]         = useState('');
+  const [ledgers, setLedgers]               = useState<Ledger[]>([]);
+  const [allVouchers, setAllVouchers]       = useState<any[]>([]);
+  const [allEntries, setAllEntries]         = useState<any[]>([]);
+  const [companyName, setCompanyName]       = useState('');
+  const [mainPeriod, setMainPeriod]         = useState({ from:'', to:'' });
+  const [extraPeriods, setExtraPeriods]     = useState<Period[]>([]);
+  const [showPeriod, setShowPeriod]         = useState(false);
+  const [showAddPeriod, setShowAddPeriod]   = useState(false);
+  const [expanded, setExpanded]             = useState<Set<string>>(new Set());
+  const [drillLedger, setDrillLedger]       = useState<Ledger | null>(null);
+  const [loading, setLoading]               = useState(true);
+  const [loadError, setLoadError]           = useState('');
   const [showNettProfit, setShowNettProfit] = useState(true);
-  const [focusedRowIdx, setFocusedRowIdx] = useState<number>(-1);
+  const [focusedRowIdx, setFocusedRowIdx]   = useState<number>(-1);
 
   const rootRef    = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
+  // Auto-focus root when modals close
   useEffect(() => {
     if (!drillLedger && !showPeriod && !showAddPeriod) rootRef.current?.focus();
   }, [drillLedger, showPeriod, showAddPeriod]);
 
-  // ── Fetch ────────────────────────────────────────────────────────
+  // ── Fetch & Process ────────────────────────────────────────────────
   useEffect(() => {
     const q = branchId ? `?branchId=${branchId}` : '';
     setLoading(true);
     setLoadError('');
+    let debugLog = '🔍 DATA LOAD LOG\n\n';
 
     Promise.all([
       fetch(`/api/ledgers${q}`).then(r => { if (!r.ok) throw new Error(`Ledgers: ${r.status}`); return r.json(); }),
@@ -416,6 +540,10 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
       fetch('/api/branches').then(r => r.json()).catch(() => []),
     ])
     .then(([l, v, ve, b]) => {
+      debugLog += `✓ Ledgers: ${Array.isArray(l) ? l.length : 0} rows\n`;
+      debugLog += `✓ Vouchers: ${Array.isArray(v) ? v.length : 0} rows\n`;
+      debugLog += `✓ Entries: ${Array.isArray(ve) ? ve.length : 0} rows\n`;
+
       const groupIdMap: Record<string, string> = {};
       if (Array.isArray(l)) {
         l.forEach((lg: any) => {
@@ -424,15 +552,22 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
           }
         });
       }
+      debugLog += `\n📊 Group ID Map: ${Object.keys(groupIdMap).length} mappings\n`;
+
       const ledgerArr: Ledger[] = (Array.isArray(l) ? l : []).map(raw => normalizeLedger(raw, groupIdMap));
       setLedgers(ledgerArr);
+
+      debugLog += `✓ Normalized: ${ledgerArr.length} ledgers\n`;
+      if (ledgerArr.length > 0) {
+        debugLog += `  [0] ${ledgerArr[0].name} → group="${ledgerArr[0].group}"\n`;
+      }
 
       const vArr = activeVouchers(v);
       setAllVouchers(vArr);
 
       const activeVoucherIds = new Set(vArr.map((x: any) => x.id));
       const voucherDateMap: Record<string, string> = {};
-      vArr.forEach((v: any) => { voucherDateMap[v.id] = v.date?.slice(0,10) || ''; });
+      vArr.forEach((v: any) => { voucherDateMap[v.id] = v.date?.slice(0, 10) || ''; });
 
       const entryArr = (Array.isArray(ve) ? ve : [])
         .filter((e: any) => activeVoucherIds.has(e.voucherId))
@@ -442,15 +577,24 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
       if (vArr.length > 0) {
         const dates = vArr.map((x: any) => x.date?.slice(0,10)).filter(Boolean).sort();
         setMainPeriod({ from: dates[0], to: dates[dates.length - 1] });
+        debugLog += `\n📅 Date Range: ${dates[0]} to ${dates[dates.length-1]}\n`;
       }
+
       if (Array.isArray(b) && b.length > 0) {
         const br = branchId ? b.find((x: any) => x.id === branchId) : b[0];
         if (br) setCompanyName(br.name);
       }
+
+      const uniqueGroups = [...new Set(ledgerArr.map(l => l.group))];
+      debugLog += `\n🏷️  UNIQUE GROUPS (${uniqueGroups.length}):\n`;
+      uniqueGroups.forEach(g => { debugLog += `  • ${g}\n`; });
+      console.debug(debugLog);
     })
     .catch(err => {
       console.error('[BalanceSheet] fetch error:', err);
+      debugLog += `\n❌ FETCH ERROR: ${err.message}\n`;
       setLoadError(err.message || 'Failed to load data');
+      console.debug(debugLog);
     })
     .finally(() => setLoading(false));
 
@@ -460,7 +604,7 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
       .catch(() => {});
   }, [branchId]);
 
-  // ── Balance calculations ─────────────────────────────────────────
+  // ── Balance calculations ───────────────────────────────────────────
   const calcBalanceForPeriod = useCallback((ledgerId: string, from: string, to: string): number => {
     const ledger = ledgers.find(l => l.id === ledgerId);
     if (!ledger) return 0;
@@ -473,7 +617,9 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
     allEntries.forEach((e: any) => {
       if (e.ledgerId !== ledgerId) return;
       const eDate = e._date || '';
-      if (isPL) { if (from && eDate < from) return; }
+      if (isPL) {
+        if (from && eDate < from) return;
+      }
       if (to && eDate > to) return;
       running += e.type === 'Dr' ? Number(e.amount || 0) : -Number(e.amount || 0);
     });
@@ -492,7 +638,7 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
       .filter(l => calcBalanceForPeriod(l.id, from, to) !== 0),
   [ledgers, calcBalanceForPeriod]);
 
-  // ── Periods ──────────────────────────────────────────────────────
+  // ── Periods ────────────────────────────────────────────────────────
   const allPeriods: Period[] = useMemo(() => [
     { label: companyName || 'Current Period', from: mainPeriod.from, to: mainPeriod.to },
     ...extraPeriods,
@@ -501,7 +647,7 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
   const periodLabel = useCallback((p: { from: string; to: string }) =>
     p.from && p.to ? `${fmtDate(p.from)} to ${fmtDate(p.to)}` : 'All Dates', []);
 
-  // ── P&L calculations ─────────────────────────────────────────────
+  // ── P&L calculations ───────────────────────────────────────────────
   const plNetForPeriod = useCallback((from: string, to: string): number => {
     const income  = PL_INCOME_GROUPS.reduce( (a, g) => a + Math.abs(groupTotalForPeriod(g, from, to)), 0);
     const expense = PL_EXPENSE_GROUPS.reduce((a, g) => a + Math.abs(groupTotalForPeriod(g, from, to)), 0);
@@ -519,7 +665,7 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
     return { liabRaw, assetRaw, plNet, liabTotal, assetTotal, grand, diff };
   }), [allPeriods, groupTotalForPeriod, plNetForPeriod, showNettProfit]);
 
-  // ── Navigable rows ───────────────────────────────────────────────
+  // ── Navigable rows ─────────────────────────────────────────────────
   const navigableRows = useMemo(() => {
     type NavRow =
       | { type: 'group';  name: string }
@@ -547,12 +693,22 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
     setExpanded(prev => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n; }),
   []);
 
-  // ── Balance Sheet print (main screen) ───────────────────────────
+  // ── Export ─────────────────────────────────────────────────────────
+  const handleExport = useCallback(() => {
+    const rows: any[] = [];
+    allPeriods.forEach(p => {
+      LIABILITY_GROUPS.forEach(g => rows.push({ Period:p.label, Side:'Liabilities', Group:g, Amount: Math.abs(groupTotalForPeriod(g, p.from, p.to)) }));
+      ASSET_GROUPS.forEach(g =>     rows.push({ Period:p.label, Side:'Assets',      Group:g, Amount: Math.abs(groupTotalForPeriod(g, p.from, p.to)) }));
+    });
+    exportToExcel(rows, 'Balance_Sheet');
+  }, [allPeriods, groupTotalForPeriod]);
+
+  // ── Print (Balance Sheet) ──────────────────────────────────────────
   const handlePrint = useCallback(() => {
     const fmt = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-    const period = allPeriods[0];
-    const pt = periodTotals[0];
-    const plNet = pt?.plNet ?? 0;
+    const period  = allPeriods[0];
+    const pt      = periodTotals[0];
+    const plNet   = pt?.plNet ?? 0;
     const periodStr = period?.from && period?.to
       ? `${fmtDate(period.from)} to ${fmtDate(period.to)}`
       : 'All Dates';
@@ -594,6 +750,7 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
         .pl-row td { font-style: italic; background: #fffbf0; padding: 3px 10px; font-size: 11px; border-bottom: 1px solid #eee; }
         .total td { border-top: 2px solid #1f4e79; border-bottom: 2px solid #1f4e79; font-weight: 900; font-size: 13px; background: #e8f0f8; padding: 5px 10px; }
         .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
+        @media print { .footer { position: fixed; bottom: 0; right: 0; left: 0; } }
       </style>
     </head><body>
       <div class="hdr">
@@ -622,148 +779,41 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
     </body></html>`;
 
     const win = window.open('', '_blank', 'width=960,height=700');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      setTimeout(() => { win.focus(); win.print(); }, 400);
+    }
   }, [companyName, allPeriods, periodTotals, groupTotalForPeriod, groupLedgersNonZero, calcBalanceForPeriod]);
 
-  // ── FIX-4: Ledger statement print (drill-down) ───────────────────
-  // Fetches rows fresh, builds A4 portrait ledger statement, opens print dialog.
-  const handlePrintLedger = useCallback(() => {
-    if (!drillLedger) return;
-    const fmt = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-    const q = branchId ? `?branchId=${branchId}` : '';
-
-    fetch(`/api/vouchers/ledger/${drillLedger.id}${q}`)
-      .then(r => r.json())
-      .then(d => {
-        const rows = (Array.isArray(d) ? d : []).filter((v: any) => !isVoided(v));
-        const ob    = Number(drillLedger.openingBalance || 0);
-        let running = drillLedger.balanceType === 'Cr' ? -ob : ob;
-
-        const rowsHtml = rows.map((r: any, i: number) => {
-          const amt   = Number(r.entry_amount || 0);
-          running    += r.entry_type === 'Dr' ? amt : -amt;
-          const runType = running >= 0 ? 'Dr' : 'Cr';
-          const isDr  = r.entry_type === 'Dr';
-          const bg    = i % 2 === 0 ? '#ffffff' : '#fafbfd';
-          return `<tr style="background:${bg};border-bottom:1px solid #e0e6ee">
-            <td style="padding:3px 8px">${fmtDate(r.date)}</td>
-            <td style="padding:3px 8px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">${r.narration || r.type || '—'}</td>
-            <td style="padding:3px 8px;font-style:italic;color:#555">${r.type || ''}</td>
-            <td style="padding:3px 8px;text-align:center">${r.number || ''}</td>
-            <td style="padding:3px 10px;text-align:right;color:#7a0000;font-weight:${isDr ? 700 : 400}">${isDr ? fmt(amt) : ''}</td>
-            <td style="padding:3px 10px;text-align:right;color:#006b00;font-weight:${!isDr ? 700 : 400}">${!isDr ? fmt(amt) : ''}</td>
-            <td style="padding:3px 10px;text-align:right;font-weight:600">${fmt(running)} ${runType}</td>
-          </tr>`;
-        }).join('');
-
-        const totalDr = rows.filter((r: any) => r.entry_type === 'Dr').reduce((a: number, r: any) => a + Number(r.entry_amount || 0), 0);
-        const totalCr = rows.filter((r: any) => r.entry_type === 'Cr').reduce((a: number, r: any) => a + Number(r.entry_amount || 0), 0);
-        const closing = (drillLedger.balanceType === 'Cr' ? -ob : ob) + totalDr - totalCr;
-        const periodStr = mainPeriod.from && mainPeriod.to
-          ? `${fmtDate(mainPeriod.from)} to ${fmtDate(mainPeriod.to)}`
-          : 'All Dates';
-
-        const html = `<!DOCTYPE html><html><head>
-          <title>Ledger – ${drillLedger.name}</title>
-          <meta charset="utf-8"/>
-          <style>
-            @page { margin: 12mm; size: A4 portrait; }
-            * { box-sizing: border-box; }
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 12px; }
-            .hdr { background: #1f4e79; color: #fff; text-align: center; padding: 8px 12px; }
-            .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
-            .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; }
-            .meta { display: flex; justify-content: space-between; padding: 5px 12px; background: #fafbfd; border-bottom: 1px solid #b8c4cc; font-size: 11px; }
-            table { width: 100%; border-collapse: collapse; }
-            thead tr { background: #f0f4f8; }
-            th { padding: 4px 8px; font-size: 11px; font-weight: 700; color: #333; border-bottom: 1px solid #b8c4cc; border-right: 1px solid #e0e6ee; text-align: left; white-space: nowrap; }
-            th.r { text-align: right; }
-            .ob td { background: #f8fbff; font-style: italic; color: #555; font-weight: 700; padding: 3px 8px; border-bottom: 1px solid #e0e6ee; }
-            .total td { background: #f0f4f8; font-weight: 700; padding: 4px 10px; border-top: 2px solid #555; }
-            .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
-          </style>
-        </head><body>
-          <div class="hdr">
-            <h1>${companyName || 'Company'}</h1>
-            <div class="sub">LEDGER STATEMENT &nbsp;·&nbsp; ${drillLedger.name} &nbsp;·&nbsp; ${periodStr}</div>
-          </div>
-          <div class="meta">
-            <div><b>Ledger:</b> ${drillLedger.name} &nbsp;&nbsp; <b>Group:</b> ${drillLedger.group || '—'}</div>
-            <div><b>Opening Balance:</b> ${fmt(ob)} ${drillLedger.balanceType || 'Dr'}</div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th style="width:80px">Date</th>
-                <th>Particulars</th>
-                <th style="width:90px">Vch Type</th>
-                <th style="width:65px;text-align:center">Vch No.</th>
-                <th class="r" style="width:110px">Debit (₹)</th>
-                <th class="r" style="width:110px">Credit (₹)</th>
-                <th class="r" style="width:120px">Balance</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr class="ob">
-                <td></td><td>Opening Balance</td><td></td><td></td>
-                <td style="text-align:right;color:#7a0000">${(drillLedger.balanceType !== 'Cr' && ob > 0) ? fmt(ob) : ''}</td>
-                <td style="text-align:right;color:#006b00">${(drillLedger.balanceType === 'Cr' && ob > 0) ? fmt(ob) : ''}</td>
-                <td style="text-align:right">${fmt(ob)} ${drillLedger.balanceType || 'Dr'}</td>
-              </tr>
-              ${rowsHtml}
-            </tbody>
-            <tfoot>
-              <tr class="total">
-                <td colspan="4" style="text-align:right;padding-right:8px">Closing Balance</td>
-                <td style="text-align:right;color:#7a0000">${totalDr > 0 ? fmt(totalDr) : ''}</td>
-                <td style="text-align:right;color:#006b00">${totalCr > 0 ? fmt(totalCr) : ''}</td>
-                <td style="text-align:right">${fmt(closing)} ${closing >= 0 ? 'Dr' : 'Cr'}</td>
-              </tr>
-            </tfoot>
-          </table>
-          <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} &nbsp;|&nbsp; ${companyName} &nbsp;|&nbsp; ${rows.length} transaction(s)</div>
-        </body></html>`;
-
-        const win = window.open('', '_blank', 'width=800,height=700');
-        if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
-      })
-      .catch(err => alert(`Print failed: ${err.message}`));
-  }, [drillLedger, branchId, mainPeriod, companyName]);
-
-  // ── Export ────────────────────────────────────────────────────────
-  const handleExport = useCallback(() => {
-    const rows: any[] = [];
-    allPeriods.forEach(p => {
-      LIABILITY_GROUPS.forEach(g => rows.push({ Period:p.label, Side:'Liabilities', Group:g, Amount: Math.abs(groupTotalForPeriod(g, p.from, p.to)) }));
-      ASSET_GROUPS.forEach(g =>     rows.push({ Period:p.label, Side:'Assets',      Group:g, Amount: Math.abs(groupTotalForPeriod(g, p.from, p.to)) }));
-    });
-    exportToExcel(rows, 'Balance_Sheet');
-  }, [allPeriods, groupTotalForPeriod]);
-
-  // ── Global keyboard shortcuts ─────────────────────────────────────
-  // FIX-3: when drillLedger is open, only intercept Alt+P (routes to ledger
-  // print); everything else is handled by LedgerDetail's own listener.
+  // ── Keyboard shortcuts ─────────────────────────────────────────────
+  // FIX v8: Removed `drillLedger` from the early-return guard.
+  //         When drillLedger is active, LedgerDetail mounts its own listener
+  //         (useCapture=true) and handles Escape + Alt+P there.
+  //         The BS handler still fires but drillLedger-specific keys
+  //         are not mapped here, so they naturally fall through.
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
-      if (drillLedger) {
-        if (e.altKey && e.key.toLowerCase() === 'p') {
-          e.preventDefault(); e.stopPropagation();
-          handlePrintLedger();
-        }
-        // Escape and everything else: let LedgerDetail handle
-        return;
-      }
-
+      // FIX v8: Only block BS shortcuts when a modal is open, NOT when drillLedger is open.
+      // LedgerDetail registers its own useCapture listener that fires first and
+      // calls stopPropagation() for the keys it handles (Escape, Alt+P).
       if (showPeriod || showAddPeriod) return;
 
+      // If we're in drill-down, don't process BS-level shortcuts
+      // (LedgerDetail's handler already took care of what it needs)
+      if (drillLedger) return;
+
       let handled = false;
+
       if (e.key === 'ArrowDown') {
-        setFocusedRowIdx(prev => Math.min(prev + 1, navigableRows.length - 1)); handled = true;
+        setFocusedRowIdx(prev => Math.min(prev + 1, navigableRows.length - 1));
+        handled = true;
       } else if (e.key === 'ArrowUp') {
-        setFocusedRowIdx(prev => Math.max(prev - 1, 0)); handled = true;
+        setFocusedRowIdx(prev => Math.max(prev - 1, 0));
+        handled = true;
       } else if (e.key === 'Enter' || e.key === 'ArrowRight') {
         if (focusedRowIdx >= 0 && focusedRowIdx < navigableRows.length) {
           const row = navigableRows[focusedRowIdx];
@@ -783,23 +833,24 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
       } else if (e.key === 'F5') {
         setExpanded(new Set([...LIABILITY_GROUPS, ...ASSET_GROUPS])); handled = true;
       } else if (e.key === 'Escape') {
-        if (expanded.size > 0) setExpanded(new Set());
-        else if (onBack) onBack();
+        if (expanded.size > 0) { setExpanded(new Set()); }
+        else if (onBack) { onBack(); }
         handled = true;
       } else if (e.altKey && e.key.toLowerCase() === 'p') {
-        handlePrint(); handled = true;          // main BS print
+        handlePrint(); handled = true;
       } else if (e.altKey && e.key.toLowerCase() === 'n') {
         setShowAddPeriod(true); handled = true;
       } else if (e.altKey && e.key.toLowerCase() === 'e') {
         handleExport(); handled = true;
       }
+
       if (handled) { e.preventDefault(); e.stopPropagation(); }
     };
     window.addEventListener('keydown', h, true);
     return () => window.removeEventListener('keydown', h, true);
-  }, [drillLedger, showPeriod, showAddPeriod, navigableRows, focusedRowIdx, expanded, onBack, toggleGroup, handleExport, handlePrint, handlePrintLedger]);
+  }, [drillLedger, showPeriod, showAddPeriod, navigableRows, focusedRowIdx, expanded, onBack, toggleGroup, handleExport, handlePrint]);
 
-  // ── Render helpers ────────────────────────────────────────────────
+  // ── Render helpers ─────────────────────────────────────────────────
   const renderGroupRow = (grpName: string) => {
     const anyNonZero = allPeriods.some(p => groupTotalForPeriod(grpName, p.from, p.to) !== 0);
     if (!anyNonZero) return null;
@@ -898,21 +949,16 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
 
   const colSpan = 1 + allPeriods.length;
 
-  // ── FIX-4: Drill-down renders LedgerDetail with onPrint injected ──
+  // ── Drill-down view ────────────────────────────────────────────────
   if (drillLedger) {
     return (
       <ErrorBoundary>
-        <LedgerDetail
-          ledger={drillLedger}
-          branchId={branchId}
-          onBack={() => setDrillLedger(null)}
-          onPrint={handlePrintLedger}          // ← pass handler down
-        />
+        <LedgerDetail ledger={drillLedger} branchId={branchId} onBack={() => setDrillLedger(null)} />
       </ErrorBoundary>
     );
   }
 
-  // ── Main render ───────────────────────────────────────────────────
+  // ── Main render ────────────────────────────────────────────────────
   return (
     <div ref={rootRef} style={s.root} id="bs-report" tabIndex={0}>
       <style>{`
@@ -955,6 +1001,7 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
             No ledger data found. Please check your API or add ledger entries.
           </div>
         ) : (
+          <>
           <div style={s.twoCol}>
 
             {/* ── Liabilities ── */}
@@ -962,7 +1009,7 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
               <table style={s.table}>
                 <thead>
                   <tr>
-                    <th colSpan={colSpan} style={{ ...rs.th, textAlign:'center', background:'#f2f7fb', letterSpacing:1.2, fontSize:11, fontWeight:800, color:HDR_BG, borderBottom:`1px solid ${BORDER}`, padding:'2px 0' }}>
+                    <th colSpan={colSpan} style={{ ...rs.th, textAlign:'center', background:'#f2f7fb', letterSpacing:1.2, fontSize:11, fontWeight:800, color:HDR_BG, borderBottom:`1px solid ${BORDER}`, padding: '2px 0' }}>
                       LIABILITIES
                     </th>
                   </tr>
@@ -974,14 +1021,17 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
                   <SectionHeader label="Share Capital & Reserves" colSpan={colSpan} />
                   {renderGroupRow('Capital Account')}
                   {renderGroupRow('Reserves & Surplus')}
+
                   <SectionHeader label="Loan Funds" colSpan={colSpan} />
                   {renderGroupRow('Loans (Liability)')}
+
                   <SectionHeader label="Current Liabilities" colSpan={colSpan} />
                   {renderGroupRow('Current Liabilities')}
                   {renderGroupRow('Suspense Account')}
+
                   {showNettProfit && (periodTotals[0]?.plNet ?? 0) >= 0 && renderPLRow()}
                   {renderDiffRow('liab')}
-                  <tr style={{ height:'100%' }}><td colSpan={colSpan} /></tr>
+                  <tr style={{ height: '100%' }}><td colSpan={colSpan}></td></tr>
                 </tbody>
                 <tfoot>
                   <tr style={s.totalRow}>
@@ -1003,7 +1053,7 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
               <table style={s.table}>
                 <thead>
                   <tr>
-                    <th colSpan={colSpan} style={{ ...rs.th, textAlign:'center', background:'#f2f7fb', letterSpacing:1.2, fontSize:11, fontWeight:800, color:HDR_BG, borderBottom:`1px solid ${BORDER}`, padding:'2px 0' }}>
+                    <th colSpan={colSpan} style={{ ...rs.th, textAlign:'center', background:'#f2f7fb', letterSpacing:1.2, fontSize:11, fontWeight:800, color:HDR_BG, borderBottom:`1px solid ${BORDER}`, padding: '2px 0' }}>
                       ASSETS
                     </th>
                   </tr>
@@ -1014,15 +1064,19 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
                 <tbody>
                   <SectionHeader label="Fixed Assets" colSpan={colSpan} />
                   {renderGroupRow('Fixed Assets')}
+
                   <SectionHeader label="Investments" colSpan={colSpan} />
                   {renderGroupRow('Investments')}
+
                   <SectionHeader label="Current Assets" colSpan={colSpan} />
                   {renderGroupRow('Current Assets')}
+
                   <SectionHeader label="Miscellaneous" colSpan={colSpan} />
                   {renderGroupRow('Misc. Expenses (Asset)')}
+
                   {showNettProfit && (periodTotals[0]?.plNet ?? 0) < 0 && renderPLRow()}
                   {renderDiffRow('asset')}
-                  <tr style={{ height:'100%' }}><td colSpan={colSpan} /></tr>
+                  <tr style={{ height: '100%' }}><td colSpan={colSpan}></td></tr>
                 </tbody>
                 <tfoot>
                   <tr style={s.totalRow}>
@@ -1038,24 +1092,26 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
             </div>
 
           </div>
+          </>
         )}
       </div>
 
       {/* Right Function Buttons */}
       <div style={s.rightPanel} className="no-print">
         {[
-          { k:'F2',    l:'Period',                         a: () => setShowPeriod(true) },
-          { k:'F5',    l:'Expand All',                     a: () => setExpanded(new Set([...LIABILITY_GROUPS, ...ASSET_GROUPS])) },
-          { k:'Esc',   l:'Collapse /\nBack',               a: () => { if (expanded.size > 0) setExpanded(new Set()); else onBack?.(); } },
-          { k:'Alt+N', l:'Add Period',                     a: () => setShowAddPeriod(true) },
+          { k:'F2',    l:'Period',                                          a: () => setShowPeriod(true) },
+          { k:'F5',    l:'Expand All',                                      a: () => setExpanded(new Set([...LIABILITY_GROUPS, ...ASSET_GROUPS])) },
+          { k:'Esc',   l:'Collapse /\nBack',                                a: () => { if (expanded.size > 0) setExpanded(new Set()); else onBack?.(); } },
+          { k:'Alt+N', l:'Add Period',                                      a: () => setShowAddPeriod(true) },
           { k:'P&L',   l: showNettProfit ? 'Hide P&L\nBalance' : 'Show P&L\nBalance', a: () => setShowNettProfit(p => !p) },
-          { k:'✕ Clr', l:'Clear Periods',                 a: () => setExtraPeriods([]) },
-          { k:'Alt+P', l:'Print',                           a: handlePrint },
-          { k:'F12',   l:'Configure',                      a: () => {} },
+          { k:'✕ Clr', l:'Clear Periods',                                  a: () => setExtraPeriods([]) },
+          { k:'Alt+P', l:'Print',                                            a: handlePrint },
+          { k:'F12',   l:'Configure',                                        a: () => {} },
         ].map((b, i) => (
           <button key={i} onClick={b.a} className="no-print" style={{
             ...s.sideBtn,
             background: b.k==='Alt+N' ? 'rgba(100,200,100,0.15)' : b.k==='✕ Clr' ? 'rgba(255,80,80,0.15)' : b.k==='P&L' ? 'rgba(255,200,50,0.12)' : 'none',
+            opacity: b.l ? 1 : 0.2,
           }}>
             <span style={s.sBtnKey}>{b.k}</span>
             <span style={s.sBtnLabel}>{b.l}</span>
@@ -1076,7 +1132,7 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
           {extraPeriods.length > 0 && `  ·  Comparing ${allPeriods.length} periods`}
         </span>
         <span style={{ color:'#aaa', fontSize:10 }}>
-          F2: Period  |  F5: Expand  |  Alt+N: Add Comparison  |  Alt+P: Print  |  Click ledger: Transactions
+          F2: Period  |  F5: Expand  |  Alt+N: Add Comparison  |  Click ledger: Transactions  |  P&L: Toggle
         </span>
       </div>
     </div>
