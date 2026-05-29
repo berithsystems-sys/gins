@@ -84,6 +84,7 @@ const GATEWAY_MENU = [
     { id: 'pl_account', label: 'Profit & Loss A/c', key: 'P' },
     { id: 'ratio_analysis', label: 'Ratio Analysis', key: 'R' },
     { id: 'trial_balance', label: 'Trial Balance', key: 'T' },
+    { id: 'cash_bank_book', label: 'Cash/Bank Book', key: 'U' },
   ]}
 ];
 
@@ -133,6 +134,14 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
+    if (user) {
+      localStorage.setItem('tally_user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('tally_user');
+    }
+  }, [user]);
+
+  useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
@@ -167,7 +176,6 @@ export default function App() {
     setCurrentScreen('GOTO');
     setGotoSearch('');
     setGotoHighlightedIdx(0);
-    // Focus the search input after a short delay
     setTimeout(() => {
       const input = document.getElementById('goto-search-input');
       if (input) input.focus();
@@ -187,6 +195,7 @@ export default function App() {
     pl_account: 'PL_ACCOUNT',
     ratio_analysis: 'RATIO',
     trial_balance: 'TRIAL_BALANCE',
+    cash_bank_book: 'CASH_BANK_BOOK',
     audit: 'AUDIT',
   };
 
@@ -282,20 +291,10 @@ export default function App() {
 
   useHotkeys('enter', (e) => {
     if (currentScreen === 'GATEWAY') {
-      const selectedId = flatMenu[selectedIndex].id;
-      if (selectedId === 'vouchers') setCurrentScreen('VOUCHER');
-      if (selectedId === 'masters') setCurrentScreen('LEDGER'); 
-      if (selectedId === 'alter') setCurrentScreen('ALTER');
-      if (selectedId === 'daybook') setCurrentScreen('DAYBOOK');
-      if (selectedId === 'banking') setCurrentScreen('BANKING');
-      if (selectedId === 'payroll') setCurrentScreen('PAYROLL');
-      if (selectedId === 'balance_sheet') setCurrentScreen('BALANCE_SHEET');
-      if (selectedId === 'pl_account') setCurrentScreen('PL_ACCOUNT');
-      if (selectedId === 'ratio_analysis') setCurrentScreen('RATIO');
-      if (selectedId === 'trial_balance') setCurrentScreen('TRIAL_BALANCE');
-      if (selectedId === 'chart') setCurrentScreen('CHART');
-      if (selectedId === 'audit') setCurrentScreen('AUDIT');
-      if (selectedId === 'debug') setCurrentScreen('DEBUG');
+      const selectedId = flatMenu[selectedIndex]?.id;
+      if (selectedId && gatewayScreenMap[selectedId]) {
+        setCurrentScreen(gatewayScreenMap[selectedId]);
+      }
     } else if (currentScreen === 'GOTO') {
       e.preventDefault();
       const filtered = getFilteredGotoOptions();
@@ -308,7 +307,6 @@ export default function App() {
   const handleBack = () => {
     if (showCalculator) { setShowCalculator(false); return; }
     if (showDateModal) { setShowDateModal(false); return; }
-    if (showHelp) { setShowHelp(false); return; }
     if (showQuit) { setShowQuit(false); return; }
 
     if (currentScreen === 'GOTO') {
@@ -321,8 +319,6 @@ export default function App() {
     }
 
     if (currentScreen === 'TRIAL_BALANCE' || currentScreen === 'DAYBOOK') {
-      // These screens handle their own internal navigation and back-to-gateway.
-      // We don't want to force-redirect to GATEWAY here.
       return;
     }
 
@@ -336,9 +332,6 @@ export default function App() {
 
   useHotkeys('esc', (e) => {
     if (currentScreen === 'TRIAL_BALANCE' || currentScreen === 'DAYBOOK') {
-      // These screens handle their own ESC logic. 
-      // We only want App to handle it if they aren't active or if we're at their top level.
-      // For now, let's just return and let the components handle it.
       return;
     }
     e.preventDefault();
@@ -354,10 +347,17 @@ export default function App() {
   useHotkeys('p', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('PL_ACCOUNT'); });
   useHotkeys('r', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('RATIO'); });
   useHotkeys('t', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('TRIAL_BALANCE'); });
+  useHotkeys('u', (e) => {
+    if (currentScreen === 'GATEWAY') {
+      e.preventDefault();
+      setCurrentScreen('CASH_BANK_BOOK');
+    }
+  }, {}, [currentScreen]);
   useHotkeys('h', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('CHART'); });
   useHotkeys('l', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('AUDIT'); });
   // useHotkeys('d', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('DEBUG'); });
   useHotkeys('alt+c', () => setShowCalculator(true), { enableOnFormTags: true });
+
   const handleLogout = () => {
     localStorage.removeItem('tally_user');
     setUser(null);
@@ -378,10 +378,6 @@ export default function App() {
   }, { enableOnFormTags: true });
   useHotkeys('alt+m', () => setCurrentScreen('EXPORT'), { enableOnFormTags: true });
   useHotkeys('alt+e', () => setCurrentScreen('EXPORT'), { enableOnFormTags: true });
-  useHotkeys('alt+p', () => {
-    const screensWithOwnPrint = ['BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'DAYBOOK', 'CASH_BANK_BOOK'];
-    if (!screensWithOwnPrint.includes(currentScreen)) setCurrentScreen('PRINT');
-  }, { enableOnFormTags: true }, [currentScreen]);
   useHotkeys('alt+s', () => setCurrentScreen('SETTINGS'), { enableOnFormTags: true });
   useHotkeys('alt+d', (e) => { 
     if (currentScreen === 'DAYBOOK') return;
@@ -409,10 +405,17 @@ export default function App() {
 
   useHotkeys('q', () => setShowQuit(true));
   useHotkeys('ctrl+q', () => setShowQuit(true));
-  useHotkeys('y', () => { if (showQuit) window.close(); });
+  useHotkeys('y', (e) => {
+    if (showQuit) {
+      window.close();
+      return;
+    }
+    if (currentScreen === 'GATEWAY') {
+      e.preventDefault();
+      setCurrentScreen('PAYROLL');
+    }
+  }, {}, [currentScreen, showQuit]);
   useHotkeys('n', () => { if (showQuit) setShowQuit(false); });
-
-  const [showHelp, setShowHelp] = useState(false);
 
   if (!user) return <LoginScreen onLogin={setUser} />;
 
@@ -507,7 +510,6 @@ export default function App() {
             <span className="cursor-pointer hover:bg-white/10 px-1 rounded" onClick={() => setCurrentScreen('IMPORT')}><u>O</u>: Import</span>
             <span className="cursor-pointer hover:bg-white/10 px-1 rounded" onClick={() => setCurrentScreen('EXPORT')}><u>E</u>: Export</span>
             <span className="cursor-pointer hover:bg-white/10 px-1 rounded" onClick={() => setCurrentScreen('EMAIL')}><u>M</u>: E-mail</span>
-            <span className="cursor-pointer hover:bg-white/10 px-1 rounded" onClick={() => setCurrentScreen('PRINT')}><u>P</u>: Print</span>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -558,53 +560,6 @@ export default function App() {
                 <div className="flex gap-8 justify-center">
                   <button onClick={() => window.close()} className="bg-tally-accent text-black px-8 py-1 font-bold border border-black hover:bg-yellow-500 transition-colors">Yes (Y)</button>
                   <button onClick={() => setShowQuit(false)} className="bg-gray-100 px-8 py-1 font-bold border border-gray-300 hover:bg-gray-200 transition-colors">No (N)</button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {showHelp && (
-            <motion.div 
-              initial={{ x: 300, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: 300, opacity: 0 }}
-              className="absolute right-0 top-[65px] bottom-[24px] w-[350px] z-[90] bg-white border-l-4 border-tally-teal shadow-2xl p-6 overflow-auto"
-            >
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-lg font-bold text-tally-teal tracking-widest">Golden Rules</h2>
-                <button onClick={() => setShowHelp(false)} className="text-red-600 font-bold">X</button>
-              </div>
-              
-              <div className="space-y-8">
-                <section>
-                  <h3 className="text-sm font-bold bg-gray-100 p-1 mb-2">Real Accounts</h3>
-                  <p className="text-xs italic text-gray-500 mb-2">(Relating to properties & assets)</p>
-                  <ul className="text-xs space-y-1 font-bold">
-                    <li className="text-green-700">Debit: What Comes In</li>
-                    <li className="text-red-700">Credit: What Goes Out</li>
-                  </ul>
-                </section>
-
-                <section>
-                  <h3 className="text-sm font-bold bg-gray-100 p-1 mb-2">Personal Accounts</h3>
-                  <p className="text-xs italic text-gray-500 mb-2">(Relating to persons/firms)</p>
-                  <ul className="text-xs space-y-1 font-bold">
-                    <li className="text-green-700">Debit: The Receiver</li>
-                    <li className="text-red-700">Credit: The Giver</li>
-                  </ul>
-                </section>
-
-                <section>
-                  <h3 className="text-sm font-bold bg-gray-100 p-1 mb-2">Nominal Accounts</h3>
-                  <p className="text-xs italic text-gray-500 mb-2">(Relating to income/expenses)</p>
-                  <ul className="text-xs space-y-1 font-bold">
-                    <li className="text-green-700">Debit: All Expenses & Losses</li>
-                    <li className="text-red-700">Credit: All Incomes & Gains</li>
-                  </ul>
-                </section>
-
-                <div className="bg-tally-bg p-3 border border-tally-teal/20 text-[10px] italic">
-                  Tally Shortcut: Use F12 in any voucher to configure advanced options.
                 </div>
               </div>
             </motion.div>
@@ -688,9 +643,9 @@ export default function App() {
             </div>
           </div>
         ) : (
-          <div className={`flex-1 overflow-auto bg-tally-bg ${['VOUCHER', 'DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL', 'HQ'].includes(currentScreen) ? 'p-0' : 'p-4'}`}>
-            <div className={['VOUCHER', 'DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL', 'HQ'].includes(currentScreen) ? 'h-full w-full' : 'max-w-7xl mx-auto'}>
-              {currentScreen !== 'VOUCHER' && currentScreen !== 'HQ' && (
+          <div className={`flex-1 overflow-auto bg-tally-bg ${['VOUCHER', 'DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL'].includes(currentScreen) ? 'p-0' : 'p-4'}`}>
+            <div className={['VOUCHER', 'DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL'].includes(currentScreen) ? 'h-full w-full' : 'max-w-7xl mx-auto'}>
+              {currentScreen !== 'VOUCHER' && (
                 <div className={
                   ['DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL'].includes(currentScreen)
                   ? "bg-white border-b-2 border-tally-teal px-4 py-2 shadow-sm"
@@ -753,19 +708,25 @@ export default function App() {
               )}
               <div className={
                 currentScreen === 'VOUCHER' ? "h-full" : 
-                ['DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL', 'HQ'].includes(currentScreen) 
+                ['DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL'].includes(currentScreen) 
                   ? "flex-1 flex flex-col min-h-0 h-full" 
                   : "bg-white border-2 border-tally-teal rounded-sm p-4 shadow-lg flex-1 flex flex-col min-h-0"
               }>
                 {currentScreen === 'LEDGER' && <MastersDashboard branchId={selectedBranchId} />}
-                {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} onSelectLedger={(id) => { setSelectedLedgerId(id); setCurrentScreen('LEDGER_DETAIL'); }} />}
+                {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} />}
                 {currentScreen === 'CHART' && <ChartOfAccountsScreen branchId={selectedBranchId} />}
                 {currentScreen === 'BALANCE_SHEET' && <BalanceSheetScreen branchId={selectedBranchId} onBack={handleBack} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
                 {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} onBack={handleBack} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
                 {currentScreen === 'TRIAL_BALANCE' && <TrialBalanceScreen branchId={selectedBranchId} onBackToGateway={() => setCurrentScreen('GATEWAY')} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
                 {currentScreen === 'CASH_BANK_BOOK' && <CashBankBookScreen branchId={selectedBranchId} />}
                 {currentScreen === 'RATIO' && <RatioAnalysisScreen onBack={handleBack} branchId={selectedBranchId} />}
-                {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} printData={printData} />}
+                {currentScreen === 'PRINT' && printData && (
+                  <PrintScreen
+                    onBack={() => { setPrintData(null); handleBack(); }}
+                    currentScreen={currentScreen}
+                    printData={printData}
+                  />
+                )}
                 {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} initialDate={currentDate} onBackToGateway={() => setCurrentScreen('GATEWAY')} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
                 {currentScreen === 'LEDGER_DETAIL' && <LedgerVouchersScreen branchId={selectedBranchId} ledgerId={selectedLedgerId} onBack={() => setCurrentScreen('GATEWAY')} />}
                 {currentScreen === 'HQ' && user?.role === 'HQ' && <HQDashboard onSelectBranch={(id) => { setSelectedBranchId(id); setCurrentScreen('GATEWAY'); }} />}
@@ -778,9 +739,8 @@ export default function App() {
                 {currentScreen === 'DATA' && <DataScreen onNavigate={setCurrentScreen} />}
                 {currentScreen === 'EXCHANGE' && <div className="p-10 text-center font-bold text-tally-teal uppercase italic">Exchange Module - Coming Soon</div>}
                 {currentScreen === 'EXPORT' && <ExportScreen onBack={handleBack} />}
-                {currentScreen === 'PRINT' && <PrintScreen onBack={handleBack} currentScreen={currentScreen} />}
                 {currentScreen === 'IMPORT' && <ImportScreen onBack={handleBack} />}
-                {currentScreen === 'SETTINGS' && <SettingsScreen onBack={handleBack} />}
+                {currentScreen === 'SETTINGS' && user && <SettingsScreen user={user} onUserUpdate={setUser} onBack={handleBack} />}
                 {currentScreen === 'DEBUG' && <DebugDiagnosticsScreen />}
                 {['GOTO', 'EMAIL'].includes(currentScreen) && (
                   <div className="p-20 text-center space-y-4">
@@ -813,7 +773,6 @@ export default function App() {
           <div className="h-4 bg-black/10"></div>
           <div className="hotkey-btn opacity-60"><span>F11: Features</span></div>
           <div className="hotkey-btn" onClick={() => setShowConfig(true)}><span>F12: Configure</span></div>
-          <div className="hotkey-btn bg-tally-accent text-black mt-2" onClick={() => setShowHelp(!showHelp)}><span>H: Golden Rules</span></div>
           <div className="mt-auto bg-[#001c24] p-2 text-[10px] text-center italic border-t border-white/5">
             {currentTime.toLocaleTimeString()}
           </div>
