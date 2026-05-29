@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { Building2, Plus, Trash2, ChevronRight, KeyRound, TrendingUp, BarChart2, PieChart as PieIcon } from 'lucide-react';
+import { Plus, Trash2, KeyRound, TrendingUp, BarChart2, PieChart as PieIcon } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell, AreaChart, Area,
@@ -15,7 +15,24 @@ interface HQDashboardProps {
   onSelectBranch: (id: string) => void;
 }
 
-const TEAL  = '#00695C';
+interface HqSummary {
+  branchCount: number;
+  consolidatedCashBank: number;
+  consolidatedCashBankAbs: number;
+  consolidatedSide: 'Dr' | 'Cr';
+  perBranch: Array<{
+    id: string;
+    code: string;
+    name: string;
+    location: string;
+    cashBankBalance: number;
+    cashBankBalanceAbs: number;
+    cashBankSide: 'Dr' | 'Cr';
+  }>;
+}
+
+/* ── Colour palette ── */
+const TEAL   = '#00695C';
 const ORANGE = '#FF6F00';
 const INDIGO = '#3949AB';
 const GREEN  = '#43A047';
@@ -34,6 +51,7 @@ const VOUCHER_COLORS: Record<string, string> = {
 };
 const DONUT_FALLBACK = [TEAL, ORANGE, INDIGO, GREEN, RED, PURPLE];
 
+/* ── Tooltip ── */
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
@@ -48,7 +66,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-const CustomPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }: any) => {
+/* ── Pie inner label ── */
+const CustomPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
   if (percent < 0.05) return null;
   const RADIAN = Math.PI / 180;
   const r = innerRadius + (outerRadius - innerRadius) * 0.5;
@@ -62,52 +81,85 @@ const CustomPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, n
 };
 
 export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
-  const [branches, setBranches]       = useState<any[]>([]);
-  const [showAdd, setShowAdd]         = useState(false);
-  const [showEdit, setShowEdit]       = useState(false);
-  const [selectedBranch, setSelectedBranch] = useState<any>(null);
-  const [newBranch, setNewBranch]     = useState({ name: '', code: '', location: '', email: '', password: '', fy_start: '2026-04-01', books_start: '2026-04-01' });
-  const [globalBalance, setGlobalBalance] = useState(0);
-  const [vouchers, setVouchers]       = useState<any[]>([]);
+  const [branches, setBranches]         = useState<any[]>([]);
+  const [summary, setSummary]           = useState<HqSummary | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(true);
+  const [vouchers, setVouchers]         = useState<any[]>([]);
 
-  useEffect(() => {
-    fetch('/api/branches').then(r => r.json()).then(setBranches);
-    fetch('/api/ledgers').then(r => r.json()).then(ledgers => {
-      const total = ledgers.reduce((acc: number, l: any) => {
-        const bal = Number(l.openingBalance || 0);
-        return l.balanceType === 'Dr' ? acc + bal : acc - bal;
-      }, 0);
-      setGlobalBalance(total);
-    });
-    fetch('/api/vouchers').then(r => r.json()).then(data => {
-      const all = Array.isArray(data) ? data : [];
-      setVouchers(all.filter(v => !v.voided && v.voided !== 1 && v.voided !== '1'));
-    });
+  const [showAdd, setShowAdd]           = useState(false);
+  const [showEdit, setShowEdit]         = useState(false);
+  const [selectedBranch, setSelectedBranch] = useState<any>(null);
+  const [newBranch, setNewBranch] = useState({
+    name: '', code: '', location: '', email: '', password: '',
+    fy_start: '2026-04-01', books_start: '2026-04-01',
+  });
+
+  /* ─── Fallback global balance from /api/ledgers ─── */
+  const [ledgerBalance, setLedgerBalance] = useState<number | null>(null);
+
+  const loadData = useCallback(async () => {
+    setLoadingSummary(true);
+    try {
+      const [branchRes, summaryRes, voucherRes, ledgerRes] = await Promise.all([
+        fetch('/api/branches'),
+        fetch('/api/hq/summary'),
+        fetch('/api/vouchers'),
+        fetch('/api/ledgers'),
+      ]);
+
+      if (branchRes.ok)  setBranches(await branchRes.json());
+
+      if (summaryRes.ok) {
+        setSummary(await summaryRes.json());
+      } else {
+        setSummary(null);
+      }
+
+      if (voucherRes.ok) {
+        const all = await voucherRes.json();
+        setVouchers(
+          Array.isArray(all)
+            ? all.filter((v: any) => !v.voided && v.voided !== 1 && v.voided !== '1')
+            : [],
+        );
+      }
+
+      /* Fallback balance calculation from raw ledgers */
+      if (ledgerRes.ok) {
+        const ledgers: any[] = await ledgerRes.json();
+        const total = ledgers.reduce((acc: number, l: any) => {
+          const bal = Number(l.openingBalance || 0);
+          return l.balanceType === 'Dr' ? acc + bal : acc - bal;
+        }, 0);
+        setLedgerBalance(total);
+      }
+    } catch {
+      setSummary(null);
+    } finally {
+      setLoadingSummary(false);
+    }
   }, []);
 
-  // Monthly voucher count (Apr–Mar fiscal year)
+  useEffect(() => { loadData(); }, [loadData]);
+
+  /* ─── Derived chart data ─── */
   const monthlyData = useMemo(() => {
     const counts: Record<number, number> = {};
     MONTH_LABELS.forEach((_, i) => (counts[i] = 0));
     vouchers.forEach(v => {
-      const m = new Date(v.date).getMonth(); // 0=Jan…11=Dec
-      const fiscalIdx = (m - 3 + 12) % 12;   // 0=Apr…11=Mar
+      const m = new Date(v.date).getMonth();
+      const fiscalIdx = (m - 3 + 12) % 12;
       counts[fiscalIdx] = (counts[fiscalIdx] || 0) + 1;
     });
     return MONTH_LABELS.map((label, i) => ({ month: label, Transactions: counts[i] }));
   }, [vouchers]);
 
-  // Voucher type breakdown (donut)
   const typeData = useMemo(() => {
     const map: Record<string, number> = {};
-    vouchers.forEach(v => {
-      const t = v.type || 'Other';
-      map[t] = (map[t] || 0) + 1;
-    });
+    vouchers.forEach(v => { const t = v.type || 'Other'; map[t] = (map[t] || 0) + 1; });
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [vouchers]);
 
-  // Cumulative fund flow (area chart) — running count of vouchers over fiscal months
   const fundFlowData = useMemo(() => {
     let running = 0;
     return monthlyData.map(d => {
@@ -116,71 +168,76 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
     });
   }, [monthlyData]);
 
-  // Branch comparison — voucher counts per branch
   const branchComparisonData = useMemo(() => {
     if (branches.length === 0) return [];
     return branches.map(branch => {
       const bv = vouchers.filter(v => String(v.branchId) === String(branch.id));
       return {
         name: branch.name.length > 14 ? branch.name.slice(0, 14) + '…' : branch.name,
-        Receipts : bv.filter(v => v.type === 'Receipt').length,
-        Payments : bv.filter(v => v.type === 'Payment').length,
-        Journals : bv.filter(v => v.type === 'Journal').length,
-        Other    : bv.filter(v => !['Receipt','Payment','Journal'].includes(v.type)).length,
+        Receipts: bv.filter(v => v.type === 'Receipt').length,
+        Payments: bv.filter(v => v.type === 'Payment').length,
+        Journals: bv.filter(v => v.type === 'Journal').length,
+        Other   : bv.filter(v => !['Receipt','Payment','Journal'].includes(v.type)).length,
       };
     });
   }, [branches, vouchers]);
 
   const totalVouchers = vouchers.length;
 
+  /* ─── Resolve displayed balance ───
+     Priority: /api/hq/summary  →  ledger fallback  →  0 */
+  const displayBalance  = summary?.consolidatedCashBank   ?? ledgerBalance ?? 0;
+  const displaySide     = summary?.consolidatedSide       ?? (displayBalance >= 0 ? 'Dr' : 'Cr');
+  const fmt = (n: number) =>
+    Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const branchBalanceMap = new Map((summary?.perBranch ?? []).map(b => [b.id, b]));
+
+  /* ─── CRUD handlers ─── */
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch('/api/branches', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const res  = await fetch('/api/branches', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newBranch),
     });
     const data = await res.json();
     if (res.ok) {
-      setBranches([...branches, data]);
       setShowAdd(false);
-      setNewBranch({ name: '', code: '', location: '', email: '', password: '', fy_start: '2026-04-01', books_start: '2026-04-01' });
-    } else {
-      alert(data.error || 'Failed to create branch');
-    }
+      setNewBranch({ name:'', code:'', location:'', email:'', password:'', fy_start:'2026-04-01', books_start:'2026-04-01' });
+      await loadData();
+    } else { alert(data.error || data.details || 'Failed to create branch'); }
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     const res = await fetch(`/api/branches/${selectedBranch.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(selectedBranch),
     });
-    if (res.ok) {
-      setBranches(branches.map(b => b.id === selectedBranch.id ? selectedBranch : b));
-      setShowEdit(false); setSelectedBranch(null);
-    } else alert('Failed to update branch');
+    if (res.ok) { setShowEdit(false); setSelectedBranch(null); await loadData(); }
+    else { const d = await res.json().catch(() => ({})); alert((d as any).error || 'Failed to update'); }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure? All data related to this church branch will be deleted.')) return;
-    await fetch(`api/branches/${id}`, { method: 'DELETE' });
-    setBranches(branches.filter(b => b.id !== id));
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Delete branch "${name}"?\n\nAll ledgers, vouchers, and users will be permanently removed.`)) return;
+    const res = await fetch(`/api/branches/${id}`, { method: 'DELETE' });
+    if (res.ok) { await loadData(); return; }
+    const d = await res.json().catch(() => ({}));
+    alert((d as any).error || (d as any).details || 'Failed to delete branch');
   };
 
   const handleResetPassword = async (id: string) => {
     const newPass = prompt('Enter new password for this church:');
     if (!newPass) return;
-    const res = await fetch(`api/branches/${id}/reset-password`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+    const res = await fetch(`/api/branches/${id}/reset-password`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: newPass }),
     });
     if (res.ok) alert('Password reset successfully');
     else alert('Failed to reset password');
   };
 
+  /* ══════════════════════════════════════════════════════ RENDER ══ */
   return (
     <div className="flex flex-col h-full bg-tally-bg">
       {/* Title bar */}
@@ -189,12 +246,13 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
         <span className="text-tally-accent">Global Administration</span>
       </div>
 
-      {/* Main content */}
+      {/* Main content — full width, no fixed right panel */}
       <div className="flex-grow overflow-auto p-4">
         <div className="flex gap-4 h-full min-h-0">
 
           {/* ── LEFT PANEL ── */}
           <div className="w-[340px] flex-shrink-0 flex flex-col gap-4">
+
             {/* Header */}
             <div className="flex justify-between items-end border-b-2 border-tally-teal pb-2">
               <div>
@@ -221,26 +279,41 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {branches.map(branch => (
-                    <tr
-                      key={branch.id}
-                      className="hover:bg-tally-accent cursor-pointer border-b border-gray-50 group"
-                      onClick={() => onSelectBranch(branch.id)}
-                    >
-                      <td className="px-3 py-2 font-bold text-tally-teal uppercase">{branch.name}</td>
-                      <td className="px-3 py-2 font-mono text-[10px]">{branch.code}</td>
-                      <td className="px-3 py-2 text-right font-mono text-gray-600">
-                        ₹ {Math.abs(globalBalance / Math.max(branches.length, 1)).toLocaleString('en-IN', { minimumFractionDigits: 2 })} Dr
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100">
-                          <button onClick={e => { e.stopPropagation(); setSelectedBranch(branch); setShowEdit(true); }} className="p-1 hover:text-tally-teal text-[9px] font-bold uppercase">Edit</button>
-                          <button onClick={e => { e.stopPropagation(); handleResetPassword(branch.id); }} className="p-1 hover:text-tally-teal"><KeyRound className="w-3 h-3" /></button>
-                          <button onClick={e => { e.stopPropagation(); handleDelete(branch.id); }} className="p-1 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {branches.map(branch => {
+                    const bal = branchBalanceMap.get(branch.id);
+                    return (
+                      <tr
+                        key={branch.id}
+                        className="hover:bg-tally-accent cursor-pointer border-b border-gray-50 group"
+                        onClick={() => onSelectBranch(branch.id)}
+                      >
+                        <td className="px-3 py-2 font-bold text-tally-teal uppercase">{branch.name}</td>
+                        <td className="px-3 py-2 font-mono text-[10px]">{branch.code}</td>
+                        <td className="px-3 py-2 text-right font-mono text-gray-600 text-[10px]">
+                          {bal
+                            ? <>₹ {fmt(bal.cashBankBalance)} <span className="text-gray-500">{bal.cashBankSide}</span></>
+                            : '—'
+                          }
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100">
+                            <button
+                              onClick={e => { e.stopPropagation(); setSelectedBranch(branch); setShowEdit(true); }}
+                              className="p-1 hover:text-tally-teal text-[9px] font-bold uppercase"
+                            >Edit</button>
+                            <button
+                              onClick={e => { e.stopPropagation(); handleResetPassword(branch.id); }}
+                              className="p-1 hover:text-tally-teal"
+                            ><KeyRound className="w-3 h-3" /></button>
+                            <button
+                              onClick={e => { e.stopPropagation(); handleDelete(branch.id, branch.name); }}
+                              className="p-1 hover:text-red-500"
+                            ><Trash2 className="w-3 h-3" /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               {branches.length === 0 && (
@@ -263,11 +336,17 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
               </div>
               <div className="pt-2 border-t border-gray-100">
                 <p className="text-[8px] uppercase text-tally-teal font-bold mb-1">Global Cash &amp; Bank Balance</p>
-                <p className="text-lg font-black text-tally-teal font-mono">
-                  ₹ {Math.abs(globalBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}&nbsp;
-                  <span className="text-sm">{globalBalance >= 0 ? 'Dr' : 'Cr'}</span>
+                {loadingSummary ? (
+                  <p className="text-sm text-gray-400 mt-1 animate-pulse">Calculating…</p>
+                ) : (
+                  <p className="text-lg font-black text-tally-teal font-mono">
+                    ₹ {fmt(displayBalance)}&nbsp;
+                    <span className="text-sm">{displaySide}</span>
+                  </p>
+                )}
+                <p className="text-[8px] text-gray-400 italic mt-0.5">
+                  Closing balance (opening + vouchers, voided excluded)
                 </p>
-                <p className="text-[8px] text-gray-400 italic mt-0.5">Closing balance (opening + vouchers, voided inclusive)</p>
               </div>
             </div>
           </div>
@@ -275,7 +354,7 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
           {/* ── RIGHT PANEL: CHARTS ── */}
           <div className="flex-1 min-w-0 flex flex-col gap-4">
 
-            {/* Row 1: Bar chart (monthly transactions) */}
+            {/* Row 1: Monthly bar chart */}
             <div className="bg-white border border-tally-teal/20 shadow-sm p-4 flex-1 min-h-0">
               <div className="flex items-center gap-2 mb-3 border-b border-tally-teal/10 pb-2">
                 <BarChart2 className="w-3.5 h-3.5 text-tally-teal" />
@@ -292,22 +371,20 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
                     <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#555' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 9, fill: '#555' }} axisLine={false} tickLine={false} allowDecimals={false} />
                     <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,105,92,0.06)' }} />
-                    <Bar dataKey="Transactions" fill={TEAL} radius={[3, 3, 0, 0]} label={false} />
+                    <Bar dataKey="Transactions" fill={TEAL} radius={[3,3,0,0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
             </div>
 
-            {/* Row 2: Branch Comparison Bar Chart */}
+            {/* Row 2: Branch comparison */}
             <div className="bg-white border border-tally-teal/20 shadow-sm p-4" style={{ height: '200px' }}>
               <div className="flex items-center gap-2 mb-2 border-b border-tally-teal/10 pb-2">
                 <BarChart2 className="w-3.5 h-3.5 text-indigo-600" />
                 <h3 className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Branch Comparison — Voucher Activity</h3>
               </div>
               {branchComparisonData.length === 0 ? (
-                <div className="flex items-center justify-center h-[calc(100%-2rem)] text-[10px] text-gray-400 italic">
-                  No branch data available
-                </div>
+                <div className="flex items-center justify-center h-[calc(100%-2rem)] text-[10px] text-gray-400 italic">No branch data available</div>
               ) : (
                 <ResponsiveContainer width="100%" height="80%">
                   <BarChart data={branchComparisonData} margin={{ top: 2, right: 8, left: -20, bottom: 0 }} barSize={12}>
@@ -316,34 +393,30 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
                     <YAxis tick={{ fontSize: 9, fill: '#555' }} axisLine={false} tickLine={false} allowDecimals={false} />
                     <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
                     <Legend wrapperStyle={{ fontSize: 8 }} />
-                    <Bar dataKey="Receipts" fill={GREEN}   radius={[2,2,0,0]} />
-                    <Bar dataKey="Payments" fill={RED}     radius={[2,2,0,0]} />
-                    <Bar dataKey="Journals" fill={INDIGO}  radius={[2,2,0,0]} />
-                    <Bar dataKey="Other"    fill={ORANGE}  radius={[2,2,0,0]} />
+                    <Bar dataKey="Receipts" fill={GREEN}  radius={[2,2,0,0]} />
+                    <Bar dataKey="Payments" fill={RED}    radius={[2,2,0,0]} />
+                    <Bar dataKey="Journals" fill={INDIGO} radius={[2,2,0,0]} />
+                    <Bar dataKey="Other"    fill={ORANGE} radius={[2,2,0,0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
             </div>
 
-            {/* Row 3: Area chart + Donut side by side */}
+            {/* Row 3: Area + Donut */}
             <div className="flex gap-4" style={{ height: '220px' }}>
-
-              {/* Area chart — cumulative fund flow */}
               <div className="bg-white border border-tally-teal/20 shadow-sm p-4 flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-2 border-b border-tally-teal/10 pb-2">
                   <TrendingUp className="w-3 h-3 text-orange-600" />
                   <h3 className="text-[10px] font-bold text-orange-600 uppercase tracking-wider">Cumulative Transaction Flow</h3>
                 </div>
                 {totalVouchers === 0 ? (
-                  <div className="flex items-center justify-center h-[calc(100%-2rem)] text-[10px] text-gray-400 italic">
-                    No data yet
-                  </div>
+                  <div className="flex items-center justify-center h-[calc(100%-2rem)] text-[10px] text-gray-400 italic">No data yet</div>
                 ) : (
                   <ResponsiveContainer width="100%" height="80%">
                     <AreaChart data={fundFlowData} margin={{ top: 2, right: 8, left: -20, bottom: 0 }}>
                       <defs>
                         <linearGradient id="cumGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={ORANGE} stopOpacity={0.3} />
+                          <stop offset="5%"  stopColor={ORANGE} stopOpacity={0.3} />
                           <stop offset="95%" stopColor={ORANGE} stopOpacity={0.02} />
                         </linearGradient>
                       </defs>
@@ -351,66 +424,40 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
                       <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#555' }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 9, fill: '#555' }} axisLine={false} tickLine={false} allowDecimals={false} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Area
-                        type="monotone"
-                        dataKey="Cumulative"
-                        stroke={ORANGE}
-                        strokeWidth={2}
-                        fill="url(#cumGrad)"
-                        dot={{ r: 2, fill: ORANGE }}
-                        activeDot={{ r: 4 }}
-                      />
+                      <Area type="monotone" dataKey="Cumulative" stroke={ORANGE} strokeWidth={2}
+                        fill="url(#cumGrad)" dot={{ r: 2, fill: ORANGE }} activeDot={{ r: 4 }} />
                     </AreaChart>
                   </ResponsiveContainer>
                 )}
               </div>
 
-              {/* Donut chart — voucher type breakdown */}
               <div className="bg-white border border-tally-teal/20 shadow-sm p-4 flex-shrink-0 w-[220px]">
                 <div className="flex items-center gap-2 mb-2 border-b border-tally-teal/10 pb-2">
                   <PieIcon className="w-3 h-3 text-indigo-600" />
                   <h3 className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Voucher Types</h3>
                 </div>
                 {typeData.length === 0 ? (
-                  <div className="flex items-center justify-center h-[calc(100%-2rem)] text-[10px] text-gray-400 italic">
-                    No data yet
-                  </div>
+                  <div className="flex items-center justify-center h-[calc(100%-2rem)] text-[10px] text-gray-400 italic">No data yet</div>
                 ) : (
                   <div className="flex flex-col items-center h-[calc(100%-2rem)]">
                     <ResponsiveContainer width="100%" height={110}>
                       <PieChart>
-                        <Pie
-                          data={typeData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={28}
-                          outerRadius={50}
-                          dataKey="value"
-                          labelLine={false}
-                          label={<CustomPieLabel />}
-                        >
+                        <Pie data={typeData} cx="50%" cy="50%" innerRadius={28} outerRadius={50}
+                          dataKey="value" labelLine={false} label={<CustomPieLabel />}>
                           {typeData.map((entry, i) => (
-                            <Cell
-                              key={entry.name}
-                              fill={VOUCHER_COLORS[entry.name] ?? DONUT_FALLBACK[i % DONUT_FALLBACK.length]}
-                            />
+                            <Cell key={entry.name} fill={VOUCHER_COLORS[entry.name] ?? DONUT_FALLBACK[i % DONUT_FALLBACK.length]} />
                           ))}
                         </Pie>
-                        <Tooltip
-                          formatter={(val: any, name: any) => [val, name]}
-                          contentStyle={{ fontSize: 9, border: '1px solid #ccc', borderRadius: 2 }}
-                        />
+                        <Tooltip formatter={(val: any, name: any) => [val, name]}
+                          contentStyle={{ fontSize: 9, border: '1px solid #ccc', borderRadius: 2 }} />
                       </PieChart>
                     </ResponsiveContainer>
-                    {/* Legend */}
                     <div className="mt-1 space-y-0.5 w-full">
                       {typeData.map((d, i) => (
                         <div key={d.name} className="flex items-center justify-between text-[9px]">
                           <div className="flex items-center gap-1">
-                            <span
-                              className="w-2 h-2 rounded-full flex-shrink-0"
-                              style={{ background: VOUCHER_COLORS[d.name] ?? DONUT_FALLBACK[i % DONUT_FALLBACK.length] }}
-                            />
+                            <span className="w-2 h-2 rounded-full flex-shrink-0"
+                              style={{ background: VOUCHER_COLORS[d.name] ?? DONUT_FALLBACK[i % DONUT_FALLBACK.length] }} />
                             <span className="text-gray-600">{d.name}</span>
                           </div>
                           <span className="font-bold text-gray-700">{d.value}</span>
@@ -428,16 +475,13 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
       {/* ── ADD BRANCH MODAL ── */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-white border-4 border-tally-teal p-8 w-full max-w-md shadow-2xl"
-          >
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            className="bg-white border-4 border-tally-teal p-8 w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold text-tally-teal uppercase mb-6 tracking-widest text-center">New Church Branch</h2>
             <form onSubmit={handleAdd} className="space-y-4">
               <div>
                 <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Church / Branch Name</label>
-                <input type="text" placeholder="e.g. St. Peters Main"
+                <input type="text" placeholder="EBC MUMBAI"
                   className="w-full border-2 p-3 outline-none focus:border-tally-teal uppercase text-sm font-bold mt-1"
                   value={newBranch.name} onChange={e => setNewBranch({ ...newBranch, name: e.target.value })} required />
               </div>
@@ -450,7 +494,7 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Location</label>
-                  <input type="text" placeholder="New York"
+                  <input type="text" placeholder="NEW LAMKA"
                     className="w-full border-2 p-3 outline-none focus:border-tally-teal uppercase text-sm font-bold mt-1"
                     value={newBranch.location} onChange={e => setNewBranch({ ...newBranch, location: e.target.value })} required />
                 </div>
@@ -470,14 +514,12 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">FY Begin</label>
-                  <input type="date"
-                    className="w-full border-2 p-2 outline-none focus:border-tally-teal text-sm font-bold mt-1"
+                  <input type="date" className="w-full border-2 p-2 outline-none focus:border-tally-teal text-sm font-bold mt-1"
                     value={newBranch.fy_start} onChange={e => setNewBranch({ ...newBranch, fy_start: e.target.value })} required />
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Books From</label>
-                  <input type="date"
-                    className="w-full border-2 p-2 outline-none focus:border-tally-teal text-sm font-bold mt-1"
+                  <input type="date" className="w-full border-2 p-2 outline-none focus:border-tally-teal text-sm font-bold mt-1"
                     value={newBranch.books_start} onChange={e => setNewBranch({ ...newBranch, books_start: e.target.value })} required />
                 </div>
               </div>
@@ -493,11 +535,8 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
       {/* ── EDIT BRANCH MODAL ── */}
       {showEdit && selectedBranch && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-white border-4 border-tally-teal p-8 w-full max-w-md shadow-2xl"
-          >
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            className="bg-white border-4 border-tally-teal p-8 w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold text-tally-teal uppercase mb-6 tracking-widest text-center">Edit Church Branch</h2>
             <form onSubmit={handleUpdate} className="space-y-4">
               <div>
@@ -523,20 +562,19 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">FY Begin</label>
-                  <input type="date"
-                    className="w-full border-2 p-2 outline-none focus:border-tally-teal text-sm font-bold mt-1"
+                  <input type="date" className="w-full border-2 p-2 outline-none focus:border-tally-teal text-sm font-bold mt-1"
                     value={selectedBranch.fy_start} onChange={e => setSelectedBranch({ ...selectedBranch, fy_start: e.target.value })} required />
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Books From</label>
-                  <input type="date"
-                    className="w-full border-2 p-2 outline-none focus:border-tally-teal text-sm font-bold mt-1"
+                  <input type="date" className="w-full border-2 p-2 outline-none focus:border-tally-teal text-sm font-bold mt-1"
                     value={selectedBranch.books_start} onChange={e => setSelectedBranch({ ...selectedBranch, books_start: e.target.value })} required />
                 </div>
               </div>
               <div className="flex gap-4 pt-6">
                 <button type="submit" className="flex-1 bg-tally-teal text-white font-bold py-3 uppercase text-xs hover:bg-tally-header">Save Changes</button>
-                <button type="button" onClick={() => { setShowEdit(false); setSelectedBranch(null); }} className="px-6 bg-gray-100 font-bold uppercase text-xs hover:bg-gray-200">Cancel</button>
+                <button type="button" onClick={() => { setShowEdit(false); setSelectedBranch(null); }}
+                  className="px-6 bg-gray-100 font-bold uppercase text-xs hover:bg-gray-200">Cancel</button>
               </div>
             </form>
           </motion.div>
