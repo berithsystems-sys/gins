@@ -1,11 +1,10 @@
 /**
- * TallyPrime-style Profit & Loss A/c — v3
- * Fixes:
- * 1. Arrow key navigation (Up/Down to move focus, Enter to expand/drill)
- * 2. Removed Print and Export keyboard shortcuts + side buttons
- * 3. ESC goes back to main menu via onBack prop
- * 4. Table area fills full height to bottom of page
- * 5. VOIDED transactions filtered out (as per voucher logic)
+ * TallyPrime-style Profit & Loss A/c — v4
+ * FIXES in this version:
+ *   FIX-1  Alt+P works inside LedgerDetail drill-down (prints ledger statement)
+ *   FIX-2  Print button visible in LedgerDetail header
+ *   FIX-3  PLScreen Alt+P guard removed so it still fires from main screen
+ *   FIX-4  handlePrintLedger passed as prop to LedgerDetail
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -25,28 +24,40 @@ const fmtDate = (iso: string) => {
   } catch { return iso; }
 };
 
-// Helper: matches your voucher logic to ignore voided entries
 const isVoided = (v: any): boolean => v.voided === true || v.voided === 1 || v.voided === '1';
 
 // ─── LedgerDetail (drill-down) ────────────────────────────────────────────────
-function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?: string; onBack: () => void }) {
+function LedgerDetail({
+  ledger, branchId, onBack, onPrint, companyName,
+}: {
+  ledger: Ledger;
+  branchId?: string;
+  onBack: () => void;
+  onPrint: () => void;          // ← NEW: receives handlePrintLedger from PLScreen
+  companyName: string;
+}) {
   const [rows, setRows]       = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Keyboard: Escape → back, Alt+P → print
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onBack(); }
+      if (e.key === 'Escape') {
+        e.preventDefault(); e.stopPropagation(); onBack(); return;
+      }
+      if (e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault(); e.stopPropagation(); onPrint(); return;
+      }
     };
     window.addEventListener('keydown', h, true);
     return () => window.removeEventListener('keydown', h, true);
-  }, [onBack]);
+  }, [onBack, onPrint]);
 
   useEffect(() => {
     const q = branchId ? `?branchId=${branchId}` : '';
     fetch(`/api/vouchers/ledger/${ledger.id}${q}`)
       .then(r => r.json())
       .then(d => {
-        // --- FIX: Filter voided transactions here ---
         const active = (Array.isArray(d) ? d : []).filter(v => !isVoided(v));
         setRows(active);
       })
@@ -61,8 +72,8 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
     running  += r.entry_type === 'Dr' ? amt : -amt;
     return { ...r, running };
   });
-  const totalDr = rows.filter(r => r.entry_type === 'Dr').reduce((a,r) => a + Number(r.entry_amount||0), 0);
-  const totalCr = rows.filter(r => r.entry_type === 'Cr').reduce((a,r) => a + Number(r.entry_amount||0), 0);
+  const totalDr = rows.filter(r => r.entry_type === 'Dr').reduce((a, r) => a + Number(r.entry_amount || 0), 0);
+  const totalCr = rows.filter(r => r.entry_type === 'Cr').reduce((a, r) => a + Number(r.entry_amount || 0), 0);
   const closing = obSgn + totalDr - totalCr;
 
   const FONT = `-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,sans-serif`;
@@ -71,11 +82,20 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
 
   return (
     <div style={{ fontFamily: FONT, fontSize: 12, display:'flex', flexDirection:'column', height:'100%', background:'#fff', border:'1px solid #b8c4cc', borderRadius:2, overflow:'hidden' }}>
+      {/* Header — now has Print button */}
       <div style={{ background: HDR, color:'#fff', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'3px 10px', fontSize:12, fontWeight:700, flexShrink:0 }}>
-        <button onClick={onBack} style={{ background:'none', border:'1px solid rgba(255,255,255,0.4)', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:FONT, padding:'1px 10px', borderRadius:2 }}>← Back (Esc)</button>
+        <button onClick={onBack}
+          style={{ background:'none', border:'1px solid rgba(255,255,255,0.4)', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:FONT, padding:'1px 10px', borderRadius:2 }}>
+          ← Back (Esc)
+        </button>
         <span style={{ flex:2, textAlign:'center', fontWeight:800, fontSize:13 }}>{ledger.name}</span>
-        <span />
+        {/* FIX-2: Print button in drill-down header */}
+        <button onClick={onPrint}
+          style={{ background:'none', border:'1px solid rgba(255,255,255,0.4)', color:'#fff', cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:FONT, padding:'1px 10px', borderRadius:2 }}>
+          🖨 Print (Alt+P)
+        </button>
       </div>
+
       <div style={{ display:'flex', justifyContent:'space-between', padding:'5px 12px', background:'#fafbfd', borderBottom:'1px solid #b8c4cc', flexShrink:0 }}>
         <div>
           <span style={{ fontSize:11, color:'#777', fontStyle:'italic' }}>Ledger: </span>
@@ -90,11 +110,12 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
           </span>
         </div>
       </div>
+
       <div style={{ flex:1, overflowY:'auto' }}>
         <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
           <thead>
             <tr style={{ background:'#f0f4f8', position:'sticky', top:0, zIndex:5 }}>
-              {['Date','Particulars','Vch Type','Vch No.','Debit (₹)','Credit (₹)','Balance'].map((h,i) => (
+              {['Date','Particulars','Vch Type','Vch No.','Debit (₹)','Credit (₹)','Balance'].map((h, i) => (
                 <th key={h} style={{ padding:'4px 8px', fontSize:11, fontWeight:700, color:'#333', borderBottom:'1px solid #b8c4cc', borderRight:'1px solid #e0e6ee', background:'#f0f4f8', textAlign: i >= 4 ? 'right' : i === 3 ? 'center' : 'left', whiteSpace:'nowrap', width: i===0?80:i===2?100:i===3?70:i>=4?120:undefined }}>{h}</th>
               ))}
             </tr>
@@ -103,26 +124,27 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
             <tr style={{ background:'#f8fbff', borderBottom:`1px solid ${BD}` }}>
               <td style={{ padding:'3px 8px', borderRight:`1px solid ${BD}` }} />
               <td style={{ padding:'3px 8px', fontWeight:700, fontStyle:'italic', color:'#555', borderRight:`1px solid ${BD}` }}>Opening Balance</td>
-              <td style={{ padding:'3px 8px', borderRight:`1px solid ${BD}` }} /><td style={{ padding:'3px 8px', borderRight:`1px solid ${BD}` }} />
+              <td style={{ padding:'3px 8px', borderRight:`1px solid ${BD}` }} />
+              <td style={{ padding:'3px 8px', borderRight:`1px solid ${BD}` }} />
               <td style={{ padding:'3px 10px', textAlign:'right', color:'#7a0000', borderRight:`1px solid ${BD}` }}>{obSgn > 0 ? fmtAmtAbs(ob) : ''}</td>
               <td style={{ padding:'3px 10px', textAlign:'right', color:'#006b00', borderRight:`1px solid ${BD}` }}>{obSgn < 0 ? fmtAmtAbs(ob) : ''}</td>
-              <td style={{ padding:'3px 10px', textAlign:'right', fontWeight:700 }}>{fmtAmtAbs(ob)} {ledger.balanceType||'Dr'}</td>
+              <td style={{ padding:'3px 10px', textAlign:'right', fontWeight:700 }}>{fmtAmtAbs(ob)} {ledger.balanceType || 'Dr'}</td>
             </tr>
             {loading ? (
               <tr><td colSpan={7} style={{ padding:24, textAlign:'center', color:'#888', fontStyle:'italic' }}>Loading…</td></tr>
             ) : withRun.length === 0 ? (
               <tr><td colSpan={7} style={{ padding:24, textAlign:'center', color:'#888', fontStyle:'italic' }}>No transactions found.</td></tr>
-            ) : withRun.map((r,i) => {
+            ) : withRun.map((r, i) => {
               const isDr = r.entry_type === 'Dr';
               const runType = r.running >= 0 ? 'Dr' : 'Cr';
               return (
                 <tr key={`${r.id}-${i}`} style={{ borderBottom:`1px solid ${BD}`, background: i%2===0?'#fff':'#fafbfd' }}>
                   <td style={{ padding:'3px 8px', borderRight:`1px solid ${BD}` }}>{fmtDate(r.date)}</td>
-                  <td style={{ padding:'3px 8px', fontWeight:600, borderRight:`1px solid ${BD}`, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.narration||r.type||'—'}</td>
+                  <td style={{ padding:'3px 8px', fontWeight:600, borderRight:`1px solid ${BD}`, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.narration || r.type || '—'}</td>
                   <td style={{ padding:'3px 8px', fontStyle:'italic', color:'#555', borderRight:`1px solid ${BD}` }}>{r.type}</td>
-                  <td style={{ padding:'3px 8px', textAlign:'center', borderRight:`1px solid ${BD}` }}>{r.number||''}</td>
-                  <td style={{ padding:'3px 10px', textAlign:'right', color:'#7a0000', fontWeight: isDr?700:400, borderRight:`1px solid ${BD}` }}>{isDr?fmtAmtAbs(r.entry_amount):''}</td>
-                  <td style={{ padding:'3px 10px', textAlign:'right', color:'#006b00', fontWeight:!isDr?700:400, borderRight:`1px solid ${BD}` }}>{!isDr?fmtAmtAbs(r.entry_amount):''}</td>
+                  <td style={{ padding:'3px 8px', textAlign:'center', borderRight:`1px solid ${BD}` }}>{r.number || ''}</td>
+                  <td style={{ padding:'3px 10px', textAlign:'right', color:'#7a0000', fontWeight: isDr?700:400, borderRight:`1px solid ${BD}` }}>{isDr ? fmtAmtAbs(r.entry_amount) : ''}</td>
+                  <td style={{ padding:'3px 10px', textAlign:'right', color:'#006b00', fontWeight: !isDr?700:400, borderRight:`1px solid ${BD}` }}>{!isDr ? fmtAmtAbs(r.entry_amount) : ''}</td>
                   <td style={{ padding:'3px 10px', textAlign:'right', fontWeight:600 }}>{fmtAmtAbs(r.running)} {runType}</td>
                 </tr>
               );
@@ -131,9 +153,9 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
           <tfoot>
             <tr style={{ background:'#f0f4f8', borderTop:'1px solid #b8c4cc', position:'sticky', bottom:0 }}>
               <td colSpan={4} style={{ padding:'4px 8px', fontWeight:700, textAlign:'right', borderRight:`1px solid ${BD}`, paddingRight:8 }}>Closing Balance</td>
-              <td style={{ padding:'4px 10px', textAlign:'right', fontWeight:700, color:'#7a0000', borderTop:'2px solid #555', borderRight:`1px solid ${BD}` }}>{totalDr>0?fmtAmtAbs(totalDr):''}</td>
-              <td style={{ padding:'4px 10px', textAlign:'right', fontWeight:700, color:'#006b00', borderTop:'2px solid #555', borderRight:`1px solid ${BD}` }}>{totalCr>0?fmtAmtAbs(totalCr):''}</td>
-              <td style={{ padding:'4px 10px', textAlign:'right', fontWeight:800, borderTop:'2px solid #555' }}>{fmtAmtAbs(closing)} {closing>=0?'Dr':'Cr'}</td>
+              <td style={{ padding:'4px 10px', textAlign:'right', fontWeight:700, color:'#7a0000', borderTop:'2px solid #555', borderRight:`1px solid ${BD}` }}>{totalDr > 0 ? fmtAmtAbs(totalDr) : ''}</td>
+              <td style={{ padding:'4px 10px', textAlign:'right', fontWeight:700, color:'#006b00', borderTop:'2px solid #555', borderRight:`1px solid ${BD}` }}>{totalCr > 0 ? fmtAmtAbs(totalCr) : ''}</td>
+              <td style={{ padding:'4px 10px', textAlign:'right', fontWeight:800, borderTop:'2px solid #555' }}>{fmtAmtAbs(closing)} {closing >= 0 ? 'Dr' : 'Cr'}</td>
             </tr>
           </tfoot>
         </table>
@@ -159,19 +181,21 @@ function PeriodModal({ from, to, onAccept, onCancel }: { from:string; to:string;
       <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:2, boxShadow:'0 8px 32px rgba(0,0,0,0.28)', width:300, overflow:'hidden', fontFamily:FONT }}>
         <div style={{ background:HDR, color:'#fff', padding:'5px 12px', fontSize:12, fontWeight:700 }}>Change Period  <span style={{ fontSize:9, opacity:0.6 }}>F2</span></div>
         <div style={{ padding:'14px 16px', display:'flex', flexDirection:'column', gap:12 }}>
-          {[{lbl:'From Date :', val:f, set:setF, ref:undefined as any, onKey:(e:React.KeyboardEvent)=>{ if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();toRef.current?.focus();}}},
-            {lbl:'To Date :',   val:t, set:setT, ref:toRef,           onKey:(e:React.KeyboardEvent)=>{ if(e.key==='Enter') onAccept(f,t);}}
-          ].map((row,i) => (
+          {[
+            { lbl:'From Date :', val:f, set:setF, ref:undefined as any, onKey:(e:React.KeyboardEvent)=>{ if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();toRef.current?.focus();}}},
+            { lbl:'To Date :',   val:t, set:setT, ref:toRef,           onKey:(e:React.KeyboardEvent)=>{ if(e.key==='Enter') onAccept(f,t);}}
+          ].map((row, i) => (
             <div key={i} style={{ display:'flex', alignItems:'center', gap:8 }}>
               <label style={{ fontSize:12, color:'#555', fontStyle:'italic', width:90, flexShrink:0 }}>{row.lbl}</label>
-              <input autoFocus={i===0} ref={row.ref} type="date" value={row.val} onChange={e=>row.set(e.target.value)} onKeyDown={row.onKey}
+              <input autoFocus={i===0} ref={row.ref} type="date" value={row.val}
+                onChange={e => row.set(e.target.value)} onKeyDown={row.onKey}
                 style={{ flex:1, border:'none', borderBottom:`2px solid ${HDR}`, outline:'none', fontSize:13, fontWeight:700, fontFamily:FONT, padding:'2px 4px', background:'#fffde0', color:'#1a1a1a' }} />
             </div>
           ))}
         </div>
         <div style={{ padding:'8px 16px 12px', display:'flex', justifyContent:'flex-end', gap:10 }}>
-          <button onClick={()=>onAccept(f,t)} style={{ background:HDR, color:'#fff', border:'none', padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Accept</button>
-          <button onClick={onCancel}          style={{ background:'#f0f4f8', color:'#444', border:`1px solid ${BD}`, padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Cancel</button>
+          <button onClick={() => onAccept(f,t)} style={{ background:HDR, color:'#fff', border:'none', padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Accept</button>
+          <button onClick={onCancel}            style={{ background:'#f0f4f8', color:'#444', border:`1px solid ${BD}`, padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Cancel</button>
         </div>
       </div>
     </div>
@@ -199,18 +223,20 @@ function AddPeriodModal({ onAdd, onCancel }: { onAdd:(label:string,from:string,t
             { lbl:'Label (optional):', val:label, set:setLabel, type:'text',  ph:'e.g. Q1 Apr–Jun' },
             { lbl:'From Date :',       val:from,  set:setFrom,  type:'date',  ph:'' },
             { lbl:'To Date :',         val:to,    set:setTo,    type:'date',  ph:'' },
-          ].map((row,i) => (
+          ].map((row, i) => (
             <div key={i} style={{ display:'flex', alignItems:'center', gap:8 }}>
               <label style={{ fontSize:12, color:'#555', fontStyle:'italic', width:110, flexShrink:0 }}>{row.lbl}</label>
-              <input autoFocus={i===0} type={row.type} value={row.val} placeholder={row.ph} onChange={e=>row.set(e.target.value)}
+              <input autoFocus={i===0} type={row.type} value={row.val} placeholder={row.ph}
+                onChange={e => row.set(e.target.value)}
                 style={{ flex:1, border:'none', borderBottom:`2px solid ${HDR}`, outline:'none', fontSize:13, fontWeight:700, fontFamily:FONT, padding:'2px 4px', background:'#fffde0', color:'#1a1a1a' }} />
             </div>
           ))}
         </div>
         <div style={{ padding:'8px 16px 12px', display:'flex', justifyContent:'flex-end', gap:10 }}>
-          <button onClick={()=>{ if(from&&to) onAdd(label||`${fmtDate(from)} – ${fmtDate(to)}`,from,to); }}
+          <button onClick={() => { if(from && to) onAdd(label || `${fmtDate(from)} – ${fmtDate(to)}`, from, to); }}
             style={{ background:HDR, color:'#fff', border:'none', padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Add</button>
-          <button onClick={onCancel} style={{ background:'#f0f4f8', color:'#444', border:`1px solid ${BD}`, padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Cancel</button>
+          <button onClick={onCancel}
+            style={{ background:'#f0f4f8', color:'#444', border:`1px solid ${BD}`, padding:'5px 18px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:FONT, borderRadius:2 }}>Cancel</button>
         </div>
       </div>
     </div>
@@ -229,17 +255,17 @@ const ROW_BDR = '#e0e6ee';
 const DARK    = '#1a2a3a';
 
 export default function PLScreen({ branchId, onBack }: PLScreenProps) {
-  const [ledgers, setLedgers]         = useState<any[]>([]);
-  const [allVouchers, setAllVouchers] = useState<any[]>([]);
-  const [companyName, setCompanyName] = useState('');
-  const [mainPeriod, setMainPeriod]   = useState({ from: '', to: '' });
-  const [extraPeriods, setExtraPeriods] = useState<Period[]>([]);
-  const [showPeriod, setShowPeriod]   = useState(false);
+  const [ledgers, setLedgers]             = useState<any[]>([]);
+  const [allVouchers, setAllVouchers]     = useState<any[]>([]);
+  const [companyName, setCompanyName]     = useState('');
+  const [mainPeriod, setMainPeriod]       = useState({ from: '', to: '' });
+  const [extraPeriods, setExtraPeriods]   = useState<Period[]>([]);
+  const [showPeriod, setShowPeriod]       = useState(false);
   const [showAddPeriod, setShowAddPeriod] = useState(false);
-  const [expanded, setExpanded]       = useState<Set<string>>(new Set());
-  const [drillLedger, setDrillLedger] = useState<Ledger | null>(null);
-  const [loading, setLoading]         = useState(true);
-  const [showPercent, setShowPercent] = useState(false);
+  const [expanded, setExpanded]           = useState<Set<string>>(new Set());
+  const [drillLedger, setDrillLedger]     = useState<Ledger | null>(null);
+  const [loading, setLoading]             = useState(true);
+  const [showPercent, setShowPercent]     = useState(false);
   const [focusedRowIdx, setFocusedRowIdx] = useState<number>(-1);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -252,31 +278,28 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
       fetch('/api/branches').then(r => r.json()).catch(() => []),
     ]).then(([l, v, b]) => {
       setLedgers(Array.isArray(l) ? l : []);
-      
-      // --- FIX: Exclude voided vouchers so they never enter any calculation ---
       const vArr = (Array.isArray(v) ? v : []).filter((x: any) => !isVoided(x));
       setAllVouchers(vArr);
-
       if (vArr.length > 0) {
-        const dates = vArr.map((x:any) => x.date?.slice(0,10)).filter(Boolean).sort();
+        const dates = vArr.map((x: any) => x.date?.slice(0,10)).filter(Boolean).sort();
         setMainPeriod({ from: dates[0], to: dates[dates.length-1] });
       }
       if (Array.isArray(b)) {
-        const br = branchId ? b.find((x:any)=>x.id===branchId) : b[0];
+        const br = branchId ? b.find((x: any) => x.id === branchId) : b[0];
         if (br) setCompanyName(br.name);
       }
-    }).catch(()=>{}).finally(()=>setLoading(false));
+    }).catch(() => {}).finally(() => setLoading(false));
   }, [branchId]);
 
   const calcBalanceForPeriod = useCallback((ledgerId: string, from: string, to: string) => {
-    const ledger  = ledgers.find(l => l.id === ledgerId);
-    const ob      = Number(ledger?.openingBalance || 0);
-    let running   = ledger?.balanceType === 'Cr' ? -ob : ob;
+    const ledger = ledgers.find(l => l.id === ledgerId);
+    const ob     = Number(ledger?.openingBalance || 0);
+    let running  = ledger?.balanceType === 'Cr' ? -ob : ob;
     allVouchers.forEach(v => {
       const vDate = v.date?.slice(0,10) || '';
       if (from && vDate < from) return;
       if (to   && vDate > to)   return;
-      (v.entries || []).forEach((e:any) => {
+      (v.entries || []).forEach((e: any) => {
         if (e.ledgerId === ledgerId) running += e.type === 'Dr' ? Number(e.amount) : -Number(e.amount);
       });
     });
@@ -305,8 +328,8 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
   const ALL_GROUPS   = [...LEFT_GROUPS, ...RIGHT_GROUPS];
 
   const periodTotals = useMemo(() => allPeriods.map(p => {
-    const leftT  = LEFT_GROUPS.reduce((a,g) => a + Math.abs(groupTotalForPeriod(g, p.from, p.to)), 0);
-    const rightT = RIGHT_GROUPS.reduce((a,g) => a + Math.abs(groupTotalForPeriod(g, p.from, p.to)), 0);
+    const leftT  = LEFT_GROUPS.reduce((a, g) => a + Math.abs(groupTotalForPeriod(g, p.from, p.to)), 0);
+    const rightT = RIGHT_GROUPS.reduce((a, g) => a + Math.abs(groupTotalForPeriod(g, p.from, p.to)), 0);
     return { leftT, rightT, nett: rightT - leftT, grand: Math.max(leftT, rightT) };
   }), [allPeriods, groupTotalForPeriod]);
 
@@ -337,7 +360,8 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
     const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n;
   });
 
-  const handlePrint = () => {
+  // ── P&L print (main screen) ──────────────────────────────────────────────
+  const handlePrint = useCallback(() => {
     const fmt = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
     const period = allPeriods[0];
     const pt = periodTotals[0];
@@ -365,7 +389,7 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
           </tr>${ledgerRows}`;
       }).join('');
 
-    const nett = pt?.nett ?? 0;
+    const nett  = pt?.nett  ?? 0;
     const grand = pt?.grand ?? 0;
 
     const html = `<!DOCTYPE html><html><head>
@@ -415,26 +439,137 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
     </body></html>`;
 
     const win = window.open('', '_blank', 'width=960,height=700');
-    if (win) {
-      win.document.write(html);
-      win.document.close();
-      setTimeout(() => { win.focus(); win.print(); }, 400);
-    }
-  };
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+  }, [allPeriods, periodTotals, groupTotalForPeriod, groupLedgersNonZero, calcBalanceForPeriod, mainPeriod, companyName, LEFT_GROUPS, RIGHT_GROUPS]);
 
+  // ── FIX-1: Ledger statement print (drill-down screen) ────────────────────
+  // Fetches fresh rows, builds a full A4 ledger statement, opens print dialog.
+  const handlePrintLedger = useCallback(() => {
+    if (!drillLedger) return;
+    const fmt = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+    const q = branchId ? `?branchId=${branchId}` : '';
+
+    fetch(`/api/vouchers/ledger/${drillLedger.id}${q}`)
+      .then(r => r.json())
+      .then(d => {
+        const rows = (Array.isArray(d) ? d : []).filter(v => !isVoided(v));
+        const ob    = Number(drillLedger.openingBalance || 0);
+        let running = drillLedger.balanceType === 'Cr' ? -ob : ob;
+
+        const rowsHtml = rows.map((r: any, i: number) => {
+          const amt   = Number(r.entry_amount || 0);
+          running    += r.entry_type === 'Dr' ? amt : -amt;
+          const runType = running >= 0 ? 'Dr' : 'Cr';
+          const isDr  = r.entry_type === 'Dr';
+          const bg    = i % 2 === 0 ? '#ffffff' : '#fafbfd';
+          return `<tr style="background:${bg};border-bottom:1px solid #e0e6ee">
+            <td style="padding:3px 8px">${fmtDate(r.date)}</td>
+            <td style="padding:3px 8px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px">${r.narration || r.type || '—'}</td>
+            <td style="padding:3px 8px;font-style:italic;color:#555">${r.type || ''}</td>
+            <td style="padding:3px 8px;text-align:center">${r.number || ''}</td>
+            <td style="padding:3px 10px;text-align:right;color:#7a0000;font-weight:${isDr?700:400}">${isDr ? fmt(amt) : ''}</td>
+            <td style="padding:3px 10px;text-align:right;color:#006b00;font-weight:${!isDr?700:400}">${!isDr ? fmt(amt) : ''}</td>
+            <td style="padding:3px 10px;text-align:right;font-weight:600">${fmt(running)} ${runType}</td>
+          </tr>`;
+        }).join('');
+
+        const totalDr = rows.filter((r: any) => r.entry_type === 'Dr').reduce((a: number, r: any) => a + Number(r.entry_amount || 0), 0);
+        const totalCr = rows.filter((r: any) => r.entry_type === 'Cr').reduce((a: number, r: any) => a + Number(r.entry_amount || 0), 0);
+        const closing = (drillLedger.balanceType === 'Cr' ? -ob : ob) + totalDr - totalCr;
+        const periodStr = mainPeriod.from && mainPeriod.to
+          ? `${fmtDate(mainPeriod.from)} to ${fmtDate(mainPeriod.to)}`
+          : 'All Dates';
+
+        const html = `<!DOCTYPE html><html><head>
+          <title>Ledger – ${drillLedger.name}</title>
+          <meta charset="utf-8"/>
+          <style>
+            @page { margin: 12mm; size: A4 portrait; }
+            * { box-sizing: border-box; }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 12px; }
+            .hdr { background: #1f4e79; color: #fff; text-align: center; padding: 8px 12px; }
+            .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+            .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; }
+            .meta { display: flex; justify-content: space-between; padding: 5px 12px; background: #fafbfd; border-bottom: 1px solid #b8c4cc; font-size: 11px; }
+            table { width: 100%; border-collapse: collapse; }
+            thead tr { background: #f0f4f8; }
+            th { padding: 4px 8px; font-size: 11px; font-weight: 700; color: #333; border-bottom: 1px solid #b8c4cc; border-right: 1px solid #e0e6ee; text-align: left; white-space: nowrap; }
+            th.r { text-align: right; }
+            .ob td { background: #f8fbff; font-style: italic; color: #555; font-weight: 700; padding: 3px 8px; border-bottom: 1px solid #e0e6ee; }
+            .total td { background: #f0f4f8; font-weight: 700; padding: 4px 10px; border-top: 2px solid #555; }
+            .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
+          </style>
+        </head><body>
+          <div class="hdr">
+            <h1>${companyName || 'Company'}</h1>
+            <div class="sub">LEDGER STATEMENT &nbsp;·&nbsp; ${drillLedger.name} &nbsp;·&nbsp; ${periodStr}</div>
+          </div>
+          <div class="meta">
+            <div><b>Ledger:</b> ${drillLedger.name} &nbsp;&nbsp; <b>Group:</b> ${drillLedger.group || drillLedger.group_name || '—'}</div>
+            <div><b>Opening Balance:</b> ${fmt(ob)} ${drillLedger.balanceType || 'Dr'}</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width:80px">Date</th>
+                <th>Particulars</th>
+                <th style="width:90px">Vch Type</th>
+                <th style="width:65px;text-align:center">Vch No.</th>
+                <th class="r" style="width:110px">Debit (₹)</th>
+                <th class="r" style="width:110px">Credit (₹)</th>
+                <th class="r" style="width:120px">Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="ob">
+                <td></td><td>Opening Balance</td><td></td><td></td>
+                <td style="text-align:right;color:#7a0000">${(drillLedger.balanceType !== 'Cr' && ob > 0) ? fmt(ob) : ''}</td>
+                <td style="text-align:right;color:#006b00">${(drillLedger.balanceType === 'Cr' && ob > 0) ? fmt(ob) : ''}</td>
+                <td style="text-align:right">${fmt(ob)} ${drillLedger.balanceType || 'Dr'}</td>
+              </tr>
+              ${rowsHtml}
+            </tbody>
+            <tfoot>
+              <tr class="total">
+                <td colspan="4" style="text-align:right;padding-right:8px">Closing Balance</td>
+                <td style="text-align:right;color:#7a0000">${totalDr > 0 ? fmt(totalDr) : ''}</td>
+                <td style="text-align:right;color:#006b00">${totalCr > 0 ? fmt(totalCr) : ''}</td>
+                <td style="text-align:right">${fmt(closing)} ${closing >= 0 ? 'Dr' : 'Cr'}</td>
+              </tr>
+            </tfoot>
+          </table>
+          <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} &nbsp;|&nbsp; ${companyName} &nbsp;|&nbsp; ${rows.length} transaction(s)</div>
+        </body></html>`;
+
+        const win = window.open('', '_blank', 'width=800,height=700');
+        if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+      })
+      .catch(err => alert(`Print failed: ${err.message}`));
+  }, [drillLedger, branchId, mainPeriod, companyName]);
+
+  // ── Global keyboard handler ───────────────────────────────────────────────
+  // FIX-3: drillLedger check removed from Alt+P branch so it no longer blocks
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (drillLedger) return;
+
+      // When drill-down is open, only handle Alt+P (for ledger print) and Escape.
+      // Everything else is handled inside LedgerDetail's own listener.
+      if (drillLedger) {
+        if (e.altKey && e.key.toLowerCase() === 'p') {
+          e.preventDefault(); e.stopPropagation();
+          handlePrintLedger();
+        }
+        // Escape is handled inside LedgerDetail; don't intercept here.
+        return;
+      }
 
       let handled = false;
       if (e.key === 'ArrowDown') {
-        setFocusedRowIdx(prev => Math.min(prev + 1, navigableRows.length - 1));
-        handled = true;
+        setFocusedRowIdx(prev => Math.min(prev + 1, navigableRows.length - 1)); handled = true;
       } else if (e.key === 'ArrowUp') {
-        setFocusedRowIdx(prev => Math.max(prev - 1, 0));
-        handled = true;
+        setFocusedRowIdx(prev => Math.max(prev - 1, 0)); handled = true;
       } else if (e.key === 'Enter' || e.key === 'ArrowRight') {
         if (focusedRowIdx >= 0 && focusedRowIdx < navigableRows.length) {
           const row = navigableRows[focusedRowIdx];
@@ -462,25 +597,34 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
       } else if (e.altKey && e.key.toLowerCase() === 'n') {
         setShowAddPeriod(true); handled = true;
       } else if (e.altKey && e.key.toLowerCase() === 'p') {
-        handlePrint(); handled = true;
+        handlePrint(); handled = true;                  // main P&L print
       }
       if (handled) { e.preventDefault(); e.stopPropagation(); }
     };
     window.addEventListener('keydown', h, true);
     return () => window.removeEventListener('keydown', h, true);
-  }, [drillLedger, focusedRowIdx, navigableRows, expanded, onBack, handlePrint]);
+  }, [drillLedger, focusedRowIdx, navigableRows, expanded, onBack, handlePrint, handlePrintLedger, ALL_GROUPS]);
 
   const periodLabel = (p: {from:string;to:string}) =>
     p.from && p.to ? `${fmtDate(p.from)} to ${fmtDate(p.to)}` : '—';
 
-  if (drillLedger) return <LedgerDetail ledger={drillLedger} branchId={branchId} onBack={() => setDrillLedger(null)} />;
+  // ── Drill-down renders LedgerDetail with onPrint injected ────────────────
+  if (drillLedger) return (
+    <LedgerDetail
+      ledger={drillLedger}
+      branchId={branchId}
+      companyName={companyName}
+      onBack={() => setDrillLedger(null)}
+      onPrint={handlePrintLedger}          // ← FIX-4: pass print handler down
+    />
+  );
 
   const ColHdrCells = () => (
     <>
       <th style={{ ...rs.th, textAlign:'left', width: showPercent ? '40%' : '50%' }}>Particulars</th>
       {showPercent && <th style={{ ...rs.th, width:'8%', textAlign:'right', fontSize:10 }}>%</th>}
-      {allPeriods.map((p,i) => (
-        <th key={i} style={{ ...rs.th, textAlign:'right', width: `${(showPercent?52:50)/allPeriods.length}%`, borderLeft: i===0?'none':'1px solid #ccd5dd' }}>
+      {allPeriods.map((p, i) => (
+        <th key={i} style={{ ...rs.th, textAlign:'right', width:`${(showPercent?52:50)/allPeriods.length}%`, borderLeft: i===0?'none':'1px solid #ccd5dd' }}>
           <div style={{ fontSize:11, fontWeight:800, color:'#1a1a1a' }}>{p.label}</div>
           <div style={{ fontSize:9, fontWeight:400, color:'#777' }}>{periodLabel(p)}</div>
         </th>
@@ -494,12 +638,12 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
     const anyNonZero = allPeriods.some(p => groupTotalForPeriod(grpName, p.from, p.to) !== 0);
     if (!anyNonZero) return null;
 
-    const isExp = expanded.has(grpName);
-    const mainAbs = Math.abs(groupTotalForPeriod(grpName, mainPeriod.from, mainPeriod.to));
-    const pct = salesTotal0 > 0 ? ((mainAbs / salesTotal0) * 100).toFixed(2) : '—';
+    const isExp    = expanded.has(grpName);
+    const mainAbs  = Math.abs(groupTotalForPeriod(grpName, mainPeriod.from, mainPeriod.to));
+    const pct      = salesTotal0 > 0 ? ((mainAbs / salesTotal0) * 100).toFixed(2) : '—';
 
     rowIdxCounter++;
-    const grpIdx = rowIdxCounter;
+    const grpIdx    = rowIdxCounter;
     const isFocused = focusedRowIdx === grpIdx;
 
     return (
@@ -514,7 +658,7 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
             <span style={rs.groupName}>{grpName}</span>
           </td>
           {showPercent && <td style={rs.tdPct}>{pct}%</td>}
-          {allPeriods.map((p,i) => {
+          {allPeriods.map((p, i) => {
             const abs = Math.abs(groupTotalForPeriod(grpName, p.from, p.to));
             return (
               <td key={i} style={{ ...rs.tdAmt, borderLeft: i===0?'none':'1px solid #dde4ec' }}>
@@ -525,22 +669,25 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
         </tr>
         {isExp && groupLedgersNonZero(grpName, mainPeriod.from, mainPeriod.to).map(l => {
           rowIdxCounter++;
-          const ledgerIdx = rowIdxCounter;
+          const ledgerIdx       = rowIdxCounter;
           const isLedgerFocused = focusedRowIdx === ledgerIdx;
           return (
             <tr
               key={l.id}
               data-rowidx={ledgerIdx}
               style={{ ...rs.ledgerRow, outline: isLedgerFocused ? '2px solid #1f4e79' : 'none', outlineOffset: -2, background: isLedgerFocused ? '#ddeeff' : '#fafbff' }}
-              onClick={() => { setFocusedRowIdx(ledgerIdx); }}
+              onClick={() => setFocusedRowIdx(ledgerIdx)}
             >
               <td style={{ ...rs.tdName, paddingLeft:28 }}>
-                <span onClick={(e) => { e.stopPropagation(); setDrillLedger(l); }} style={{ fontStyle:'italic', color:'#1a5fa8', cursor:'pointer', textDecoration:'underline' }}>
+                <span
+                  onClick={e => { e.stopPropagation(); setDrillLedger(l); }}
+                  style={{ fontStyle:'italic', color:'#1a5fa8', cursor:'pointer', textDecoration:'underline' }}
+                >
                   {l.name}
                 </span>
               </td>
               {showPercent && <td style={rs.tdPct} />}
-              {allPeriods.map((p,i) => {
+              {allPeriods.map((p, i) => {
                 const bal = calcBalanceForPeriod(l.id, p.from, p.to);
                 return (
                   <td key={i} style={{ ...rs.tdAmt, color:'#555', fontWeight:400, borderLeft: i===0?'none':'1px solid #dde4ec' }}>
@@ -561,9 +708,9 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
         {periodTotals[0]?.nett >= 0 ? 'Nett Profit' : 'Nett Loss'}
       </td>
       {showPercent && <td style={rs.tdPct} />}
-      {periodTotals.map((pt,i) => {
-        const isProfit = pt.nett >= 0;
-        const showOnSide = (side==='left' && isProfit) || (side==='right' && !isProfit);
+      {periodTotals.map((pt, i) => {
+        const isProfit    = pt.nett >= 0;
+        const showOnSide  = (side==='left' && isProfit) || (side==='right' && !isProfit);
         return (
           <td key={i} style={{ ...rs.tdAmt, color: isProfit ? '#006b00' : '#7a0000', fontWeight:800, borderLeft: i===0?'none':'1px solid #dde4ec' }}>
             {showOnSide ? fmtAmtAbs(pt.nett) : ''}
@@ -577,19 +724,19 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
     <div style={s.root} id="pl-report" tabIndex={0}>
       {showPeriod && (
         <PeriodModal from={mainPeriod.from} to={mainPeriod.to}
-          onAccept={(f,t) => { setMainPeriod({from:f,to:t}); setShowPeriod(false); }}
+          onAccept={(f, t) => { setMainPeriod({ from:f, to:t }); setShowPeriod(false); }}
           onCancel={() => setShowPeriod(false)} />
       )}
       {showAddPeriod && (
         <AddPeriodModal
-          onAdd={(label,from,to) => { setExtraPeriods(p=>[...p,{label,from,to}]); setShowAddPeriod(false); }}
+          onAdd={(label, from, to) => { setExtraPeriods(p => [...p, { label, from, to }]); setShowAddPeriod(false); }}
           onCancel={() => setShowAddPeriod(false)} />
       )}
 
       <div style={s.titleBar}>
         {onBack && <button onClick={onBack} style={s.backBtn}>← Back</button>}
         <span style={{ flex:1, fontWeight:700 }}>Profit & Loss A/c</span>
-        <span style={{ flex:2, textAlign:'center', fontWeight:800, fontSize:12 }}>{companyName||'…'}</span>
+        <span style={{ flex:2, textAlign:'center', fontWeight:800, fontSize:12 }}>{companyName || '…'}</span>
         <span style={{ flex:1, textAlign:'right', opacity:0.7, fontSize:11 }}>{periodLabel(mainPeriod)}</span>
       </div>
 
@@ -607,7 +754,7 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
                   <tr style={s.totalRow}>
                     <td style={{ ...rs.tdName, fontWeight:900 }}>Total</td>
                     {showPercent && <td style={rs.tdPct} />}
-                    {periodTotals.map((pt,i) => (
+                    {periodTotals.map((pt, i) => (
                       <td key={i} style={{ ...rs.tdAmt, fontWeight:900, borderTop:'2px solid #555', borderLeft: i===0?'none':'1px solid #dde4ec' }}>
                         {fmtAmtAbs(pt.grand)}
                       </td>
@@ -628,7 +775,7 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
                   <tr style={s.totalRow}>
                     <td style={{ ...rs.tdName, fontWeight:900 }}>Total</td>
                     {showPercent && <td style={rs.tdPct} />}
-                    {periodTotals.map((pt,i) => (
+                    {periodTotals.map((pt, i) => (
                       <td key={i} style={{ ...rs.tdAmt, fontWeight:900, borderTop:'2px solid #555', borderLeft: i===0?'none':'1px solid #dde4ec' }}>
                         {fmtAmtAbs(pt.grand)}
                       </td>
@@ -643,14 +790,14 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
 
       <div style={s.rightPanel}>
         {[
-          { k:'F2',    l:'Period',        a:()=>setShowPeriod(true) },
-          { k:'F5',    l:'Expand All',    a:()=>setExpanded(new Set(ALL_GROUPS)) },
-          { k:'Esc',   l:'Collapse / Back', a:()=>{ if(expanded.size>0) setExpanded(new Set()); else if(onBack) onBack(); } },
-          { k:'Alt+N', l:'Add Period',    a:()=>setShowAddPeriod(true) },
-          { k:'Alt+F', l:'Percentages',   a:()=>setShowPercent(p=>!p) },
-          { k:'✕ Clr', l:'Clear Periods', a:()=>setExtraPeriods([]) },
-          { k:'Alt+P', l:'Print',          a: handlePrint },
-        ].map((b,i) => (
+          { k:'F2',    l:'Period',          a: () => setShowPeriod(true) },
+          { k:'F5',    l:'Expand All',      a: () => setExpanded(new Set(ALL_GROUPS)) },
+          { k:'Esc',   l:'Collapse / Back', a: () => { if (expanded.size > 0) setExpanded(new Set()); else if (onBack) onBack(); } },
+          { k:'Alt+N', l:'Add Period',      a: () => setShowAddPeriod(true) },
+          { k:'Alt+F', l:'Percentages',     a: () => setShowPercent(p => !p) },
+          { k:'✕ Clr', l:'Clear Periods',   a: () => setExtraPeriods([]) },
+          { k:'Alt+P', l:'Print',           a: handlePrint },
+        ].map((b, i) => (
           <button key={i} onClick={b.a} style={s.sideBtn}>
             <span style={s.sBtnKey}>{b.k}</span>
             <span style={s.sBtnLabel}>{b.l}</span>
@@ -659,7 +806,7 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
       </div>
 
       <div style={s.statusBar}>
-        <span style={{ color:'#aaa', fontSize:10 }}>F2: Period | F5: Expand | Esc: Back | Alt+N: New Period</span>
+        <span style={{ color:'#aaa', fontSize:10 }}>F2: Period | F5: Expand | Esc: Back | Alt+N: New Period | Alt+P: Print</span>
       </div>
     </div>
   );
@@ -667,14 +814,14 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const rs: Record<string, React.CSSProperties> = {
-  th:         { padding:'5px 10px', fontSize:11, fontWeight:700, color:'#333', borderBottom:`1px solid ${BORDER}`, background:LIGHT, whiteSpace:'nowrap' },
-  groupRow:   { borderBottom:`1px solid ${ROW_BDR}`, background:'#fff' },
-  ledgerRow:  { borderBottom:`1px solid ${ROW_BDR}`, background:'#fafbff' },
-  tdName:     { padding:'3px 8px', fontSize:12, verticalAlign:'middle', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' },
-  tdAmt:      { padding:'3px 10px', fontSize:12, fontWeight:700, textAlign:'right', verticalAlign:'middle', whiteSpace:'nowrap' },
-  tdPct:      { padding:'3px 6px', fontSize:11, textAlign:'right', color:'#888' },
-  toggle:     { display:'inline-block', width:14, textAlign:'center', fontSize:10, fontWeight:900, border:`1px solid ${BORDER}`, background:LIGHT, marginRight:6 },
-  groupName:  { fontWeight:700, textTransform:'uppercase', fontSize:11 },
+  th:        { padding:'5px 10px', fontSize:11, fontWeight:700, color:'#333', borderBottom:`1px solid ${BORDER}`, background:LIGHT, whiteSpace:'nowrap' },
+  groupRow:  { borderBottom:`1px solid ${ROW_BDR}`, background:'#fff' },
+  ledgerRow: { borderBottom:`1px solid ${ROW_BDR}`, background:'#fafbff' },
+  tdName:    { padding:'3px 8px', fontSize:12, verticalAlign:'middle', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' },
+  tdAmt:     { padding:'3px 10px', fontSize:12, fontWeight:700, textAlign:'right', verticalAlign:'middle', whiteSpace:'nowrap' },
+  tdPct:     { padding:'3px 6px', fontSize:11, textAlign:'right', color:'#888' },
+  toggle:    { display:'inline-block', width:14, textAlign:'center', fontSize:10, fontWeight:900, border:`1px solid ${BORDER}`, background:LIGHT, marginRight:6 },
+  groupName: { fontWeight:700, textTransform:'uppercase', fontSize:11 },
 };
 
 const s: Record<string, React.CSSProperties> = {
