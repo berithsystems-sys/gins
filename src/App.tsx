@@ -176,7 +176,6 @@ export default function App() {
     setCurrentScreen('GOTO');
     setGotoSearch('');
     setGotoHighlightedIdx(0);
-    // Focus the search input after a short delay
     setTimeout(() => {
       const input = document.getElementById('goto-search-input');
       if (input) input.focus();
@@ -308,7 +307,6 @@ export default function App() {
   const handleBack = () => {
     if (showCalculator) { setShowCalculator(false); return; }
     if (showDateModal) { setShowDateModal(false); return; }
-    if (showHelp) { setShowHelp(false); return; }
     if (showQuit) { setShowQuit(false); return; }
 
     if (currentScreen === 'GOTO') {
@@ -321,8 +319,6 @@ export default function App() {
     }
 
     if (currentScreen === 'TRIAL_BALANCE' || currentScreen === 'DAYBOOK') {
-      // These screens handle their own internal navigation and back-to-gateway.
-      // We don't want to force-redirect to GATEWAY here.
       return;
     }
 
@@ -336,9 +332,6 @@ export default function App() {
 
   useHotkeys('esc', (e) => {
     if (currentScreen === 'TRIAL_BALANCE' || currentScreen === 'DAYBOOK') {
-      // These screens handle their own ESC logic. 
-      // We only want App to handle it if they aren't active or if we're at their top level.
-      // For now, let's just return and let the components handle it.
       return;
     }
     e.preventDefault();
@@ -364,6 +357,7 @@ export default function App() {
   useHotkeys('l', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('AUDIT'); });
   // useHotkeys('d', () => { if (currentScreen === 'GATEWAY') setCurrentScreen('DEBUG'); });
   useHotkeys('alt+c', () => setShowCalculator(true), { enableOnFormTags: true });
+
   const handleLogout = () => {
     localStorage.removeItem('tally_user');
     setUser(null);
@@ -384,7 +378,6 @@ export default function App() {
   }, { enableOnFormTags: true });
   useHotkeys('alt+m', () => setCurrentScreen('EXPORT'), { enableOnFormTags: true });
   useHotkeys('alt+e', () => setCurrentScreen('EXPORT'), { enableOnFormTags: true });
-  // Alt+P: print is handled inside each report screen (Balance Sheet, P&L, Trial Balance, Day Book)
   useHotkeys('alt+s', () => setCurrentScreen('SETTINGS'), { enableOnFormTags: true });
   useHotkeys('alt+d', (e) => { 
     if (currentScreen === 'DAYBOOK') return;
@@ -423,8 +416,6 @@ export default function App() {
     }
   }, {}, [currentScreen, showQuit]);
   useHotkeys('n', () => { if (showQuit) setShowQuit(false); });
-
-  const [showHelp, setShowHelp] = useState(false);
 
   if (!user) return <LoginScreen onLogin={setUser} />;
 
@@ -569,53 +560,6 @@ export default function App() {
                 <div className="flex gap-8 justify-center">
                   <button onClick={() => window.close()} className="bg-tally-accent text-black px-8 py-1 font-bold border border-black hover:bg-yellow-500 transition-colors">Yes (Y)</button>
                   <button onClick={() => setShowQuit(false)} className="bg-gray-100 px-8 py-1 font-bold border border-gray-300 hover:bg-gray-200 transition-colors">No (N)</button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {showHelp && (
-            <motion.div 
-              initial={{ x: 300, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: 300, opacity: 0 }}
-              className="absolute right-0 top-[65px] bottom-[24px] w-[350px] z-[90] bg-white border-l-4 border-tally-teal shadow-2xl p-6 overflow-auto"
-            >
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-lg font-bold text-tally-teal tracking-widest">Golden Rules</h2>
-                <button onClick={() => setShowHelp(false)} className="text-red-600 font-bold">X</button>
-              </div>
-              
-              <div className="space-y-8">
-                <section>
-                  <h3 className="text-sm font-bold bg-gray-100 p-1 mb-2">Real Accounts</h3>
-                  <p className="text-xs italic text-gray-500 mb-2">(Relating to properties & assets)</p>
-                  <ul className="text-xs space-y-1 font-bold">
-                    <li className="text-green-700">Debit: What Comes In</li>
-                    <li className="text-red-700">Credit: What Goes Out</li>
-                  </ul>
-                </section>
-
-                <section>
-                  <h3 className="text-sm font-bold bg-gray-100 p-1 mb-2">Personal Accounts</h3>
-                  <p className="text-xs italic text-gray-500 mb-2">(Relating to persons/firms)</p>
-                  <ul className="text-xs space-y-1 font-bold">
-                    <li className="text-green-700">Debit: The Receiver</li>
-                    <li className="text-red-700">Credit: The Giver</li>
-                  </ul>
-                </section>
-
-                <section>
-                  <h3 className="text-sm font-bold bg-gray-100 p-1 mb-2">Nominal Accounts</h3>
-                  <p className="text-xs italic text-gray-500 mb-2">(Relating to income/expenses)</p>
-                  <ul className="text-xs space-y-1 font-bold">
-                    <li className="text-green-700">Debit: All Expenses & Losses</li>
-                    <li className="text-red-700">Credit: All Incomes & Gains</li>
-                  </ul>
-                </section>
-
-                <div className="bg-tally-bg p-3 border border-tally-teal/20 text-[10px] italic">
-                  Tally Shortcut: Use F12 in any voucher to configure advanced options.
                 </div>
               </div>
             </motion.div>
@@ -829,7 +773,6 @@ export default function App() {
           <div className="h-4 bg-black/10"></div>
           <div className="hotkey-btn opacity-60"><span>F11: Features</span></div>
           <div className="hotkey-btn" onClick={() => setShowConfig(true)}><span>F12: Configure</span></div>
-          <div className="hotkey-btn bg-tally-accent text-black mt-2" onClick={() => setShowHelp(!showHelp)}><span>H: Golden Rules</span></div>
           <div className="mt-auto bg-[#001c24] p-2 text-[10px] text-center italic border-t border-white/5">
             {currentTime.toLocaleTimeString()}
           </div>
