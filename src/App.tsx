@@ -762,7 +762,7 @@ export default function App() {
         )}
 
         {/* Sidebar Actions */}
-        <aside className="w-[180px] bg-tally-teal text-white flex flex-col border-l border-tally-hotkey">
+        <aside className={`w-[180px] bg-tally-teal text-white flex-col border-l border-tally-hotkey ${currentScreen === 'HQ' ? 'hidden' : 'flex'}`}>
           <div className="hotkey-btn" onClick={() => { setDateInput(currentDate); setShowDateModal(true); }}><span>F2: Date</span></div>
           <div className="hotkey-btn" onClick={() => alert('Branch Selection')}><span>F3: Branch</span></div>
           <div className="h-4 bg-black/10"></div>
