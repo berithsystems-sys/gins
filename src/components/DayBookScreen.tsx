@@ -5,7 +5,9 @@
  *          and status bar regardless of row count.
  *   FIX-B  Soft-delete void — PATCH voided:true; permanent DELETE is gone.
  *          Filter toggle: Active / Voided / All.
- *   FIX-C  ArrowRight focuses the detail panel; ArrowLeft returns to table.
+ *   FIX-C  ArrowRight focuses the Edit Voucher button directly.
+ *   FIX-D  Ledger dropdown uses position:fixed portal so it's never clipped
+ *          by the modal's overflow constraints.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -18,7 +20,7 @@ const ROW_BORDER = '#e0e6ee';
 const LIGHT_BG   = '#f0f4f8';
 const BORDER     = '#b0b8c4';
 
-const VOUCHER_STYLES = {
+const VOUCHER_STYLES: Record<string, { header: string; tab: string; bodyBg: string; rowBg: string }> = {
   Contra:  { header: '#1f4e79', tab: '#2e75b6', bodyBg: '#f0f4f8', rowBg: '#f7f9fb' },
   Payment: { header: '#2d4a22', tab: '#4a7c3f', bodyBg: '#f0f5f0', rowBg: '#f6faf5' },
   Receipt: { header: '#4a2222', tab: '#8b3a3a', bodyBg: '#fdf0f0', rowBg: '#fdf6f6' },
@@ -28,56 +30,59 @@ const defaultStyle = VOUCHER_STYLES.Payment;
 
 const VOID_FILTERS = ['Active', 'Voided', 'All'];
 
-function fmtDate(iso) {
+function fmtDate(iso: string) {
   try {
     const d = parseISO(iso);
     if (!isValid(d)) return iso;
     return format(d, 'd-MMM-yy');
   } catch { return iso; }
 }
-function fmtAmount(n) {
+function fmtAmount(n: number) {
   if (!n && n !== 0) return '';
   return n.toLocaleString('en-IN', { minimumFractionDigits: 2 });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Inline Voucher Edit Form (unchanged)
+// Inline Voucher Edit Form
+// FIX-D: dropdown uses position:fixed with getBoundingClientRect coords
 // ─────────────────────────────────────────────────────────────────────────────
-function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
+function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }: any) {
   const vs = VOUCHER_STYLES[voucher.type] || defaultStyle;
   const [date, setDate]           = useState(voucher.date?.slice(0, 10) || '');
   const [narration, setNarration] = useState(voucher.narration || '');
   const [entries, setEntries]     = useState(() =>
-    (voucher.entries || []).map(e => ({
+    (voucher.entries || []).map((e: any) => ({
       ledgerId: e.ledgerId || '',
       amount:   String(e.amount || ''),
       type:     e.type || 'Dr',
-      tempSearch: e.ledger_name || ledgers.find(l => l.id === e.ledgerId)?.name || '',
+      tempSearch: e.ledger_name || ledgers.find((l: any) => l.id === e.ledgerId)?.name || '',
       methodAdjustment: e.methodAdjustment || 'On Account',
       refNo:    e.refNo || '',
     }))
   );
   const [saving, setSaving]     = useState(false);
   const [errMsg, setErrMsg]     = useState('');
-  const [activeDD, setActiveDD] = useState(null);
+  const [activeDD, setActiveDD] = useState<number | null>(null);
   const [hlIdx, setHlIdx]       = useState(0);
+  // FIX-D: track dropdown screen position for fixed portal
+  const [ddPos, setDdPos]       = useState({ top: 0, left: 0, width: 320 });
 
-  const getFiltered = (search) => {
+  const getFiltered = (search: string) => {
     const s = (search || '').toLowerCase();
-    return ledgers.filter(l => l.name.toLowerCase().includes(s));
+    return ledgers.filter((l: any) => l.name.toLowerCase().includes(s));
   };
 
-  const updateEntry = (idx, patch) =>
-    setEntries(prev => { const n = [...prev]; n[idx] = { ...n[idx], ...patch }; return n; });
+  const updateEntry = (idx: number, patch: any) =>
+    setEntries((prev: any[]) => { const n = [...prev]; n[idx] = { ...n[idx], ...patch }; return n; });
 
-  const handleSelectLedger = (idx, ledger) => {
+  const handleSelectLedger = (idx: number, ledger: any) => {
     updateEntry(idx, { ledgerId: ledger.id, tempSearch: ledger.name });
     setActiveDD(null);
-    setTimeout(() => document.getElementById(`edit-amt-${idx}`)?.focus(), 20);
+    setTimeout(() => (document.getElementById(`edit-amt-${idx}`) as HTMLInputElement)?.focus(), 20);
   };
 
   const handleSave = async () => {
-    const valid = entries.filter(e => e.ledgerId && e.amount);
+    const valid = entries.filter((e: any) => e.ledgerId && e.amount);
     if (!valid.length) { setErrMsg('No valid entries to save.'); return; }
     setSaving(true); setErrMsg('');
     try {
@@ -85,7 +90,7 @@ function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
         date,
         narration,
         branchId,
-        entries: valid.map(e => ({
+        entries: valid.map((e: any) => ({
           ledgerId: e.ledgerId,
           amount: Number(e.amount),
           type: e.type,
@@ -102,9 +107,9 @@ function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
         onSaved();
       } else {
         const data = await res.json().catch(() => ({}));
-        setErrMsg(data.error || `Server error ${res.status}`);
+        setErrMsg((data as any).error || `Server error ${res.status}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       setErrMsg(err.message);
     } finally {
       setSaving(false);
@@ -112,13 +117,15 @@ function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
   };
 
   return (
-    <div style={{ fontFamily: FONT, fontSize: 12 }}>
-      <div style={{ background: vs.header, color: '#fff', padding: '5px 10px', fontSize: 11, fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ fontFamily: FONT, fontSize: 12, display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Header */}
+      <div style={{ background: vs.header, color: '#fff', padding: '5px 10px', fontSize: 11, fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <span>Edit {voucher.type} Voucher — {voucher.number}</span>
         <button onClick={onCancel} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 13, opacity: 0.8 }}>✕</button>
       </div>
 
-      <div style={{ padding: '10px 12px', background: vs.bodyBg }}>
+      {/* Scrollable body */}
+      <div style={{ padding: '10px 12px', background: vs.bodyBg, overflowY: 'auto', flex: 1 }}>
         <div style={{ display: 'flex', gap: 16, marginBottom: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <label style={eS.label}>Date</label>
@@ -134,7 +141,7 @@ function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
           </div>
         </div>
 
-        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 2, overflow: 'hidden', marginBottom: 8 }}>
+        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 2, overflow: 'visible', marginBottom: 8 }}>
           <div style={{ display: 'flex', background: '#e8ecf0', borderBottom: `1px solid ${BORDER}`, padding: '3px 0' }}>
             <div style={{ flex: 1, padding: '0 8px', fontSize: 11, fontWeight: 700 }}>Ledger Account</div>
             <div style={{ width: 70, padding: '0 8px', fontSize: 11, fontWeight: 700, textAlign: 'center' }}>Dr/Cr</div>
@@ -142,21 +149,27 @@ function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
             <div style={{ width: 28 }} />
           </div>
 
-          {entries.map((entry, idx) => {
+          {entries.map((entry: any, idx: number) => {
             const filtered = getFiltered(entry.tempSearch);
             return (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${ROW_BORDER}`, background: vs.rowBg, position: 'relative' }}>
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${ROW_BORDER}`, background: vs.rowBg }}>
                 <div style={{ flex: 1, padding: '3px 8px', position: 'relative' }}>
                   <input
                     id={`edit-lgr-${idx}`}
                     type="text"
                     value={entry.tempSearch}
                     onChange={e => {
-                      const match = ledgers.find(l => l.name.toLowerCase() === e.target.value.toLowerCase());
+                      const rect = e.target.getBoundingClientRect();
+                      setDdPos({ top: rect.bottom + 2, left: rect.left, width: Math.max(320, rect.width) });
+                      const match = ledgers.find((l: any) => l.name.toLowerCase() === e.target.value.toLowerCase());
                       updateEntry(idx, { tempSearch: e.target.value, ledgerId: match ? match.id : '' });
                       setActiveDD(idx); setHlIdx(0);
                     }}
-                    onFocus={() => { setActiveDD(idx); setHlIdx(0); }}
+                    onFocus={e => {
+                      const rect = e.target.getBoundingClientRect();
+                      setDdPos({ top: rect.bottom + 2, left: rect.left, width: Math.max(320, rect.width) });
+                      setActiveDD(idx); setHlIdx(0);
+                    }}
                     onBlur={() => setTimeout(() => setActiveDD(null), 180)}
                     onKeyDown={e => {
                       const f = getFiltered(entry.tempSearch);
@@ -171,13 +184,33 @@ function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
                     placeholder="Select ledger..."
                     autoComplete="off"
                   />
+                  {/* FIX-D: fixed portal dropdown — never clipped by modal overflow */}
                   {activeDD === idx && (
-                    <div style={{ position: 'absolute', zIndex: 300, left: 0, top: '100%', width: 320, background: '#fff', border: `1px solid ${BORDER}`, boxShadow: '2px 4px 12px rgba(0,0,0,0.15)', maxHeight: 180, overflowY: 'auto' }}>
-                      <div style={{ background: HEADER_BG, color: '#fff', padding: '3px 8px', fontSize: 10, fontWeight: 700 }}>List of Ledger Accounts</div>
-                      {filtered.length === 0 && <div style={{ padding: '6px 8px', fontSize: 11, color: '#888', fontStyle: 'italic' }}>No matches</div>}
-                      {filtered.map((l, i) => (
+                    <div style={{
+                      position: 'fixed',
+                      zIndex: 99999,
+                      top: ddPos.top,
+                      left: ddPos.left,
+                      width: ddPos.width,
+                      background: '#fff',
+                      border: `1px solid ${BORDER}`,
+                      boxShadow: '2px 4px 12px rgba(0,0,0,0.2)',
+                      maxHeight: 220,
+                      overflowY: 'auto',
+                    }}>
+                      <div style={{ background: HEADER_BG, color: '#fff', padding: '3px 8px', fontSize: 10, fontWeight: 700, position: 'sticky', top: 0 }}>
+                        List of Ledger Accounts ({filtered.length})
+                      </div>
+                      {filtered.length === 0 && (
+                        <div style={{ padding: '6px 8px', fontSize: 11, color: '#888', fontStyle: 'italic' }}>No matches</div>
+                      )}
+                      {filtered.map((l: any, i: number) => (
                         <div key={l.id} onMouseDown={() => handleSelectLedger(idx, l)}
-                          style={{ padding: '4px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: hlIdx === i ? '#b3d9ff' : 'transparent', borderBottom: `1px solid #eee` }}>
+                          style={{
+                            padding: '5px 8px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                            background: hlIdx === i ? '#b3d9ff' : 'transparent',
+                            borderBottom: `1px solid #eee`,
+                          }}>
                           {l.name}
                         </div>
                       ))}
@@ -199,7 +232,7 @@ function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
                 </div>
                 <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {entries.length > 1 && (
-                    <button onClick={() => setEntries(p => p.filter((_, i) => i !== idx))}
+                    <button onClick={() => setEntries((p: any[]) => p.filter((_: any, i: number) => i !== idx))}
                       style={{ background: 'none', border: 'none', color: '#c00', cursor: 'pointer', fontSize: 11, padding: '0 2px' }}>✕</button>
                   )}
                 </div>
@@ -208,7 +241,7 @@ function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
           })}
 
           <div style={{ padding: '4px 8px', background: vs.bodyBg }}>
-            <button onClick={() => setEntries(p => [...p, { ledgerId: '', amount: '', type: 'Dr', tempSearch: '', methodAdjustment: 'On Account', refNo: '' }])}
+            <button onClick={() => setEntries((p: any[]) => [...p, { ledgerId: '', amount: '', type: 'Dr', tempSearch: '', methodAdjustment: 'On Account', refNo: '' }])}
               style={{ background: 'none', border: `1px dashed ${BORDER}`, borderRadius: 2, color: '#555', cursor: 'pointer', fontSize: 11, padding: '2px 10px', fontFamily: FONT }}>
               + Add Line
             </button>
@@ -232,7 +265,7 @@ function VoucherEditForm({ voucher, ledgers, branchId, onSaved, onCancel }) {
   );
 }
 
-const eS = {
+const eS: Record<string, React.CSSProperties> = {
   label: { fontSize: 11, color: '#555', fontStyle: 'italic', whiteSpace: 'nowrap' },
   colon: { fontSize: 11, color: '#555' },
   input: {
@@ -244,15 +277,14 @@ const eS = {
 // ─────────────────────────────────────────────────────────────────────────────
 // Voucher Detail Side Panel
 // ─────────────────────────────────────────────────────────────────────────────
-function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSaved, onEdit, panelRef, editBtnRef }) {
+function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSaved, onEdit, panelRef, editBtnRef }: any) {
   const [voidConfirm, setVoidConfirm] = useState(false);
   const [voiding, setVoiding]         = useState(false);
   const [voidErr, setVoidErr]         = useState('');
 
   const vs = VOUCHER_STYLES[voucher.type] || defaultStyle;
-  const drAmt = (voucher.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
+  const drAmt = (voucher.entries || []).filter((e: any) => e.type === 'Dr').reduce((a: number, e: any) => a + e.amount, 0);
 
-  // ── FIX-B: Soft-delete void — PATCH voided:true only. No DELETE fallback.
   const handleVoid = useCallback(async () => {
     if (voiding) return;
     setVoiding(true); setVoidErr('');
@@ -263,26 +295,24 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ voided: true, voidedAt: new Date().toISOString() }),
       });
-
       if (res.ok) { onVoid(); return; }
-
       let msg = '';
       const ct = res.headers.get('content-type') || '';
       if (ct.includes('application/json')) {
         const data = await res.json().catch(() => ({}));
-        msg = data.error || data.message || '';
+        msg = (data as any).error || (data as any).message || '';
       } else {
         msg = (await res.text().catch(() => '')).slice(0, 200);
       }
       if (!msg) {
-        if (res.status === 404) msg = 'Voucher not found (404). It may have already been voided.';
-        else if (res.status === 403) msg = 'You do not have permission to void this voucher (403).';
-        else if (res.status === 405) msg = 'Server does not support soft-void (405). Please update server.ts with the PATCH route.';
+        if (res.status === 404) msg = 'Voucher not found (404).';
+        else if (res.status === 403) msg = 'Permission denied (403).';
+        else if (res.status === 405) msg = 'Server does not support soft-void (405).';
         else msg = `Server returned ${res.status} ${res.statusText || ''}`.trim();
       }
       setVoidErr(msg);
       setVoidConfirm(false);
-    } catch (err) {
+    } catch (err: any) {
       setVoidErr(`Network error: ${err.message}`);
       setVoidConfirm(false);
     } finally {
@@ -291,7 +321,7 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
   }, [voucher.id, branchId, onVoid, voiding]);
 
   useEffect(() => {
-    const h = (e) => {
+    const h = (e: KeyboardEvent) => {
       if (e.altKey && e.key.toLowerCase() === 'd') {
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -337,8 +367,8 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
           <div style={{ width: 50, padding: '0 8px', fontSize: 10, fontWeight: 700, color: '#555', textAlign: 'center' }}>DR/CR</div>
           <div style={{ width: 110, padding: '0 10px', fontSize: 10, fontWeight: 700, color: '#555', textAlign: 'right' }}>AMOUNT</div>
         </div>
-        {(voucher.entries || []).map((e, i) => {
-          const name = e.ledger_name || ledgers.find(l => l.id === e.ledgerId)?.name || e.ledgerId;
+        {(voucher.entries || []).map((e: any, i: number) => {
+          const name = e.ledger_name || ledgers.find((l: any) => l.id === e.ledgerId)?.name || e.ledgerId;
           return (
             <div key={i} style={{ display: 'flex', borderBottom: `1px solid ${ROW_BORDER}`, background: i % 2 === 0 ? '#fff' : '#fafbfd' }}>
               <div style={{ flex: 1, padding: '4px 10px', fontWeight: 600, fontSize: 12, textDecoration: isVoided ? 'line-through' : 'none', color: isVoided ? '#aaa' : '#1a1a1a' }}>{name}</div>
@@ -364,6 +394,7 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
 
       {!isVoided && !voidConfirm && (
         <div style={{ padding: '10px 12px', display: 'flex', gap: 8, borderTop: `1px solid ${BORDER}`, background: vs.bodyBg }}>
+          {/* FIX-C: editBtnRef passed here so Arrow Right can focus it directly */}
           <button ref={editBtnRef} onClick={onEdit}
             style={{ background: vs.header, color: '#fff', border: 'none', borderRadius: 2, padding: '5px 16px', fontSize: 12, fontWeight: 700, fontFamily: FONT, cursor: 'pointer', flex: 1 }}>
             ✎ Edit Voucher
@@ -389,7 +420,7 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
                 });
                 if (res.ok) onSaved();
                 else setVoidErr('Failed to restore voucher.');
-              } catch (err) {
+              } catch (err: any) {
                 setVoidErr(`Network error: ${err.message}`);
               }
             }}
@@ -426,14 +457,14 @@ function VoucherDetailPanel({ voucher, ledgers, branchId, onClose, onVoid, onSav
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Day Book Screen
 // ─────────────────────────────────────────────────────────────────────────────
-export default function DayBookScreen({ branchId, initialDate, fromDate: propFrom, toDate: propTo, user, onBackToGateway, onPrint }) {
+export default function DayBookScreen({ branchId, initialDate, fromDate: propFrom, toDate: propTo, user, onBackToGateway, onPrint }: any) {
   const today = new Date().toISOString().slice(0, 10);
-  const [vouchers, setVouchers]               = useState([]);
-  const [ledgers, setLedgers]                 = useState([]);
+  const [vouchers, setVouchers]               = useState<any[]>([]);
+  const [ledgers, setLedgers]                 = useState<any[]>([]);
   const [loading, setLoading]                 = useState(true);
   const [fromDate, setFromDate]               = useState(propFrom || initialDate || today);
   const [toDate, setToDate]                   = useState(propTo   || initialDate || today);
-  const [selectedVoucher, setSelectedVoucher] = useState(null);
+  const [selectedVoucher, setSelectedVoucher] = useState<any>(null);
   const [isEditing, setIsEditing]             = useState(false);
   const [focusedIdx, setFocusedIdx]           = useState(-1);
   const [panelFocused, setPanelFocused]       = useState(false);
@@ -441,20 +472,20 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
   const [showPeriod, setShowPeriod]           = useState(false);
   const [voidFilter, setVoidFilter]           = useState('Active');
 
-  const tableBodyRef = useRef(null);
-  const panelRef     = useRef(null);
-  const editBtnRef   = useRef(null);
-  const fromRef      = useRef(null);
-  const toRef        = useRef(null);
+  const tableBodyRef = useRef<HTMLTableSectionElement>(null);
+  const panelRef     = useRef<HTMLDivElement>(null);
+  const editBtnRef   = useRef<HTMLButtonElement>(null);
+  const fromRef      = useRef<HTMLInputElement>(null);
+  const toRef        = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (branchId) {
       fetch('/api/branches').then(r => r.json())
-        .then(branches => { const b = branches.find(b => b.id === branchId); if (b?.name) setCompanyName(b.name); })
+        .then((branches: any[]) => { const b = branches.find(b => b.id === branchId); if (b?.name) setCompanyName(b.name); })
         .catch(() => {});
     }
     fetch('/api/settings/company').then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.name) setCompanyName(d.name); }).catch(() => {});
+      .then((d: any) => { if (d?.name) setCompanyName(d.name); }).catch(() => {});
   }, [branchId]);
 
   useEffect(() => {
@@ -467,7 +498,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
     const q = branchId ? `?branchId=${branchId}` : '';
     fetch(`/api/vouchers${q}`)
       .then(r => r.json())
-      .then(data => {
+      .then((data: any[]) => {
         const filtered = data.filter(v => {
           if (!v.date) return false;
           const d = v.date.slice(0, 10);
@@ -485,8 +516,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Normalise voided — DB returns 0/1 for SQLite, true/false for MySQL
-  const isVoided = (v) => v.voided === true || v.voided === 1;
+  const isVoided = (v: any) => v.voided === true || v.voided === 1;
 
   const displayedVouchers = vouchers.filter(v => {
     if (voidFilter === 'Active')  return !isVoided(v);
@@ -506,16 +536,17 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
 
   useEffect(() => {
     if (panelFocused && selectedVoucher) {
+      // FIX-C: focus Edit button directly
       setTimeout(() => {
         editBtnRef.current?.focus() || panelRef.current?.focus();
-      }, 0);
+      }, 50);
     }
   }, [panelFocused, selectedVoucher]);
 
   useEffect(() => {
     const APP_KEYS = new Set(['F2', 'F5']);
-    const h = (e) => {
-      const tag = document.activeElement?.tagName;
+    const h = (e: KeyboardEvent) => {
+      const tag = (document.activeElement as HTMLElement)?.tagName;
       const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
       if (APP_KEYS.has(e.key)) e.preventDefault();
@@ -523,22 +554,18 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
 
       if (e.key === 'F2') { setShowPeriod(p => !p); return; }
       if (e.key === 'F5') { fetchData(); return; }
-      if (e.altKey && e.key.toLowerCase() === 'p') { 
+      if (e.altKey && e.key.toLowerCase() === 'p') {
         e.preventDefault();
         if (selectedVoucher) handlePrintVoucher(selectedVoucher);
         else handlePrintDayBook();
-        return; 
+        return;
       }
       if (e.altKey && e.key.toLowerCase() === 'e') { handleExport(); return; }
       if (e.altKey && e.key.toLowerCase() === 'd' && selectedVoucher && !isEditing) {
         e.preventDefault();
         e.stopImmediatePropagation();
-        // If panel is already open, the panel's own listener will handle it.
-        // If not, we open the panel and let it handle the shortcut.
-        if (!panelFocused) {
-          setPanelFocused(true);
-        }
-        return; 
+        if (!panelFocused) setPanelFocused(true);
+        return;
       }
 
       if (!inInput && !showPeriod && !isEditing) {
@@ -562,18 +589,23 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
           });
           return;
         }
+        // FIX-C: Arrow Right → open panel AND focus Edit button immediately
         if (e.key === 'ArrowRight' && selectedVoucher && !panelFocused) {
-          e.preventDefault(); setPanelFocused(true); return;
+          e.preventDefault();
+          setPanelFocused(true);
+          setTimeout(() => editBtnRef.current?.focus(), 50);
+          return;
         }
         if (e.key === 'ArrowLeft' && panelFocused) {
-          e.preventDefault(); setPanelFocused(false);
-          tableBodyRef.current?.querySelector(`[data-row-idx="${focusedIdx}"]`)?.focus();
+          e.preventDefault();
+          setPanelFocused(false);
+          (tableBodyRef.current?.querySelector(`[data-row-idx="${focusedIdx}"]`) as HTMLElement)?.focus();
           return;
         }
         if (e.key === 'Enter' && focusedIdx >= 0 && !panelFocused) {
           e.preventDefault();
           const v = displayedVouchers[focusedIdx];
-          setSelectedVoucher(sel => sel?.id === v?.id ? null : v || null);
+          setSelectedVoucher((sel: any) => sel?.id === v?.id ? null : v || null);
           setPanelFocused(false);
           return;
         }
@@ -582,11 +614,13 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
       if (e.key === 'Escape') {
         e.stopImmediatePropagation();
         if (isEditing) { setIsEditing(false); return; }
-        if (panelFocused) { setPanelFocused(false); tableBodyRef.current?.querySelector(`[data-row-idx="${focusedIdx}"]`)?.focus(); return; }
+        if (panelFocused) {
+          setPanelFocused(false);
+          (tableBodyRef.current?.querySelector(`[data-row-idx="${focusedIdx}"]`) as HTMLElement)?.focus();
+          return;
+        }
         if (selectedVoucher) { setSelectedVoucher(null); setPanelFocused(false); return; }
         if (showPeriod) { setShowPeriod(false); return; }
-        
-        // If nothing else is open, go back to Gateway
         if (onBackToGateway) onBackToGateway();
         return;
       }
@@ -651,6 +685,17 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
     const win = window.open('', '_blank', 'width=800,height=650');
     if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
   };
+
+  const periodLabel = fromDate === toDate ? fmtDate(fromDate) : `${fmtDate(fromDate)} to ${fmtDate(toDate)}`;
+
+  const activeForTotals = displayedVouchers.filter(v => !isVoided(v));
+  const drTotal = activeForTotals.reduce((acc, v) => {
+    const dr = (v.entries || []).filter((e: any) => e.type === 'Dr').reduce((a: number, e: any) => a + e.amount, 0);
+    return acc + (dr || v.amount || 0);
+  }, 0);
+  const crTotal = activeForTotals.reduce((acc, v) => {
+    return acc + (v.entries || []).filter((e: any) => e.type === 'Cr').reduce((a: number, e: any) => a + e.amount, 0);
+  }, 0);
 
   const handlePrintDayBook = () => {
     const fmtA = (n: number) => n > 0 ? n.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '';
@@ -727,8 +772,8 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
     const rows = [
       ['Date', 'Particulars', 'Vch Type', 'Vch No.', 'Debit Amount', 'Credit Amount', 'Voided'],
       ...displayedVouchers.map(v => {
-        const dr = (v.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
-        const cr = (v.entries || []).filter(e => e.type === 'Cr').reduce((a, e) => a + e.amount, 0);
+        const dr = (v.entries || []).filter((e: any) => e.type === 'Dr').reduce((a: number, e: any) => a + e.amount, 0);
+        const cr = (v.entries || []).filter((e: any) => e.type === 'Cr').reduce((a: number, e: any) => a + e.amount, 0);
         return [fmtDate(v.date), v.narration || '', v.type, v.number || '', dr || '', cr || '', isVoided(v) ? 'Yes' : ''];
       }),
     ];
@@ -740,26 +785,9 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
     a.click();
   };
 
-  const activeForTotals = displayedVouchers.filter(v => !isVoided(v));
-  const drTotal = activeForTotals.reduce((acc, v) => {
-    const dr = (v.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
-    return acc + (dr || v.amount || 0);
-  }, 0);
-  const crTotal = activeForTotals.reduce((acc, v) => {
-    return acc + (v.entries || []).filter(e => e.type === 'Cr').reduce((a, e) => a + e.amount, 0);
-  }, 0);
-
-  const periodLabel = fromDate === toDate ? fmtDate(fromDate) : `${fmtDate(fromDate)} to ${fmtDate(toDate)}`;
   const handleSaved = () => { fetchData(); setSelectedVoucher(null); };
 
   return (
-    /*
-     * FIX-A: Root uses display:flex + flexDirection:column.
-     * The body section gets flex:1 + minHeight:0, which forces it to fill
-     * all remaining space between the fixed header rows and the status bar.
-     * The scroll wrapper inside uses height:100% so the background always
-     * extends to the bottom even when there are few rows.
-     */
     <div style={s.root} tabIndex={0}
       onKeyDown={e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') e.preventDefault(); }}
     >
@@ -771,71 +799,33 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
         .db-row.voided-row { opacity: 0.55; }
         .db-row.voided-row td { text-decoration: line-through; color: #999 !important; }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes zoomIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes zoomIn  { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         .db-row { outline: none; }
         .void-filter-btn { border: 1px solid ${BORDER}; background: #eef2f7; color: #555; font-family: ${FONT}; font-size: 10px; font-weight: 600; padding: 2px 9px; cursor: pointer; transition: background 0.1s; }
         .void-filter-btn:first-child { border-radius: 2px 0 0 2px; }
         .void-filter-btn:last-child  { border-radius: 0 2px 2px 0; }
         .void-filter-btn + .void-filter-btn { border-left: none; }
         .void-filter-btn.active { background: ${HEADER_BG}; color: #fff; border-color: ${HEADER_BG}; }
-
-        /* FIX-A: ensure the table scroll area covers full height visually */
-        .db-scroll-area {
-          flex: 1;
-          overflow-y: auto;
-          overflow-x: auto;
-          background: #fff;
-          /* background extends behind the sticky tfoot even when rows are few */
-        }
-        .db-table-wrap {
-          min-height: 100%;
-          display: flex;
-          flex-direction: column;
-          background: #fff;
-        }
-        .db-table-wrap table {
-          border-collapse: collapse;
-          width: 100%;
-          table-layout: fixed;
-        }
-        .db-table-wrap th, .db-table-wrap td {
-          word-wrap: break-word;
-          overflow-wrap: break-word;
-          white-space: normal !important;
-          vertical-align: top;
-        }
-        /* Ensure consistent row height or at least smart wrapping */
-        .db-row td {
-          height: 1.5rem; /* Minimum height */
-          padding: 4px 8px !important;
-        }
-        /* Make the tbody grow to fill remaining table space visually */
-        .db-table-wrap tbody::after {
-          content: '';
-          display: table-row;
-          height: 100%;
-        }
-        .modal-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(0,0,0,0.4);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-          animation: fadeIn 0.2s ease-out;
-        }
+        .db-scroll-area { flex: 1; overflow-y: auto; overflow-x: auto; background: #fff; }
+        .db-table-wrap { min-height: 100%; display: flex; flex-direction: column; background: #fff; }
+        .db-table-wrap table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+        .db-table-wrap th, .db-table-wrap td { word-wrap: break-word; overflow-wrap: break-word; white-space: normal !important; vertical-align: top; }
+        .db-row td { height: 1.5rem; padding: 4px 8px !important; }
+        .db-table-wrap tbody::after { content: ''; display: table-row; height: 100%; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000; animation: fadeIn 0.2s ease-out; }
         .modal-content {
           background: #fff;
           border: 4px solid ${HEADER_BG};
           box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-          width: 800px;
+          width: 820px;
           max-width: 95vw;
-          min-height: 50vh;
-          max-height: 90vh;
-          overflow: hidden;
+          height: 85vh;
+          max-height: 85vh;
+          overflow: visible;
           animation: zoomIn 0.2s ease-out;
+          display: flex;
+          flex-direction: column;
         }
       `}</style>
 
@@ -871,7 +861,9 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
         </div>
       </div>
       <div style={s.subHeader}>
-        <span style={s.subTitle}>List of All Vouchers — click a row or use ↑↓ to navigate · → to open panel · ← to return</span>
+        <span style={s.subTitle}>
+          List of All Vouchers — click a row or use ↑↓ to navigate · → focuses Edit button · ← returns to table
+        </span>
       </div>
 
       {/* Period Modal */}
@@ -903,18 +895,12 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
         </div>
       )}
 
-      {/* ── Body — FIX-A: flex:1 + minHeight:0 forces this to fill all remaining height ── */}
+      {/* Body */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative', minHeight: 0 }}>
-
-        {/* Scroll area — FIX-A: transitions margin-right when panel opens */}
         <div
           className="db-scroll-area"
-          style={{
-            transition: 'margin-right 0.25s',
-            marginRight: selectedVoucher ? 382 : 0,
-          }}
+          style={{ transition: 'margin-right 0.25s', marginRight: selectedVoucher ? 382 : 0 }}
         >
-          {/* FIX-A: wrapper fills full height so bg/border extends even with 0 rows */}
           <div className="db-table-wrap">
             <table>
               <thead>
@@ -938,8 +924,8 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
                 ) : displayedVouchers.length === 0 ? (
                   <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: '#888', fontStyle: 'italic', fontSize: 12 }}>No vouchers found for this period.</td></tr>
                 ) : displayedVouchers.map((v, rowIdx) => {
-                  const drAmt    = (v.entries || []).filter(e => e.type === 'Dr').reduce((a, e) => a + e.amount, 0);
-                  const crAmt    = (v.entries || []).filter(e => e.type === 'Cr').reduce((a, e) => a + e.amount, 0);
+                  const drAmt     = (v.entries || []).filter((e: any) => e.type === 'Dr').reduce((a: number, e: any) => a + e.amount, 0);
+                  const crAmt     = (v.entries || []).filter((e: any) => e.type === 'Cr').reduce((a: number, e: any) => a + e.amount, 0);
                   const displayDr = drAmt || (crAmt === 0 ? v.amount : 0);
                   const isSelected = selectedVoucher?.id === v.id;
                   const isFocused  = focusedIdx === rowIdx;
@@ -967,16 +953,21 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
                           const next = Math.min(displayedVouchers.length - 1, rowIdx + 1);
                           setFocusedIdx(next);
                           setSelectedVoucher(displayedVouchers[next]);
-                          tableBodyRef.current?.querySelector(`[data-row-idx="${next}"]`)?.focus();
+                          (tableBodyRef.current?.querySelector(`[data-row-idx="${next}"]`) as HTMLElement)?.focus();
                         }
                         if (e.key === 'ArrowUp') {
                           e.preventDefault();
                           const next = Math.max(0, rowIdx - 1);
                           setFocusedIdx(next);
                           setSelectedVoucher(displayedVouchers[next]);
-                          tableBodyRef.current?.querySelector(`[data-row-idx="${next}"]`)?.focus();
+                          (tableBodyRef.current?.querySelector(`[data-row-idx="${next}"]`) as HTMLElement)?.focus();
                         }
-                        if (e.key === 'ArrowRight' && selectedVoucher) { e.preventDefault(); setPanelFocused(true); }
+                        // FIX-C: Arrow Right → focus Edit button
+                        if (e.key === 'ArrowRight' && selectedVoucher) {
+                          e.preventDefault();
+                          setPanelFocused(true);
+                          setTimeout(() => editBtnRef.current?.focus(), 50);
+                        }
                         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPanelFocused(false); setSelectedVoucher(isSelected ? null : v); }
                         if (e.key === 'Escape') { setPanelFocused(false); setSelectedVoucher(null); }
                       }}
@@ -985,29 +976,20 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
                       <td style={{ ...s.td, color: '#333' }}>{fmtDate(v.date)}</td>
                       <td style={{ ...s.td, fontWeight: 600, color: '#1a1a1a' }}>
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ color: '#1a1a1a' }}>
+                          <span>
                             {(() => {
-                              const drs = v.entries?.filter(e => e.type === 'Dr') || [];
-                              const crs = v.entries?.filter(e => e.type === 'Cr') || [];
-                              const getName = (e) => e.ledger_name || ledgers.find(l => l.id === e.ledgerId)?.name || e.ledgerId;
-                              
-                              if (drs.length === 1 && crs.length === 1) {
-                                // Simple voucher: show the "other" ledger
-                                return getName(crs[0]); 
-                              } else if (drs.length > 1 || crs.length > 1) {
-                                return '(Multiple Ledgers)';
-                              } else if (drs.length === 1) {
-                                return getName(drs[0]);
-                              } else if (crs.length === 1) {
-                                return getName(crs[0]);
-                              }
+                              const drs = v.entries?.filter((e: any) => e.type === 'Dr') || [];
+                              const crs = v.entries?.filter((e: any) => e.type === 'Cr') || [];
+                              const getName = (e: any) => e.ledger_name || ledgers.find((l: any) => l.id === e.ledgerId)?.name || e.ledgerId;
+                              if (drs.length === 1 && crs.length === 1) return getName(crs[0]);
+                              if (drs.length > 1 || crs.length > 1) return '(Multiple Ledgers)';
+                              if (drs.length === 1) return getName(drs[0]);
+                              if (crs.length === 1) return getName(crs[0]);
                               return <span style={{ fontStyle: 'italic', color: '#aaa' }}>(No Ledger)</span>;
                             })()}
                           </span>
                           {v.narration && (
-                            <span style={{ fontSize: 10, color: '#666', fontStyle: 'italic', marginTop: 2 }}>
-                              {v.narration}
-                            </span>
+                            <span style={{ fontSize: 10, color: '#666', fontStyle: 'italic', marginTop: 2 }}>{v.narration}</span>
                           )}
                         </div>
                         {voided && <span style={{ marginLeft: 6, fontSize: 9, color: '#c00', fontWeight: 700, border: '1px solid #f5a0a0', padding: '0 3px', borderRadius: 2, verticalAlign: 'middle' }}>VOID</span>}
@@ -1068,7 +1050,7 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
         )}
       </div>
 
-      {/* Edit Voucher Modal - MOVED OUTSIDE body for better positioning */}
+      {/* Edit Voucher Modal */}
       {isEditing && selectedVoucher && (
         <div className="modal-overlay no-print">
           <div className="modal-content">
@@ -1089,20 +1071,18 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
           {loading ? 'Loading…' : `${displayedVouchers.length} voucher${displayedVouchers.length !== 1 ? 's' : ''} [${voidFilter}]`}
           {selectedVoucher ? ` — viewing ${selectedVoucher.number}${isVoided(selectedVoucher) ? ' (voided)' : ''}` : ''}
           {focusedIdx >= 0 && displayedVouchers[focusedIdx] ? ` — row ${focusedIdx + 1} of ${displayedVouchers.length}` : ''}
-          {panelFocused ? ' — panel focused' : ''}
+          {panelFocused ? ' — panel focused (← to return)' : ''}
         </span>
-        <span style={{ color: '#aaa', fontSize: 10 }}>↑↓ Navigate  |  →/← Panel  |  Enter: Open  |  Esc: Close  |  F2: Period  |  F5: Refresh</span>
+        <span style={{ color: '#aaa', fontSize: 10 }}>↑↓ Navigate  |  → Edit  |  ← Return  |  Enter: Open  |  Esc: Close  |  F2: Period  |  F5: Refresh</span>
       </div>
     </div>
   );
 }
 
-// ── Styles
-const s = {
+const s: Record<string, React.CSSProperties> = {
   root: {
     fontFamily: FONT, fontSize: 12, color: '#1a1a1a', background: '#fff',
     display: 'flex', flexDirection: 'column',
-    // FIX-A: height:100% works when parent has a height; add min-height as fallback
     height: '100%', minHeight: 0,
     position: 'relative',
     overflow: 'hidden',
@@ -1110,7 +1090,7 @@ const s = {
   titleBar: {
     background: HEADER_BG, color: '#fff', display: 'flex', alignItems: 'center',
     padding: '3px 8px', fontSize: 11, fontWeight: 600, letterSpacing: 0.2,
-    flexShrink: 0,  // never shrink — always visible
+    flexShrink: 0,
   },
   titleLeft:   { flex: 1, fontWeight: 700 },
   titleCenter: { flex: 2, textAlign: 'center', fontWeight: 700, fontSize: 12 },
@@ -1142,7 +1122,7 @@ const s = {
   statusBar: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
     padding: '3px 8px', background: '#1a2a3a', borderTop: '1px solid #0d1a2a',
-    flexShrink: 0, height: 24,   // always pinned to bottom, never squeezed
+    flexShrink: 0, height: 24,
   },
   modalOverlay: {
     position: 'fixed', inset: 0, zIndex: 1000, display: 'flex',
