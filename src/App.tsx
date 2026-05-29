@@ -643,8 +643,8 @@ export default function App() {
             </div>
           </div>
         ) : (
-          <div className={`flex-1 overflow-auto bg-tally-bg ${['VOUCHER', 'DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL'].includes(currentScreen) ? 'p-0' : 'p-4'}`}>
-            <div className={['VOUCHER', 'DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL'].includes(currentScreen) ? 'h-full w-full' : 'max-w-7xl mx-auto'}>
+         <div className={`flex-1 overflow-auto bg-tally-bg ${['VOUCHER', 'DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL', 'HQ'].includes(currentScreen) ? 'p-0' : 'p-4'}`}>
+  <div className={['VOUCHER', 'DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL', 'HQ'].includes(currentScreen) ? 'h-full w-full' : 'max-w-7xl mx-auto'}>
               {currentScreen !== 'VOUCHER' && (
                 <div className={
                   ['DAYBOOK', 'CHART', 'AUDIT', 'BALANCE_SHEET', 'PL_ACCOUNT', 'TRIAL_BALANCE', 'RATIO', 'BANKING', 'PAYROLL'].includes(currentScreen)
@@ -729,7 +729,6 @@ export default function App() {
                 )}
                 {currentScreen === 'DAYBOOK' && <DayBookScreen branchId={selectedBranchId} initialDate={currentDate} onBackToGateway={() => setCurrentScreen('GATEWAY')} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
                 {currentScreen === 'LEDGER_DETAIL' && <LedgerVouchersScreen branchId={selectedBranchId} ledgerId={selectedLedgerId} onBack={() => setCurrentScreen('GATEWAY')} />}
-                {currentScreen === 'HQ' && user?.role === 'HQ' && <HQDashboard onSelectBranch={(id) => { setSelectedBranchId(id); setCurrentScreen('GATEWAY'); }} />}
                 {currentScreen === 'ANALYTICS' && <AnalyticsScreen branches={branches} ledgers={allLedgers} vouchers={allVouchers} />}
                 {currentScreen === 'AUDIT' && <AuditLogScreen branchId={selectedBranchId} isAdmin={user.role === 'HQ'} />}
                 {currentScreen === 'ADMIN' && <AdminPanel />}
