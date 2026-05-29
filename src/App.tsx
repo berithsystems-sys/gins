@@ -541,7 +541,7 @@ export default function App() {
           )}
         </div>
         <div className="text-[12px] opacity-80 italic">
-          {user.role === 'HQ' ? 'Global Controller' : 'Branch Church'} (2024-25)
+          {user.role === 'HQ' ? 'Global Controller' : 'Branch Church'}
         </div>
       </div>
 
