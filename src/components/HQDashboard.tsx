@@ -263,7 +263,7 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
                 onClick={() => setShowAdd(true)}
                 className="bg-tally-teal text-white px-3 py-1 text-[9px] font-bold uppercase flex items-center gap-1 hover:bg-tally-header transition-colors"
               >
-                <Plus className="w-3 h-3" /> Create New Branch (Alt+C)
+                <Plus className="w-3 h-3" /> Create New Branch
               </button>
             </div>
 
