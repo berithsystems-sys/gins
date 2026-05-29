@@ -251,7 +251,7 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
         <div className="flex gap-4 h-full min-h-0">
 
           {/* ── LEFT PANEL ── */}
-          <div className="w-[340px] flex-shrink-0 flex flex-col gap-4">
+          <div className="w-1/3 flex-shrink-0 flex flex-col gap-4">
 
             {/* Header */}
             <div className="flex justify-between items-end border-b-2 border-tally-teal pb-2">
