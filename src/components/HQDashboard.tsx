@@ -80,7 +80,8 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
       setGlobalBalance(total);
     });
     fetch('/api/vouchers').then(r => r.json()).then(data => {
-      setVouchers(Array.isArray(data) ? data : []);
+      const all = Array.isArray(data) ? data : [];
+      setVouchers(all.filter(v => !v.voided && v.voided !== 1 && v.voided !== '1'));
     });
   }, []);
 
@@ -114,6 +115,21 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
       return { month: d.month, Transactions: d.Transactions, Cumulative: running };
     });
   }, [monthlyData]);
+
+  // Branch comparison — voucher counts per branch
+  const branchComparisonData = useMemo(() => {
+    if (branches.length === 0) return [];
+    return branches.map(branch => {
+      const bv = vouchers.filter(v => String(v.branchId) === String(branch.id));
+      return {
+        name: branch.name.length > 14 ? branch.name.slice(0, 14) + '…' : branch.name,
+        Receipts : bv.filter(v => v.type === 'Receipt').length,
+        Payments : bv.filter(v => v.type === 'Payment').length,
+        Journals : bv.filter(v => v.type === 'Journal').length,
+        Other    : bv.filter(v => !['Receipt','Payment','Journal'].includes(v.type)).length,
+      };
+    });
+  }, [branches, vouchers]);
 
   const totalVouchers = vouchers.length;
 
@@ -173,8 +189,8 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
         <span className="text-tally-accent">Global Administration</span>
       </div>
 
-      {/* Main content — full width, right-padded to clear button bar */}
-      <div className="flex-grow overflow-auto p-4 pr-28">
+      {/* Main content */}
+      <div className="flex-grow overflow-auto p-4">
         <div className="flex gap-4 h-full min-h-0">
 
           {/* ── LEFT PANEL ── */}
@@ -282,7 +298,34 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
               )}
             </div>
 
-            {/* Row 2: Area chart + Donut side by side */}
+            {/* Row 2: Branch Comparison Bar Chart */}
+            <div className="bg-white border border-tally-teal/20 shadow-sm p-4" style={{ height: '200px' }}>
+              <div className="flex items-center gap-2 mb-2 border-b border-tally-teal/10 pb-2">
+                <BarChart2 className="w-3.5 h-3.5 text-indigo-600" />
+                <h3 className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Branch Comparison — Voucher Activity</h3>
+              </div>
+              {branchComparisonData.length === 0 ? (
+                <div className="flex items-center justify-center h-[calc(100%-2rem)] text-[10px] text-gray-400 italic">
+                  No branch data available
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="80%">
+                  <BarChart data={branchComparisonData} margin={{ top: 2, right: 8, left: -20, bottom: 0 }} barSize={12}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#555' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 9, fill: '#555' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
+                    <Legend wrapperStyle={{ fontSize: 8 }} />
+                    <Bar dataKey="Receipts" fill={GREEN}   radius={[2,2,0,0]} />
+                    <Bar dataKey="Payments" fill={RED}     radius={[2,2,0,0]} />
+                    <Bar dataKey="Journals" fill={INDIGO}  radius={[2,2,0,0]} />
+                    <Bar dataKey="Other"    fill={ORANGE}  radius={[2,2,0,0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* Row 3: Area chart + Donut side by side */}
             <div className="flex gap-4" style={{ height: '220px' }}>
 
               {/* Area chart — cumulative fund flow */}
@@ -380,25 +423,6 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Right button bar */}
-      <div className="fixed right-0 top-12 bottom-0 w-24 bg-tally-sidebar flex flex-col gap-0.5 p-0.5 text-[10px] text-white z-20">
-        {[
-          { label: 'F3: Company' },
-          { label: 'Alt+C: Create', action: () => setShowAdd(true) },
-          { label: 'Alt+G: Go To' },
-          { label: 'F11: Features' },
-          { label: 'F12: Configure' },
-        ].map(btn => (
-          <div
-            key={btn.label}
-            onClick={btn.action}
-            className="h-10 bg-tally-hotkey flex items-center px-2 cursor-pointer hover:bg-tally-accent hover:text-black"
-          >
-            {btn.label}
-          </div>
-        ))}
       </div>
 
       {/* ── ADD BRANCH MODAL ── */}
