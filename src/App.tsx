@@ -567,8 +567,10 @@ export default function App() {
         </AnimatePresence>
 
         {currentScreen === 'HQ' ? (
-          <HQDashboard onSelectBranch={(id) => { setSelectedBranchId(id); setCurrentScreen('GATEWAY'); }} />
-        ) : currentScreen === 'GATEWAY' ? (
+  <div className="flex-1 min-w-0 overflow-auto h-full">
+    <HQDashboard onSelectBranch={(id) => { setSelectedBranchId(id); setCurrentScreen('GATEWAY'); }} />
+  </div>
+) : currentScreen === 'GATEWAY' ? (
           <div className="flex h-full w-full overflow-hidden bg-tally-bg">
             {/* Left Side: Company Info */}
             <div className="w-1/2 p-4 flex flex-col gap-4 border-r border-gray-300">
