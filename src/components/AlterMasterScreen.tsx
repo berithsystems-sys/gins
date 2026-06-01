@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Edit2, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
+import { Edit2, Trash2 } from 'lucide-react';
 
 import { useHotkeys } from '../hooks/useHotkeys';
 
@@ -14,9 +14,7 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
   const [costCentres, setCostCentres] = useState<any[]>([]);
   const [activeType, setActiveType] = useState<'LEDGER' | 'GROUP' | 'EMPLOYEE' | 'COST_CENTRE'>('LEDGER');
   const [editingItem, setEditingItem] = useState<any>(null);
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [deleteConfirm, setDeleteConfirm] = useState(false);
-
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
@@ -40,40 +38,19 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
     setGroups(Array.isArray(g) ? g : []);
     setEmployees(Array.isArray(e) ? e : []);
     setCostCentres(Array.isArray(c) ? c : []);
-
-    const initialExpanded = (Array.isArray(g) ? g : []).reduce(
-      (acc: Record<string, boolean>, curr: { id: string }) => ({ ...acc, [curr.id]: true }),
-      {},
-    );
-    setExpandedGroups(initialExpanded);
   };
 
   useEffect(() => {
     fetchData();
   }, [branchId]);
 
-  const ledgerGroupName = (l: { group_name?: string; group?: string }) =>
-    (l.group_name || l.group || '').trim();
-
-  const groupedLedgers = groups.map((g) => ({
-    ...g,
-    ledgers: ledgers.filter((l) => ledgerGroupName(l) === g.name),
-  }));
-
   const getVisibleItems = () => {
     if (activeType === 'LEDGER') {
-      const items: { type: string; id: string; data: any }[] = [];
-      groupedLedgers.forEach((group) => {
-        items.push({ type: 'GROUP', id: group.id, data: group });
-        if (expandedGroups[group.id]) {
-          group.ledgers.forEach((l: { id: string }) =>
-            items.push({ type: 'LEDGER', id: l.id, data: l }),
-          );
-        }
-      });
-      return items;
+      return ledgers.map((l) => ({ type: 'LEDGER', id: l.id, data: l }));
     }
-    if (activeType === 'GROUP') return groups.map((g) => ({ type: 'GROUP', id: g.id, data: g }));
+    if (activeType === 'GROUP') {
+      return groups.map((g) => ({ type: 'GROUP', id: g.id, data: g }));
+    }
     if (activeType === 'COST_CENTRE') {
       return costCentres.map((cc) => ({ type: 'COST_CENTRE', id: cc.id, data: cc }));
     }
@@ -87,15 +64,15 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
     return 'employees';
   };
 
-  const getSelectedLedger = () => {
-    const items = getVisibleItems();
-    const item = items[selectedIndex];
-    return item?.type === 'LEDGER' ? item.data : null;
-  };
-
   const handleDelete = async (id: string, type: string) => {
     const label =
-      type === 'LEDGER' ? 'ledger' : type === 'GROUP' ? 'group' : type === 'COST_CENTRE' ? 'cost centre' : 'employee';
+      type === 'LEDGER'
+        ? 'ledger'
+        : type === 'GROUP'
+        ? 'group'
+        : type === 'COST_CENTRE'
+        ? 'cost centre'
+        : 'employee';
     const res = await fetch(`/api/${getApiPath(type)}/${id}`, { method: 'DELETE' });
     if (res.ok) {
       setEditingItem(null);
@@ -133,9 +110,7 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
     }
   };
 
-  const toggleGroup = (groupId: string) => {
-    setExpandedGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
-  };
+  // ── Hotkeys ────────────────────────────────────────────────────────────────
 
   useHotkeys(
     'down',
@@ -146,7 +121,7 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
       setSelectedIndex((prev) => Math.min(items.length - 1, prev + 1));
     },
     { enableOnFormTags: true },
-    [editingItem, activeType, expandedGroups, groups, ledgers, costCentres, employees],
+    [editingItem, activeType, ledgers, groups, costCentres, employees],
   );
 
   useHotkeys(
@@ -157,7 +132,7 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
       setSelectedIndex((prev) => Math.max(0, prev - 1));
     },
     { enableOnFormTags: true },
-    [editingItem, activeType, expandedGroups, groups, ledgers, costCentres, employees],
+    [editingItem],
   );
 
   useHotkeys(
@@ -168,27 +143,28 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
       const items = getVisibleItems();
       const item = items[selectedIndex];
       if (!item) return;
-      if (item.type === 'GROUP' && activeType === 'LEDGER') {
-        toggleGroup(item.data.id);
-      } else if (item.type !== 'GROUP') {
-        setEditingItem(item.data);
-        setDeleteConfirm(false);
-      }
+      setEditingItem(item.data);
+      setDeleteConfirm(false);
     },
     { enableOnFormTags: true },
-    [selectedIndex, editingItem, activeType, expandedGroups, groups, ledgers, costCentres, employees],
+    [selectedIndex, editingItem, activeType, ledgers, groups, costCentres, employees],
   );
 
   useHotkeys(
     'esc',
-    () => {
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation(); // prevent parent router/dashboard from catching this
       if (deleteConfirm) {
         setDeleteConfirm(false);
         return;
       }
-      if (editingItem) setEditingItem(null);
+      if (editingItem) {
+        setEditingItem(null);
+      }
     },
     { enableOnFormTags: true },
+    [deleteConfirm, editingItem],
   );
 
   useHotkeys(
@@ -199,21 +175,28 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
         requestDelete(editingItem.id, 'LEDGER');
         return;
       }
-      const ledger = getSelectedLedger();
-      if (ledger) requestDelete(ledger.id, 'LEDGER');
+      const items = getVisibleItems();
+      const item = items[selectedIndex];
+      if (item?.type === 'LEDGER') {
+        requestDelete(item.data.id, 'LEDGER');
+      }
     },
     { enableOnFormTags: true },
-    [editingItem, activeType, selectedIndex, expandedGroups, ledgers],
+    [editingItem, activeType, selectedIndex, ledgers, deleteConfirm],
   );
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-full bg-tally-bg">
+      {/* Header */}
       <div className="bg-tally-sidebar text-white px-4 py-1 font-bold text-xs uppercase flex justify-between sticky top-0 z-10">
         <span>List of Masters</span>
         <span className="text-tally-accent">Alteration Mode</span>
       </div>
 
       <div className="flex h-full gap-4 p-4 overflow-hidden">
+        {/* Sidebar: master type selector */}
         <div className="w-64 bg-white tally-border tally-shadow p-2 space-y-1">
           <h3 className="text-[10px] font-black text-gray-400 uppercase mb-4 px-2">Master Type</h3>
           {(['LEDGER', 'GROUP', 'EMPLOYEE', 'COST_CENTRE'] as const).map((type) => (
@@ -224,19 +207,25 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
                 setEditingItem(null);
                 setDeleteConfirm(false);
               }}
-              className={`w-full text-left px-3 py-1 text-xs font-bold uppercase transition-colors ${activeType === type ? 'bg-tally-accent text-black' : 'hover:bg-tally-bg text-tally-teal'}`}
+              className={`w-full text-left px-3 py-1 text-xs font-bold uppercase transition-colors ${
+                activeType === type
+                  ? 'bg-tally-accent text-black'
+                  : 'hover:bg-tally-bg text-tally-teal'
+              }`}
             >
               {type.replace('_', ' ')}s
             </button>
           ))}
         </div>
 
+        {/* Main panel */}
         <div className="flex-1 overflow-auto bg-white tally-border tally-shadow">
           {editingItem ? (
+            /* ── Edit form ── */
             <form onSubmit={handleUpdate} className="p-8 max-w-2xl mx-auto space-y-8">
               <div className="border-b-2 border-tally-teal pb-2 flex justify-between items-start gap-4">
                 <h2 className="text-sm font-black text-tally-teal uppercase">
-                  Alter {activeType}: {editingItem.name}
+                  Alter {activeType.replace('_', ' ')}: {editingItem.name}
                 </h2>
                 {activeType === 'LEDGER' && (
                   <button
@@ -256,14 +245,16 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
 
               {deleteConfirm && activeType === 'LEDGER' && (
                 <div className="bg-red-50 border-2 border-red-300 p-3 text-[11px] font-bold text-red-800 uppercase">
-                  Delete &quot;{editingItem.name}&quot;? Ledgers with voucher lines cannot be deleted. Press Delete
-                  again or Enter to confirm, Esc to cancel.
+                  Delete &quot;{editingItem.name}&quot;? Ledgers with voucher lines cannot be
+                  deleted. Press Delete again or Enter to confirm, Esc to cancel.
                 </div>
               )}
 
               <div className="grid grid-cols-1 gap-6">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase">Name</label>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase">
+                    Name
+                  </label>
                   <input
                     autoFocus
                     type="text"
@@ -272,14 +263,21 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
                     className="w-full border-b-2 border-tally-teal p-1 text-sm font-bold outline-none focus:bg-tally-accent/10 uppercase"
                   />
                 </div>
+
                 {activeType === 'LEDGER' && (
                   <div className="grid grid-cols-2 gap-8">
                     <div>
-                      <label className="block text-[10px] font-bold text-gray-400 uppercase">Under Group</label>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase">
+                        Under Group
+                      </label>
                       <select
                         value={editingItem.group_name || editingItem.group || ''}
                         onChange={(e) =>
-                          setEditingItem({ ...editingItem, group_name: e.target.value, group: e.target.value })
+                          setEditingItem({
+                            ...editingItem,
+                            group_name: e.target.value,
+                            group: e.target.value,
+                          })
                         }
                         className="w-full border-b-2 border-tally-teal p-1 text-sm outline-none bg-transparent font-bold"
                       >
@@ -291,12 +289,17 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-gray-400 uppercase">Opening Balance</label>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase">
+                        Opening Balance
+                      </label>
                       <input
                         type="number"
                         value={editingItem.openingBalance ?? 0}
                         onChange={(e) =>
-                          setEditingItem({ ...editingItem, openingBalance: Number(e.target.value) })
+                          setEditingItem({
+                            ...editingItem,
+                            openingBalance: Number(e.target.value),
+                          })
                         }
                         className="w-full border-b-2 border-tally-teal p-1 text-sm outline-none text-right font-mono font-bold"
                       />
@@ -325,134 +328,53 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
               </div>
             </form>
           ) : (
+            /* ── List view ── */
             <div className="flex flex-col h-full">
               <div className="bg-tally-light px-4 py-1 border-b border-tally-teal flex justify-between font-bold text-[10px] uppercase">
-                <span>Name of {activeType}</span>
+                <span>Name of {activeType.replace('_', ' ')}</span>
                 <span className="text-gray-500 font-normal normal-case">
-                  Enter: Alter · Alt+D: Delete ledger · Del icon on row
+                  Enter: Alter · Alt+D: Delete ledger
                 </span>
               </div>
-              <div className="flex-grow overflow-auto">
-                {activeType === 'LEDGER' && (
-                  <div className="space-y-0.5">
-                    {getVisibleItems().map((item, idx) => {
-                      const isSelected = selectedIndex === idx;
-                      if (item.type === 'GROUP') {
-                        const group = item.data;
-                        return (
-                          <div key={group.id} className="border-b border-gray-50 last:border-0">
-                            <div
-                              className={`flex items-center justify-between py-1 px-4 cursor-pointer group ${isSelected ? 'bg-tally-accent' : 'bg-gray-50/50'}`}
-                              onClick={() => {
-                                setSelectedIndex(idx);
-                                toggleGroup(group.id);
-                              }}
-                            >
-                              <div className="flex items-center gap-2">
-                                {expandedGroups[group.id] ? (
-                                  <ChevronDown className="w-3 h-3" />
-                                ) : (
-                                  <ChevronRight className="w-3 h-3" />
-                                )}
-                                <span
-                                  className={`text-[11px] font-black uppercase ${isSelected ? 'text-black' : 'text-gray-500'}`}
-                                >
-                                  {group.name}
-                                </span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingItem(group);
-                                  setActiveType('GROUP');
-                                }}
-                                className={`p-1 hover:text-tally-teal ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-                                title="Alter group"
-                              >
-                                <Edit2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      }
 
-                      const ledger = item.data;
-                      return (
-                        <div
-                          key={ledger.id}
-                          onClick={() => {
-                            setSelectedIndex(idx);
-                            setEditingItem(ledger);
-                            setDeleteConfirm(false);
-                          }}
-                          className={`flex justify-between items-center py-1 px-8 cursor-pointer group ${isSelected ? 'bg-tally-accent' : 'hover:bg-tally-accent/50'}`}
-                        >
-                          <span
-                            className={`text-xs uppercase font-bold ${isSelected ? 'text-black' : 'text-tally-teal'}`}
-                          >
-                            {ledger.name}
-                          </span>
-                          <div
-                            className={`flex items-center gap-2 ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-                          >
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingItem(ledger);
-                                setDeleteConfirm(false);
-                              }}
-                              className="p-1 hover:text-tally-teal"
-                              title="Alter ledger"
-                            >
-                              <Edit2 className="w-3 h-3" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (
-                                  window.confirm(
-                                    `Delete ledger "${ledger.name}"?\n\nLedgers used in vouchers cannot be deleted until those lines are removed.`,
-                                  )
-                                ) {
-                                  handleDelete(ledger.id, 'LEDGER');
-                                }
-                              }}
-                              className="p-1 hover:text-red-600 text-red-500"
-                              title="Delete ledger (Alt+D)"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {activeType !== 'LEDGER' && (
-                  <div className="space-y-0.5">
-                    {getVisibleItems().map((item, idx) => (
+              <div className="flex-grow overflow-auto">
+                <div className="space-y-0.5">
+                  {getVisibleItems().map((item, idx) => {
+                    const isSelected = selectedIndex === idx;
+                    return (
                       <div
                         key={item.id}
                         onClick={() => {
                           setSelectedIndex(idx);
                           setEditingItem(item.data);
+                          setDeleteConfirm(false);
                         }}
-                        className={`flex justify-between items-center py-1.5 px-4 cursor-pointer group ${selectedIndex === idx ? 'bg-tally-accent' : 'hover:bg-tally-bg'}`}
+                        className={`flex justify-between items-center py-1 px-4 cursor-pointer group ${
+                          isSelected ? 'bg-tally-accent' : 'hover:bg-tally-accent/50'
+                        }`}
                       >
-                        <span className="text-xs uppercase font-bold text-tally-teal">{item.data.name}</span>
+                        <span
+                          className={`text-xs uppercase font-bold ${
+                            isSelected ? 'text-black' : 'text-tally-teal'
+                          }`}
+                        >
+                          {item.data.name}
+                        </span>
+
                         <div
-                          className={`flex gap-2 ${selectedIndex === idx ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                          className={`flex items-center gap-2 ${
+                            isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                          }`}
                         >
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               setEditingItem(item.data);
+                              setDeleteConfirm(false);
                             }}
                             className="p-1 hover:text-tally-teal"
+                            title="Alter"
                           >
                             <Edit2 className="w-3 h-3" />
                           </button>
@@ -460,25 +382,35 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (window.confirm(`Delete "${item.data.name}"?`)) {
-                                handleDelete(item.id, activeType);
+                              if (
+                                window.confirm(
+                                  `Delete "${item.data.name}"?${
+                                    item.type === 'LEDGER'
+                                      ? '\n\nLedgers used in vouchers cannot be deleted until those lines are removed.'
+                                      : ''
+                                  }`,
+                                )
+                              ) {
+                                handleDelete(item.id, item.type);
                               }
                             }}
                             className="p-1 hover:text-red-600 text-red-500"
+                            title="Delete"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
         </div>
       </div>
 
+      {/* Footer hotkey bar */}
       <div className="bg-tally-bg border-t border-tally-hotkey px-4 py-1 text-[10px] font-bold text-gray-500 uppercase">
         ↑↓ Navigate · Enter: Alter selected · Alt+D: Delete ledger · Esc: Back
       </div>
