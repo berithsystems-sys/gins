@@ -5,9 +5,10 @@ import { useHotkeys } from '../hooks/useHotkeys';
 
 interface AlterMasterScreenProps {
   branchId?: string;
+  onEditingChange?: (val: boolean) => void;
 }
 
-export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) {
+export default function AlterMasterScreen({ branchId, onEditingChange }: AlterMasterScreenProps) {
   const [ledgers, setLedgers] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -154,7 +155,6 @@ export default function AlterMasterScreen({ branchId }: AlterMasterScreenProps) 
     'esc',
     (e) => {
       e.preventDefault();
-      e.stopPropagation(); // prevent parent router/dashboard from catching this
       if (deleteConfirm) {
         setDeleteConfirm(false);
         return;
