@@ -79,14 +79,32 @@ export default function VoucherScreen({
   const [currentBalances, setCurrentBalances] = useState<Record<string, { balance: number; type: string }>>({});
   const [loadingBalance, setLoadingBalance] = useState<Record<string, boolean>>({});
 
-  const [config, setConfig] = useState<Config>({
+  // ── Per-user config persisted in localStorage, keyed by user ID.
+  //    Each user gets their own isolated defaults — no bleed between accounts.
+  const userConfigKey = `vchr_cfg_${user?.id || 'guest'}`;
+  const DEFAULT_CONFIG: Config = {
     entryMode: 'single',
     useToBylabels: true,
     showBillWise: true,
     showCurBalance: true,
     warnNegative: true,
+  };
+  const [config, setConfig] = useState<Config>(() => {
+    try {
+      const saved = localStorage.getItem(userConfigKey);
+      if (saved) return { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
+    } catch {}
+    return DEFAULT_CONFIG;
   });
   const [showConfig, setShowConfig] = useState(false);
+  const [configSaved, setConfigSaved] = useState(false);
+
+  // Wrapper so every config change shows a brief "Saved" flash
+  const updateConfig = (updater: (prev: Config) => Config) => {
+    setConfig(updater);
+    setConfigSaved(true);
+    setTimeout(() => setConfigSaved(false), 1800);
+  };
   const [voucherNo, setVoucherNo] = useState(2);
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'ok' | 'err' } | null>(null);
   const [focusedRowIdx, setFocusedRowIdx] = useState<number | null>(null);
@@ -129,6 +147,11 @@ export default function VoucherScreen({
   // ── Sync props
   useEffect(() => { if (initialType) setType(initialType as VoucherType); }, [initialType]);
   useEffect(() => { if (initialDate) setDate(initialDate); }, [initialDate]);
+
+  // ── Persist config changes to localStorage under this user's key
+  useEffect(() => {
+    try { localStorage.setItem(userConfigKey, JSON.stringify(config)); } catch {}
+  }, [config, userConfigKey]);
 
   // ── Fetch balance for a ledger
   const fetchCurrentBalance = useCallback(async (ledgerId: string) => {
@@ -274,7 +297,11 @@ export default function VoucherScreen({
     setAccountSearch(ledger.name);
     setShowAccountDropdown(false);
     fetchCurrentBalance(ledger.id);
-    setTimeout(() => document.getElementById('ledger-0')?.focus(), 20);
+    setTimeout(() => {
+      document.getElementById('ledger-0')?.focus();
+      setActiveDropdownIdx(0);
+      setHighlightedIdx(0);
+    }, 30);
   };
 
   const toggleEntryDrCr = (idx: number) => {
@@ -322,7 +349,16 @@ export default function VoucherScreen({
           }
         } else {
           enterCountRef.current = 0;
-          document.getElementById(`ledger-${idx + 1}`)?.focus();
+          // Move focus to next ledger field AND open its dropdown immediately
+          const nextInput = document.getElementById(`ledger-${idx + 1}`);
+          if (nextInput) {
+            nextInput.focus();
+            // Open dropdown for the next row after focus settles
+            setTimeout(() => {
+              setActiveDropdownIdx(idx + 1);
+              setHighlightedIdx(0);
+            }, 30);
+          }
         }
         return;
       }
@@ -356,7 +392,7 @@ export default function VoucherScreen({
 
   // ── Toggle entry mode
   const handleToggleEntryMode = () => {
-    setConfig(prev => {
+    updateConfig(prev => {
       const newMode = prev.entryMode === 'single' ? 'double' : 'single';
       return { ...prev, entryMode: newMode };
     });
@@ -977,6 +1013,9 @@ export default function VoucherScreen({
           <div style={S.modal}>
             <div style={{ ...S.titleBar, background: colors.header, borderRadius: '2px 2px 0 0' }}>
               <span style={S.titleLeft}>Voucher Configuration (F12)</span>
+              {configSaved && (
+                <span style={{ fontSize: 11, color: '#aaffaa', marginRight: 8, fontWeight: 600 }}>✓ Saved</span>
+              )}
               <button style={S.titleClose} onClick={() => setShowConfig(false)}>✕</button>
             </div>
             <div style={{ padding: '12px 16px' }}>
@@ -1013,7 +1052,7 @@ export default function VoucherScreen({
                 <div key={key} style={S.configRow}>
                   <span style={S.configLabel}>{label}</span>
                   <button
-                    onClick={() => setConfig(p => ({ ...p, [key]: !(p as any)[key] }))}
+                    onClick={() => updateConfig(p => ({ ...p, [key]: !(p as any)[key] }))}
                     style={{ ...S.configToggle, ...((config as any)[key] ? { background: colors.header, borderColor: colors.header, color: '#fff' } : {}) }}>
                     {(config as any)[key] ? 'Yes' : 'No'}
                   </button>
