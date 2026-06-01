@@ -109,6 +109,9 @@ export default function App() {
   const [calcInput, setCalcInput] = useState('');
   const [printData, setPrintData] = useState<any>(null);
 
+  // ── ESC guard: AlterMasterScreen sets this true when an item is open ──
+  const alterIsEditing = React.useRef(false);
+
   // Flattened menu for keyboard navigation
   const flatMenu = GATEWAY_MENU.flatMap(s => s.items);
 
@@ -330,8 +333,13 @@ export default function App() {
     }
   };
 
+  // ── ESC: skip back-navigation when AlterMasterScreen has an item open ──
   useHotkeys('esc', (e) => {
     if (currentScreen === 'TRIAL_BALANCE' || currentScreen === 'DAYBOOK') {
+      return;
+    }
+    // Let AlterMasterScreen's own ESC handler close the editing panel first
+    if (currentScreen === 'ALTER' && alterIsEditing.current) {
       return;
     }
     e.preventDefault();
@@ -405,16 +413,16 @@ export default function App() {
 
   useHotkeys('q', () => setShowQuit(true));
   useHotkeys('ctrl+q', () => setShowQuit(true));
-useHotkeys('y', (e) => {
-  if (showQuit) {
-    window.close();
-    return;
-  }
-  // if (currentScreen === 'GATEWAY') {
-  //   e.preventDefault();
-  //   setCurrentScreen('PAYROLL');
-  // }
-}, {}, [currentScreen, showQuit]);
+  useHotkeys('y', (e) => {
+    if (showQuit) {
+      window.close();
+      return;
+    }
+    // if (currentScreen === 'GATEWAY') {
+    //   e.preventDefault();
+    //   setCurrentScreen('PAYROLL');
+    // }
+  }, {}, [currentScreen, showQuit]);
   useHotkeys('n', () => { if (showQuit) setShowQuit(false); });
 
   if (!user) return <LoginScreen onLogin={setUser} />;
@@ -715,7 +723,13 @@ useHotkeys('y', (e) => {
                   : "bg-white border-2 border-tally-teal rounded-sm p-4 shadow-lg flex-1 flex flex-col min-h-0"
               }>
                 {currentScreen === 'LEDGER' && <MastersDashboard branchId={selectedBranchId} />}
-                {currentScreen === 'ALTER' && <AlterMasterScreen branchId={selectedBranchId} />}
+                {/* Pass onEditingChange so AlterMasterScreen can signal when an item is open */}
+                {currentScreen === 'ALTER' && (
+                  <AlterMasterScreen
+                    branchId={selectedBranchId}
+                    onEditingChange={(val: boolean) => { alterIsEditing.current = val; }}
+                  />
+                )}
                 {currentScreen === 'CHART' && <ChartOfAccountsScreen branchId={selectedBranchId} />}
                 {currentScreen === 'BALANCE_SHEET' && <BalanceSheetScreen branchId={selectedBranchId} onBack={handleBack} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
                 {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} onBack={handleBack} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
