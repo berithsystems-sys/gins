@@ -74,11 +74,11 @@ const GATEWAY_MENU = [
     { id: 'vouchers', label: 'Vouchers', key: 'V' },
     { id: 'daybook', label: 'Day Book', key: 'K' },
   ]},
-  { section: 'Utilities', items: [
-    // { id: 'banking', label: 'Banking', key: 'N' },
-    { id: 'payroll', label: 'Payroll', key: 'Y' },
-    // { id: 'debug', label: 'Diagnostics', key: 'D' },
-  ]},
+  // { section: 'Utilities', items: [
+  //   { id: 'banking', label: 'Banking', key: 'N' },
+  //   { id: 'payroll', label: 'Payroll', key: 'Y' },
+  //   { id: 'debug', label: 'Diagnostics', key: 'D' },
+  // ]},
   { section: 'Reports', items: [
     { id: 'balance_sheet', label: 'Balance Sheet', key: 'B' },
     { id: 'pl_account', label: 'Profit & Loss A/c', key: 'P' },
@@ -405,16 +405,16 @@ export default function App() {
 
   useHotkeys('q', () => setShowQuit(true));
   useHotkeys('ctrl+q', () => setShowQuit(true));
-  useHotkeys('y', (e) => {
-    if (showQuit) {
-      window.close();
-      return;
-    }
-    if (currentScreen === 'GATEWAY') {
-      e.preventDefault();
-      setCurrentScreen('PAYROLL');
-    }
-  }, {}, [currentScreen, showQuit]);
+useHotkeys('y', (e) => {
+  if (showQuit) {
+    window.close();
+    return;
+  }
+  // if (currentScreen === 'GATEWAY') {
+  //   e.preventDefault();
+  //   setCurrentScreen('PAYROLL');
+  // }
+}, {}, [currentScreen, showQuit]);
   useHotkeys('n', () => { if (showQuit) setShowQuit(false); });
 
   if (!user) return <LoginScreen onLogin={setUser} />;
