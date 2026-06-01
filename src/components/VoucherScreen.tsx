@@ -341,19 +341,34 @@ export default function VoucherScreen({
       if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); document.getElementById(`ledger-${idx}`)?.focus(); return; }
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (idx === entries.length - 1) {
+        const isLastRow = idx === entries.length - 1;
+
+        if (isLastRow && isDoubleEntry) {
+          // Double entry: Enter on last row's amount → add new row immediately
+          // and open its ledger dropdown right away (like TallyPrime)
+          const nextType: 'Dr' | 'Cr' = drTotal > crTotal ? 'Cr' : 'Dr';
+          const nextAmt = diff > 0 ? diff.toString() : '';
+          setEntries(prev => [...prev, { ...DEFAULT_ENTRY, type: nextType, amount: nextAmt }]);
+          enterCountRef.current = 0;
+          setTimeout(() => {
+            const nextIdx = idx + 1;
+            document.getElementById(`ledger-${nextIdx}`)?.focus();
+            setActiveDropdownIdx(nextIdx);
+            setHighlightedIdx(0);
+          }, 30);
+        } else if (isLastRow && !isDoubleEntry) {
+          // Single entry: double-Enter on last row → go to narration
           enterCountRef.current += 1;
           if (enterCountRef.current >= 2) {
             enterCountRef.current = 0;
             narrationRef.current?.focus();
           }
         } else {
+          // Not the last row: move to next ledger and open its dropdown
           enterCountRef.current = 0;
-          // Move focus to next ledger field AND open its dropdown immediately
           const nextInput = document.getElementById(`ledger-${idx + 1}`);
           if (nextInput) {
             nextInput.focus();
-            // Open dropdown for the next row after focus settles
             setTimeout(() => {
               setActiveDropdownIdx(idx + 1);
               setHighlightedIdx(0);
