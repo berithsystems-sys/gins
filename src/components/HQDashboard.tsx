@@ -280,7 +280,7 @@ export default function HQDashboard({ onSelectBranch }: HQDashboardProps) {
                 </thead>
                 <tbody>
                   {branches.map(branch => {
-                    const bal = branchBalanceMap.get(branch.id);
+                    const bal = branchBalanceMap.get(branch.id) as any;
                     return (
                       <tr
                         key={branch.id}

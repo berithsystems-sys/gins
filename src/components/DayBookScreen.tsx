@@ -634,56 +634,76 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
     const drTotal = (v.entries || []).filter((e: any) => e.type === 'Dr').reduce((a: number, e: any) => a + e.amount, 0);
     const crTotal = (v.entries || []).filter((e: any) => e.type === 'Cr').reduce((a: number, e: any) => a + e.amount, 0);
     const vs = VOUCHER_STYLES[v.type] || defaultStyle;
-    const html = `<!DOCTYPE html><html><head>
-      <title>${v.type} – ${v.number}</title><meta charset="utf-8"/>
-      <style>
-        @page { margin: 12mm; size: A4 portrait; }
-        * { box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 12px; }
-        .hdr { background: ${vs.header}; color: #fff; text-align: center; padding: 8px 12px; }
-        .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
-        .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; }
-        .info { display: flex; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #ccc; background: ${vs.bodyBg}; }
-        .info div { font-size: 12px; }
-        table { width: 100%; border-collapse: collapse; }
-        th { background: #edf1f5; padding: 5px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; border-bottom: 2px solid #ccc; text-align: left; }
-        td { padding: 5px 10px; border-bottom: 1px solid #eee; font-size: 12px; }
-        .tr { border-top: 2px solid #555; font-weight: 700; background: #f2f6fa; }
-        .tr td { padding: 5px 10px; }
-        .narr { padding: 8px 12px; font-size: 11px; font-style: italic; color: #555; border-top: 1px solid #eee; }
-        .sig { display: flex; justify-content: space-between; padding: 40px 20px 10px; }
-        .sig-box { text-align: center; border-top: 1px solid #000; width: 140px; font-size: 10px; padding-top: 4px; }
-        .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; }
-      </style>
-    </head><body>
-      <div class="hdr">
-        <h1>${companyName || 'Company'}</h1>
-        <div class="sub">${v.type?.toUpperCase()} VOUCHER</div>
-      </div>
-      <div class="info">
-        <div><b>${v.type}</b> No. <b>${v.number || '—'}</b></div>
-        <div>Date: <b>${fmtDate(v.date)}</b></div>
-      </div>
-      <table>
-        <thead><tr><th style="width:60%">Particulars</th><th style="width:20%;text-align:right">Debit</th><th style="width:20%;text-align:right">Credit</th></tr></thead>
-        <tbody>
-          ${(v.entries || []).map((e: any) => {
-            const name = e.ledger_name || ledgers.find((l: any) => l.id === e.ledgerId)?.name || e.ledgerId;
-            return `<tr><td>${name}</td><td style="text-align:right">${e.type === 'Dr' ? fmtA(e.amount) : ''}</td><td style="text-align:right">${e.type === 'Cr' ? fmtA(e.amount) : ''}</td></tr>`;
-          }).join('')}
-          <tr class="tr"><td>Total</td><td style="text-align:right">${fmtA(drTotal)}</td><td style="text-align:right">${fmtA(crTotal)}</td></tr>
-        </tbody>
-      </table>
-      ${v.narration ? `<div class="narr"><b>Narration:</b> ${v.narration}</div>` : ''}
-      <div class="sig">
-        <div class="sig-box">Prepared by</div>
-        <div class="sig-box">Verified by</div>
-        <div class="sig-box">Authorised Signatory</div>
-      </div>
-      <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} | ${companyName}</div>
-    </body></html>`;
-    const win = window.open('', '_blank', 'width=800,height=650');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+
+    if (onPrint) {
+      onPrint({
+        type: 'voucher',
+        companyName,
+        voucherType: v.type,
+        voucherNo: v.number || '—',
+        date: fmtDate(v.date),
+        narration: v.narration,
+        entries: (v.entries || []).map((e: any) => {
+          const name = e.ledger_name || ledgers.find((l: any) => l.id === e.ledgerId)?.name || e.ledgerId;
+          return {
+            ledgerName: name,
+            type: e.type as 'Dr' | 'Cr',
+            amount: Number(e.amount),
+          };
+        })
+      });
+    } else {
+      const html = `<!DOCTYPE html><html><head>
+        <title>${v.type} – ${v.number}</title><meta charset="utf-8"/>
+        <style>
+          @page { margin: 12mm; size: A4 portrait; }
+          * { box-sizing: border-box; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 12px; }
+          .hdr { background: ${vs.header}; color: #fff; text-align: center; padding: 8px 12px; }
+          .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+          .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; }
+          .info { display: flex; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #ccc; background: ${vs.bodyBg}; }
+          .info div { font-size: 12px; }
+          table { width: 100%; border-collapse: collapse; }
+          th { background: #edf1f5; padding: 5px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; border-bottom: 2px solid #ccc; text-align: left; }
+          td { padding: 5px 10px; border-bottom: 1px solid #eee; font-size: 12px; }
+          .tr { border-top: 2px solid #555; font-weight: 700; background: #f2f6fa; }
+          .tr td { padding: 5px 10px; }
+          .narr { padding: 8px 12px; font-size: 11px; font-style: italic; color: #555; border-top: 1px solid #eee; }
+          .sig { display: flex; justify-content: space-between; padding: 40px 20px 10px; }
+          .sig-box { text-align: center; border-top: 1px solid #000; width: 140px; font-size: 10px; padding-top: 4px; }
+          .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; }
+        </style>
+      </head><body>
+        <div class="hdr">
+          <h1>${companyName || 'Company'}</h1>
+          <div class="sub">${v.type?.toUpperCase()} VOUCHER</div>
+        </div>
+        <div class="info">
+          <div><b>${v.type}</b> No. <b>${v.number || '—'}</b></div>
+          <div>Date: <b>${fmtDate(v.date)}</b></div>
+        </div>
+        <table>
+          <thead><tr><th style="width:60%">Particulars</th><th style="width:20%;text-align:right">Debit</th><th style="width:20%;text-align:right">Credit</th></tr></thead>
+          <tbody>
+            ${(v.entries || []).map((e: any) => {
+              const name = e.ledger_name || ledgers.find((l: any) => l.id === e.ledgerId)?.name || e.ledgerId;
+              return `<tr><td>${name}</td><td style="text-align:right">${e.type === 'Dr' ? fmtA(e.amount) : ''}</td><td style="text-align:right">${e.type === 'Cr' ? fmtA(e.amount) : ''}</td></tr>`;
+            }).join('')}
+            <tr class="tr"><td>Total</td><td style="text-align:right">${fmtA(drTotal)}</td><td style="text-align:right">${fmtA(crTotal)}</td></tr>
+          </tbody>
+        </table>
+        ${v.narration ? `<div class="narr"><b>Narration:</b> ${v.narration}</div>` : ''}
+        <div class="sig">
+          <div class="sig-box">Prepared by</div>
+          <div class="sig-box">Verified by</div>
+          <div class="sig-box">Authorised Signatory</div>
+        </div>
+        <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} | ${companyName}</div>
+      </body></html>`;
+      const win = window.open('', '_blank', 'width=800,height=650');
+      if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+    }
   };
 
   const periodLabel = fromDate === toDate ? fmtDate(fromDate) : `${fmtDate(fromDate)} to ${fmtDate(toDate)}`;
@@ -699,73 +719,106 @@ export default function DayBookScreen({ branchId, initialDate, fromDate: propFro
 
   const handlePrintDayBook = () => {
     const fmtA = (n: number) => n > 0 ? n.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '';
-    const rows = displayedVouchers.map(v => {
-      const dr = (v.entries || []).filter((e: any) => e.type === 'Dr').reduce((a: number, e: any) => a + e.amount, 0);
-      const cr = (v.entries || []).filter((e: any) => e.type === 'Cr').reduce((a: number, e: any) => a + e.amount, 0);
-      const display = dr || (cr === 0 ? v.amount : 0);
-      const particulars = (() => {
-        const drs = v.entries?.filter((e: any) => e.type === 'Dr') || [];
-        const crs = v.entries?.filter((e: any) => e.type === 'Cr') || [];
-        if (drs.length === 1 && crs.length === 1) return crs[0].ledger_name || ledgers.find((l: any) => l.id === crs[0].ledgerId)?.name || '';
-        if (drs.length > 1 || crs.length > 1) return '(Multiple Ledgers)';
-        const first = [...drs, ...crs][0];
-        return first ? (first.ledger_name || ledgers.find((l: any) => l.id === first.ledgerId)?.name || '') : '';
-      })();
-      const bg = isVoided(v) ? '#fff4f4' : 'transparent';
-      return `<tr style="background:${bg}">
-        <td style="padding:3px 8px;border-bottom:1px solid #eee">${fmtDate(v.date)}</td>
-        <td style="padding:3px 8px;border-bottom:1px solid #eee;font-weight:600">${particulars}${v.narration ? `<div style="font-size:10px;font-style:italic;color:#777">${v.narration}</div>` : ''}</td>
-        <td style="padding:3px 8px;border-bottom:1px solid #eee;color:#555">${v.type}</td>
-        <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:center">${v.number || ''}</td>
-        <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${fmtA(display)}</td>
-        <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${fmtA(cr)}</td>
-      </tr>`;
-    }).join('');
 
-    const html = `<!DOCTYPE html><html><head>
-      <title>Day Book – ${periodLabel}</title><meta charset="utf-8"/>
-      <style>
-        @page { margin: 12mm; size: A4 landscape; }
-        * { box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 12px; }
-        .hdr { background: #1f4e79; color: #fff; text-align: center; padding: 8px 12px; }
-        .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
-        .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; }
-        table { width: 100%; border-collapse: collapse; }
-        thead tr { background: #2c5f8a; color: #fff; }
-        th { padding: 5px 8px; font-size: 10px; font-weight: 800; letter-spacing: 1px; text-align: left; }
-        .tfoot td { border-top: 2px solid #1f4e79; font-weight: 900; font-size: 12px; background: #e8f0f8; padding: 5px 8px; }
-        .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
-      </style>
-    </head><body>
-      <div class="hdr">
-        <h1>${companyName || 'Company'}</h1>
-        <div class="sub">DAY BOOK &nbsp;·&nbsp; ${periodLabel}</div>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th style="width:80px">Date</th>
-            <th>Particulars</th>
-            <th style="width:90px">Vch Type</th>
-            <th style="width:70px;text-align:center">Vch No.</th>
-            <th style="width:120px;text-align:right">Debit</th>
-            <th style="width:120px;text-align:right">Credit</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-        <tfoot>
-          <tr class="tfoot">
-            <td colspan="4" style="text-align:right;padding-right:12px">Grand Total</td>
-            <td style="text-align:right">${fmtA(drTotal)}</td>
-            <td style="text-align:right">${fmtA(crTotal)}</td>
-          </tr>
-        </tfoot>
-      </table>
-      <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} | ${companyName} | ${displayedVouchers.length} voucher(s)</div>
-    </body></html>`;
-    const win = window.open('', '_blank', 'width=1000,height=700');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+    if (onPrint) {
+      onPrint({
+        type: 'daybook',
+        companyName,
+        period: periodLabel,
+        vouchers: displayedVouchers.map(v => {
+          const dr = (v.entries || []).filter((e: any) => e.type === 'Dr').reduce((a: number, e: any) => a + e.amount, 0);
+          const cr = (v.entries || []).filter((e: any) => e.type === 'Cr').reduce((a: number, e: any) => a + e.amount, 0);
+          const display = dr || (cr === 0 ? v.amount : 0);
+          const particulars = (() => {
+            const drs = v.entries?.filter((e: any) => e.type === 'Dr') || [];
+            const crs = v.entries?.filter((e: any) => e.type === 'Cr') || [];
+            if (drs.length === 1 && crs.length === 1) return crs[0].ledger_name || ledgers.find((l: any) => l.id === crs[0].ledgerId)?.name || '';
+            if (drs.length > 1 || crs.length > 1) return '(Multiple Ledgers)';
+            const first = [...drs, ...crs][0];
+            return first ? (first.ledger_name || ledgers.find((l: any) => l.id === first.ledgerId)?.name || '') : '';
+          })();
+          return {
+            date: fmtDate(v.date),
+            particulars: `${particulars}${v.narration ? ` - ${v.narration}` : ''}`,
+            vchType: v.type,
+            vchNo: v.number || '',
+            debitAmount: display,
+            creditAmount: cr,
+            voided: isVoided(v)
+          };
+        }),
+        drTotal,
+        crTotal
+      });
+    } else {
+      const rows = displayedVouchers.map(v => {
+        const dr = (v.entries || []).filter((e: any) => e.type === 'Dr').reduce((a: number, e: any) => a + e.amount, 0);
+        const cr = (v.entries || []).filter((e: any) => e.type === 'Cr').reduce((a: number, e: any) => a + e.amount, 0);
+        const display = dr || (cr === 0 ? v.amount : 0);
+        const particulars = (() => {
+          const drs = v.entries?.filter((e: any) => e.type === 'Dr') || [];
+          const crs = v.entries?.filter((e: any) => e.type === 'Cr') || [];
+          if (drs.length === 1 && crs.length === 1) return crs[0].ledger_name || ledgers.find((l: any) => l.id === crs[0].ledgerId)?.name || '';
+          if (drs.length > 1 || crs.length > 1) return '(Multiple Ledgers)';
+          const first = [...drs, ...crs][0];
+          return first ? (first.ledger_name || ledgers.find((l: any) => l.id === first.ledgerId)?.name || '') : '';
+        })();
+        const bg = isVoided(v) ? '#fff4f4' : 'transparent';
+        return `<tr style="background:${bg}">
+          <td style="padding:3px 8px;border-bottom:1px solid #eee">${fmtDate(v.date)}</td>
+          <td style="padding:3px 8px;border-bottom:1px solid #eee;font-weight:600">${particulars}${v.narration ? `<div style="font-size:10px;font-style:italic;color:#777">${v.narration}</div>` : ''}</td>
+          <td style="padding:3px 8px;border-bottom:1px solid #eee;color:#555">${v.type}</td>
+          <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:center">${v.number || ''}</td>
+          <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${fmtA(display)}</td>
+          <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${fmtA(cr)}</td>
+        </tr>`;
+      }).join('');
+
+      const html = `<!DOCTYPE html><html><head>
+        <title>Day Book – ${periodLabel}</title><meta charset="utf-8"/>
+        <style>
+          @page { margin: 12mm; size: A4 landscape; }
+          * { box-sizing: border-box; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 12px; }
+          .hdr { background: #1f4e79; color: #fff; text-align: center; padding: 8px 12px; }
+          .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+          .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; }
+          table { width: 100%; border-collapse: collapse; }
+          thead tr { background: #2c5f8a; color: #fff; }
+          th { padding: 5px 8px; font-size: 10px; font-weight: 800; letter-spacing: 1px; text-align: left; }
+          .tfoot td { border-top: 2px solid #1f4e79; font-weight: 900; font-size: 12px; background: #e8f0f8; padding: 5px 8px; }
+          .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
+        </style>
+      </head><body>
+        <div class="hdr">
+          <h1>${companyName || 'Company'}</h1>
+          <div class="sub">DAY BOOK &nbsp;·&nbsp; ${periodLabel}</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:80px">Date</th>
+              <th>Particulars</th>
+              <th style="width:90px">Vch Type</th>
+              <th style="width:70px;text-align:center">Vch No.</th>
+              <th style="width:120px;text-align:right">Debit</th>
+              <th style="width:120px;text-align:right">Credit</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+          <tfoot>
+            <tr class="tfoot">
+              <td colspan="4" style="text-align:right;padding-right:12px">Grand Total</td>
+              <td style="text-align:right">${fmtA(drTotal)}</td>
+              <td style="text-align:right">${fmtA(crTotal)}</td>
+            </tr>
+          </tfoot>
+        </table>
+        <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} | ${companyName} | ${displayedVouchers.length} voucher(s)</div>
+      </body></html>`;
+      const win = window.open('', '_blank', 'width=1000,height=700');
+      if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+    }
   };
 
   const handleExport = () => {

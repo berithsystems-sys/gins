@@ -259,7 +259,7 @@ export default function RatioAnalysisScreen({ onBack, branchId }: { onBack: () =
 
   const comparisonData = Object.entries(ratios).map(([key, items]) => ({
     name: key.charAt(0).toUpperCase() + key.slice(1),
-    avg: (items.reduce((sum, r) => sum + r.value, 0) / items.length).toFixed(2),
+    avg: ((items as any[]).reduce((sum: number, r: any) => sum + r.value, 0) / items.length).toFixed(2),
     count: items.length,
   }));
 

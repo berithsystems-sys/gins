@@ -734,7 +734,7 @@ export default function App() {
                 {currentScreen === 'BALANCE_SHEET' && <BalanceSheetScreen branchId={selectedBranchId} onBack={handleBack} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
                 {currentScreen === 'PL_ACCOUNT' && <PLScreen branchId={selectedBranchId} onBack={handleBack} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
                 {currentScreen === 'TRIAL_BALANCE' && <TrialBalanceScreen branchId={selectedBranchId} onBackToGateway={() => setCurrentScreen('GATEWAY')} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
-                {currentScreen === 'CASH_BANK_BOOK' && <CashBankBookScreen branchId={selectedBranchId} />}
+                {currentScreen === 'CASH_BANK_BOOK' && <CashBankBookScreen branchId={selectedBranchId} onPrint={(data: any) => { setPrintData(data); setCurrentScreen('PRINT'); }} />}
                 {currentScreen === 'RATIO' && <RatioAnalysisScreen onBack={handleBack} branchId={selectedBranchId} />}
                 {currentScreen === 'PRINT' && printData && (
                   <PrintScreen

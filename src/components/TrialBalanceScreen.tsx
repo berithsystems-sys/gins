@@ -34,7 +34,7 @@ const isVoided = (v: any): boolean =>
   v.voided === true || v.voided === 1 || v.voided === '1';
 
 // ─── LEVEL 4: VOUCHER DETAIL ─────────────────────────────────────────────────
-function VoucherDetail({ voucherId, onBack, companyName }: any) {
+function VoucherDetail({ voucherId, onBack, companyName, onPrint }: any) {
   const [voucher, setVoucher] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -55,67 +55,83 @@ function VoucherDetail({ voucherId, onBack, companyName }: any) {
     const drTotal = (voucher.entries || []).filter((e: any) => e.type === 'Dr').reduce((a: number, b: any) => a + Number(b.amount), 0);
     const crTotal = (voucher.entries || []).filter((e: any) => e.type === 'Cr').reduce((a: number, b: any) => a + Number(b.amount), 0);
 
-    const html = `<!DOCTYPE html><html><head>
-      <title>${voucher.type} – ${voucher.number}</title><meta charset="utf-8"/>
-      <style>
-        @page { margin:12mm; size:A4 portrait; }
-        *{box-sizing:border-box}
-        body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif;margin:0;padding:0;color:#000;font-size:12px}
-        .hdr{background:#1f4e79;color:#fff;text-align:center;padding:8px 12px}
-        .hdr h1{margin:0;font-size:16px;text-transform:uppercase;letter-spacing:1px}
-        .hdr .sub{font-size:10px;margin-top:3px;opacity:.85}
-        .info{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #ccc;background:#f0f4f8;font-size:12px}
-        table{width:100%;border-collapse:collapse}
-        th{background:#edf1f5;padding:5px 10px;font-size:10px;font-weight:700;text-transform:uppercase;border-bottom:2px solid #ccc;text-align:left}
-        td{padding:5px 10px;border-bottom:1px solid #eee;font-size:12px}
-        .tr td{border-top:2px solid #555;font-weight:700;background:#f2f6fa}
-        .narr{padding:8px 12px;font-size:11px;font-style:italic;color:#555;border-top:1px solid #eee}
-        .sig{display:flex;justify-content:space-between;padding:40px 20px 10px}
-        .sig-box{text-align:center;border-top:1px solid #000;width:140px;font-size:10px;padding-top:4px}
-        .footer{text-align:right;font-size:9px;color:#888;padding:5px 10px;border-top:1px solid #ddd}
-      </style>
-    </head><body>
-      <div class="hdr">
-        <h1>${companyName || 'Company'}</h1>
-        <div class="sub">${voucher.type?.toUpperCase()} VOUCHER</div>
-      </div>
-      <div class="info">
-        <div><b>${voucher.type}</b> No. <b>${voucher.number || '—'}</b></div>
-        <div>Date: <b>${fmtDate(voucher.date)}</b></div>
-      </div>
-      <table>
-        <thead><tr>
-          <th style="width:60%">Particulars</th>
-          <th style="width:20%;text-align:right">Debit</th>
-          <th style="width:20%;text-align:right">Credit</th>
-        </tr></thead>
-        <tbody>
-          ${(voucher.entries || []).map((e: any) =>
-            `<tr>
-              <td>${e.ledger_name || e.ledgerId}</td>
-              <td style="text-align:right">${e.type === 'Dr' ? fmt(e.amount) : ''}</td>
-              <td style="text-align:right">${e.type === 'Cr' ? fmt(e.amount) : ''}</td>
-            </tr>`
-          ).join('')}
-          <tr class="tr">
-            <td>Total</td>
-            <td style="text-align:right">${fmt(drTotal)}</td>
-            <td style="text-align:right">${fmt(crTotal)}</td>
-          </tr>
-        </tbody>
-      </table>
-      ${voucher.narration ? `<div class="narr"><b>Narration:</b> ${voucher.narration}</div>` : ''}
-      <div class="sig">
-        <div class="sig-box">Prepared by</div>
-        <div class="sig-box">Verified by</div>
-        <div class="sig-box">Authorised Signatory</div>
-      </div>
-      <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} | ${companyName}</div>
-    </body></html>`;
+    if (onPrint) {
+      onPrint({
+        type: 'voucher',
+        companyName,
+        voucherType: voucher.type,
+        voucherNo: voucher.number || '—',
+        date: fmtDate(voucher.date),
+        narration: voucher.narration,
+        entries: (voucher.entries || []).map((e: any) => ({
+          ledgerName: e.ledger_name || e.ledgerId,
+          type: e.type as 'Dr' | 'Cr',
+          amount: Number(e.amount),
+        }))
+      });
+    } else {
+      const html = `<!DOCTYPE html><html><head>
+        <title>${voucher.type} – ${voucher.number}</title><meta charset="utf-8"/>
+        <style>
+          @page { margin:12mm; size:A4 portrait; }
+          *{box-sizing:border-box}
+          body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif;margin:0;padding:0;color:#000;font-size:12px}
+          .hdr{background:#1f4e79;color:#fff;text-align:center;padding:8px 12px}
+          .hdr h1{margin:0;font-size:16px;text-transform:uppercase;letter-spacing:1px}
+          .hdr .sub{font-size:10px;margin-top:3px;opacity:.85}
+          .info{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #ccc;background:#f0f4f8;font-size:12px}
+          table{width:100%;border-collapse:collapse}
+          th{background:#edf1f5;padding:5px 10px;font-size:10px;font-weight:700;text-transform:uppercase;border-bottom:2px solid #ccc;text-align:left}
+          td{padding:5px 10px;border-bottom:1px solid #eee;font-size:12px}
+          .tr td{border-top:2px solid #555;font-weight:700;background:#f2f6fa}
+          .narr{padding:8px 12px;font-size:11px;font-style:italic;color:#555;border-top:1px solid #eee}
+          .sig{display:flex;justify-content:space-between;padding:40px 20px 10px}
+          .sig-box{text-align:center;border-top:1px solid #000;width:140px;font-size:10px;padding-top:4px}
+          .footer{text-align:right;font-size:9px;color:#888;padding:5px 10px;border-top:1px solid #ddd}
+        </style>
+      </head><body>
+        <div class="hdr">
+          <h1>${companyName || 'Company'}</h1>
+          <div class="sub">${voucher.type?.toUpperCase()} VOUCHER</div>
+        </div>
+        <div class="info">
+          <div><b>${voucher.type}</b> No. <b>${voucher.number || '—'}</b></div>
+          <div>Date: <b>${fmtDate(voucher.date)}</b></div>
+        </div>
+        <table>
+          <thead><tr>
+            <th style="width:60%">Particulars</th>
+            <th style="width:20%;text-align:right">Debit</th>
+            <th style="width:20%;text-align:right">Credit</th>
+          </tr></thead>
+          <tbody>
+            ${(voucher.entries || []).map((e: any) =>
+              `<tr>
+                <td>${e.ledger_name || e.ledgerId}</td>
+                <td style="text-align:right">${e.type === 'Dr' ? fmt(e.amount) : ''}</td>
+                <td style="text-align:right">${e.type === 'Cr' ? fmt(e.amount) : ''}</td>
+              </tr>`
+            ).join('')}
+            <tr class="tr">
+              <td>Total</td>
+              <td style="text-align:right">${fmt(drTotal)}</td>
+              <td style="text-align:right">${fmt(crTotal)}</td>
+            </tr>
+          </tbody>
+        </table>
+        ${voucher.narration ? `<div class="narr"><b>Narration:</b> ${voucher.narration}</div>` : ''}
+        <div class="sig">
+          <div class="sig-box">Prepared by</div>
+          <div class="sig-box">Verified by</div>
+          <div class="sig-box">Authorised Signatory</div>
+        </div>
+        <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} | ${companyName}</div>
+      </body></html>`;
 
-    const win = window.open('', '_blank', 'width=800,height=650');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
-  }, [voucher, companyName]);
+      const win = window.open('', '_blank', 'width=800,height=650');
+      if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+    }
+  }, [voucher, companyName, onPrint]);
 
   // Keyboard: Escape = back, Alt+P = print
   useEffect(() => {
@@ -203,7 +219,7 @@ function VoucherDetail({ voucherId, onBack, companyName }: any) {
 }
 
 // ─── LEVEL 3: VOUCHER REGISTER ───────────────────────────────────────────────
-function VoucherRegister({ ledger, monthIdx, branchId, onBack, onDrill, companyName }: any) {
+function VoucherRegister({ ledger, monthIdx, branchId, onBack, onDrill, companyName, onPrint }: any) {
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [selIdx, setSelIdx]     = useState(0);
 
@@ -224,68 +240,99 @@ function VoucherRegister({ ledger, monthIdx, branchId, onBack, onDrill, companyN
   const handlePrint = useCallback(() => {
     const fmt = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
     let running = 0;
-    const rows = vouchers.map(v => {
+    const printRows = vouchers.map(v => {
       const amt  = Number(v.entry_amount);
       const isDr = v.entry_type === 'Dr';
       running   += isDr ? amt : -amt;
-      return `<tr>
-        <td style="padding:3px 8px;border-bottom:1px solid #eee">${fmtDate(v.date)}</td>
-        <td style="padding:3px 8px;border-bottom:1px solid #eee;font-weight:600">
-          ${v.other_ledger_name || 'Multiple Ledgers'}
-          ${v.narration ? `<div style="font-size:10px;font-style:italic;color:#777">${v.narration}</div>` : ''}
-        </td>
-        <td style="padding:3px 8px;border-bottom:1px solid #eee">${v.type || 'Journal'}</td>
-        <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:center">${v.number || '-'}</td>
-        <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:right;color:#7a0000">${isDr ? fmt(amt) : ''}</td>
-        <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:right;color:#006b00">${!isDr ? fmt(amt) : ''}</td>
-        <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${fmt(running)} ${running >= 0 ? 'Dr' : 'Cr'}</td>
-      </tr>`;
-    }).join('');
+      return {
+        date: fmtDate(v.date),
+        particulars: `${v.other_ledger_name || 'Multiple Ledgers'}${v.narration ? ` - ${v.narration}` : ''}`,
+        vchType: v.type || 'Journal',
+        vchNo: v.number || '-',
+        debit: isDr ? amt : undefined,
+        credit: !isDr ? amt : undefined,
+        balance: Math.abs(running),
+        runType: running >= 0 ? ('Dr' as const) : ('Cr' as const)
+      };
+    });
     const drTot = vouchers.filter(v => v.entry_type === 'Dr').reduce((a, v) => a + Number(v.entry_amount), 0);
     const crTot = vouchers.filter(v => v.entry_type === 'Cr').reduce((a, v) => a + Number(v.entry_amount), 0);
 
-    const html = `<!DOCTYPE html><html><head>
-      <title>Ledger – ${ledger.name}</title><meta charset="utf-8"/>
-      <style>
-        @page{margin:12mm;size:A4 landscape}
-        *{box-sizing:border-box}
-        body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif;margin:0;padding:0;color:#000;font-size:12px}
-        .hdr{background:#1f4e79;color:#fff;text-align:center;padding:8px 12px}
-        .hdr h1{margin:0;font-size:16px;text-transform:uppercase;letter-spacing:1px}
-        .hdr .sub{font-size:10px;margin-top:3px;opacity:.85}
-        table{width:100%;border-collapse:collapse}
-        thead tr{background:#2c5f8a;color:#fff}
-        th{padding:5px 8px;font-size:10px;font-weight:800;letter-spacing:1px;text-align:left}
-        .tfoot td{border-top:2px solid #1f4e79;font-weight:900;font-size:12px;background:#e8f0f8;padding:5px 8px}
-        .footer{text-align:right;font-size:9px;color:#888;padding:5px 10px;border-top:1px solid #ddd;margin-top:4px}
-      </style>
-    </head><body>
-      <div class="hdr">
-        <h1>${companyName || 'Company'}</h1>
-        <div class="sub">LEDGER: ${ledger.name} &nbsp;·&nbsp; ${MONTHS[monthIdx]}</div>
-      </div>
-      <table>
-        <thead><tr>
-          <th style="width:80px">Date</th><th>Particulars</th><th style="width:80px">Vch Type</th>
-          <th style="width:70px;text-align:center">Vch No.</th>
-          <th style="width:110px;text-align:right">Debit</th>
-          <th style="width:110px;text-align:right">Credit</th>
-          <th style="width:120px;text-align:right">Balance</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-        <tfoot><tr class="tfoot">
-          <td colspan="4" style="text-align:right;padding-right:12px">Grand Total</td>
-          <td style="text-align:right">${fmt(drTot)}</td>
-          <td style="text-align:right">${fmt(crTot)}</td>
-          <td style="text-align:right">${fmt(running)} ${running >= 0 ? 'Dr' : 'Cr'}</td>
-        </tr></tfoot>
-      </table>
-      <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} | ${companyName}</div>
-    </body></html>`;
+    if (onPrint) {
+      onPrint({
+        type: 'ledger',
+        companyName,
+        ledgerName: ledger.name,
+        period: `${MONTHS[monthIdx]}`,
+        openingBalance: 0,
+        balanceType: 'Dr',
+        rows: printRows,
+        closingBalance: Math.abs(running),
+        closingType: running >= 0 ? 'Dr' : 'Cr'
+      });
+    } else {
+      const htmlRows = vouchers.map(v => {
+        const amt  = Number(v.entry_amount);
+        const isDr = v.entry_type === 'Dr';
+        const runAmt = isDr ? amt : -amt;
+        const localRun = running; // approximation or recalculate
+        return `<tr>
+          <td style="padding:3px 8px;border-bottom:1px solid #eee">${fmtDate(v.date)}</td>
+          <td style="padding:3px 8px;border-bottom:1px solid #eee;font-weight:600">
+            ${v.other_ledger_name || 'Multiple Ledgers'}
+            ${v.narration ? `<div style="font-size:10px;font-style:italic;color:#777">${v.narration}</div>` : ''}
+          </td>
+          <td style="padding:3px 8px;border-bottom:1px solid #eee">${v.type || 'Journal'}</td>
+          <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:center">${v.number || '-'}</td>
+          <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:right;color:#7a0000">${isDr ? fmt(amt) : ''}</td>
+          <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:right;color:#006b00">${!isDr ? fmt(amt) : ''}</td>
+          <td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${fmt(localRun)} ${localRun >= 0 ? 'Dr' : 'Cr'}</td>
+        </tr>`;
+      }).join('');
 
-    const win = window.open('', '_blank', 'width=1000,height=700');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
-  }, [vouchers, ledger, monthIdx, companyName]);
+      const html = `<!DOCTYPE html><html><head>
+        <title>Ledger – ${ledger.name}</title><meta charset="utf-8"/>
+        <style>
+          @page{margin:12mm;size:A4 landscape}
+          *{box-sizing:border-box}
+          body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif;margin:0;padding:0;color:#000;font-size:12px}
+          .hdr{background:#1f4e79;color:#fff;text-align:center;padding:8px 12px}
+          .hdr h1{margin:0;font-size:16px;text-transform:uppercase;letter-spacing:1px}
+          .hdr .sub{font-size:10px;margin-top:3px;opacity:.85}
+          table{width:100%;border-collapse:collapse}
+          thead tr{background:#2c5f8a;color:#fff}
+          th{padding:5px 8px;font-size:10px;font-weight:800;letter-spacing:1px;text-align:left}
+          .tfoot td{border-top:2px solid #1f4e79;font-weight:900;font-size:12px;background:#e8f0f8;padding:5px 8px}
+          .footer{text-align:right;font-size:9px;color:#888;padding:5px 10px;border-top:1px solid #ddd;margin-top:4px}
+        </style>
+      </head><body>
+        <div class="hdr">
+          <h1>${companyName || 'Company'}</h1>
+          <div class="sub">LEDGER: ${ledger.name} &nbsp;·&nbsp; ${MONTHS[monthIdx]}</div>
+        </div>
+        <table>
+          <thead><tr>
+            <th style="width:80px">Date</th><th>Particulars</th><th style="width:80px">Vch Type</th>
+            <th style="width:70px;text-align:center">Vch No.</th>
+            <th style="width:110px;text-align:right">Debit</th>
+            <th style="width:110px;text-align:right">Credit</th>
+            <th style="width:120px;text-align:right">Balance</th>
+          </tr></thead>
+          <tbody>${htmlRows}</tbody>
+          <tfoot><tr class="tfoot">
+            <td colspan="4" style="text-align:right;padding-right:12px">Grand Total</td>
+            <td style="text-align:right">${fmt(drTot)}</td>
+            <td style="text-align:right">${fmt(crTot)}</td>
+            <td style="text-align:right">${fmt(running)} ${running >= 0 ? 'Dr' : 'Cr'}</td>
+          </tr></tfoot>
+        </table>
+        <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} | ${companyName}</div>
+      </body></html>`;
+
+      const win = window.open('', '_blank', 'width=1000,height=700');
+      if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+    }
+  }, [vouchers, ledger, monthIdx, companyName, onPrint]);
 
   // Keyboard: Escape = back, arrows + enter = navigate, Alt+P = print
   useEffect(() => {
@@ -369,7 +416,7 @@ function VoucherRegister({ ledger, monthIdx, branchId, onBack, onDrill, companyN
 }
 
 // ─── LEVEL 2: MONTHLY SUMMARY ────────────────────────────────────────────────
-function LedgerMonthlySummary({ ledger, branchId, onBack, onDrill, companyName }: any) {
+function LedgerMonthlySummary({ ledger, branchId, onBack, onDrill, companyName, onPrint }: any) {
   const [data, setData]     = useState<any[]>([]);
   const [selIdx, setSelIdx] = useState(0);
 
@@ -395,67 +442,96 @@ function LedgerMonthlySummary({ ledger, branchId, onBack, onDrill, companyName }
     const opening = (ledger.balanceType === 'Cr' ? -1 : 1) * Number(ledger.openingBalance || 0);
     let running   = opening;
 
-    const rows = data.map(row => {
+    const printRows = data.map(row => {
       running += (row.dr - row.cr);
-      return `<tr>
-        <td style="padding:4px 10px;border-bottom:1px solid #eee">${row.month}</td>
-        <td style="padding:4px 10px;border-bottom:1px solid #eee;text-align:right;color:#7a0000">${row.dr > 0 ? fmt(row.dr) : ''}</td>
-        <td style="padding:4px 10px;border-bottom:1px solid #eee;text-align:right;color:#006b00">${row.cr > 0 ? fmt(row.cr) : ''}</td>
-        <td style="padding:4px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${fmt(running)} ${running >= 0 ? 'Dr' : 'Cr'}</td>
-      </tr>`;
-    }).join('');
+      return {
+        date: row.month,
+        particulars: `Monthly Summary - ${row.month}`,
+        vchType: '',
+        vchNo: '',
+        debit: row.dr > 0 ? row.dr : undefined,
+        credit: row.cr > 0 ? row.cr : undefined,
+        balance: Math.abs(running),
+        runType: running >= 0 ? ('Dr' as const) : ('Cr' as const)
+      };
+    });
 
     const totalDr = data.reduce((a, b) => a + b.dr, 0);
     const totalCr = data.reduce((a, b) => a + b.cr, 0);
     const closing = opening + (totalDr - totalCr);
 
-    const html = `<!DOCTYPE html><html><head>
-      <title>Monthly Summary – ${ledger.name}</title><meta charset="utf-8"/>
-      <style>
-        @page{margin:12mm;size:A4 portrait}
-        *{box-sizing:border-box}
-        body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif;margin:0;padding:0;color:#000;font-size:12px}
-        .hdr{background:#1f4e79;color:#fff;text-align:center;padding:8px 12px}
-        .hdr h1{margin:0;font-size:16px;text-transform:uppercase;letter-spacing:1px}
-        .hdr .sub{font-size:10px;margin-top:3px;opacity:.85}
-        .meta{display:flex;justify-content:space-between;padding:5px 12px;background:#f0f4f8;border-bottom:1px solid #b8c4cc;font-size:11px}
-        table{width:100%;border-collapse:collapse}
-        thead tr{background:#2c5f8a;color:#fff}
-        th{padding:5px 10px;font-size:10px;font-weight:800;letter-spacing:1px;text-align:left}
-        .tfoot td{border-top:2px solid #1f4e79;font-weight:900;font-size:12px;background:#e8f0f8;padding:5px 10px}
-        .footer{text-align:right;font-size:9px;color:#888;padding:5px 10px;border-top:1px solid #ddd;margin-top:4px}
-      </style>
-    </head><body>
-      <div class="hdr">
-        <h1>${companyName || 'Company'}</h1>
-        <div class="sub">MONTHLY SUMMARY: ${ledger.name}</div>
-      </div>
-      <div class="meta">
-        <span><b>Group:</b> ${ledger.group_name || ledger.group || '—'}</span>
-        <span><b>Opening Balance:</b> ${fmt(Math.abs(opening))} ${opening >= 0 ? 'Dr' : 'Cr'}</span>
-        <span><b>Closing Balance:</b> ${fmt(Math.abs(closing))} ${closing >= 0 ? 'Dr' : 'Cr'}</span>
-      </div>
-      <table>
-        <thead><tr>
-          <th style="width:35%">Month</th>
-          <th style="width:22%;text-align:right">Debit</th>
-          <th style="width:22%;text-align:right">Credit</th>
-          <th style="width:21%;text-align:right">Balance</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-        <tfoot><tr class="tfoot">
-          <td>Grand Total</td>
-          <td style="text-align:right">${fmt(totalDr)}</td>
-          <td style="text-align:right">${fmt(totalCr)}</td>
-          <td style="text-align:right">${fmt(Math.abs(closing))} ${closing >= 0 ? 'Dr' : 'Cr'}</td>
-        </tr></tfoot>
-      </table>
-      <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} | ${companyName}</div>
-    </body></html>`;
+    if (onPrint) {
+      onPrint({
+        type: 'ledger',
+        companyName,
+        ledgerName: `${ledger.name} (Monthly Summary)`,
+        period: 'All Months',
+        openingBalance: Math.abs(opening),
+        balanceType: opening >= 0 ? 'Dr' : 'Cr',
+        rows: printRows,
+        closingBalance: Math.abs(closing),
+        closingType: closing >= 0 ? 'Dr' : 'Cr'
+      });
+    } else {
+      let runBal = opening;
+      const htmlRows = data.map(row => {
+        runBal += (row.dr - row.cr);
+        return `<tr>
+          <td style="padding:4px 10px;border-bottom:1px solid #eee">${row.month}</td>
+          <td style="padding:4px 10px;border-bottom:1px solid #eee;text-align:right;color:#7a0000">${row.dr > 0 ? fmt(row.dr) : ''}</td>
+          <td style="padding:4px 10px;border-bottom:1px solid #eee;text-align:right;color:#006b00">${row.cr > 0 ? fmt(row.cr) : ''}</td>
+          <td style="padding:4px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${fmt(runBal)} ${runBal >= 0 ? 'Dr' : 'Cr'}</td>
+        </tr>`;
+      }).join('');
 
-    const win = window.open('', '_blank', 'width=800,height=650');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
-  }, [data, ledger, companyName]);
+      const html = `<!DOCTYPE html><html><head>
+        <title>Monthly Summary – ${ledger.name}</title><meta charset="utf-8"/>
+        <style>
+          @page{margin:12mm;size:A4 portrait}
+          *{box-sizing:border-box}
+          body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif;margin:0;padding:0;color:#000;font-size:12px}
+          .hdr{background:#1f4e79;color:#fff;text-align:center;padding:8px 12px}
+          .hdr h1{margin:0;font-size:16px;text-transform:uppercase;letter-spacing:1px}
+          .hdr .sub{font-size:10px;margin-top:3px;opacity:.85}
+          .meta{display:flex;justify-content:space-between;padding:5px 12px;background:#f0f4f8;border-bottom:1px solid #b8c4cc;font-size:11px}
+          table{width:100%;border-collapse:collapse}
+          thead tr{background:#2c5f8a;color:#fff}
+          th{padding:5px 10px;font-size:10px;font-weight:800;letter-spacing:1px;text-align:left}
+          .tfoot td{border-top:2px solid #1f4e79;font-weight:900;font-size:12px;background:#e8f0f8;padding:5px 10px}
+          .footer{text-align:right;font-size:9px;color:#888;padding:5px 10px;border-top:1px solid #ddd;margin-top:4px}
+        </style>
+      </head><body>
+        <div class="hdr">
+          <h1>${companyName || 'Company'}</h1>
+          <div class="sub">MONTHLY SUMMARY: ${ledger.name}</div>
+        </div>
+        <div class="meta">
+          <span><b>Group:</b> ${ledger.group_name || ledger.group || '—'}</span>
+          <span><b>Opening Balance:</b> ${fmt(Math.abs(opening))} ${opening >= 0 ? 'Dr' : 'Cr'}</span>
+          <span><b>Closing Balance:</b> ${fmt(Math.abs(closing))} ${closing >= 0 ? 'Dr' : 'Cr'}</span>
+        </div>
+        <table>
+          <thead><tr>
+            <th style="width:35%">Month</th>
+            <th style="width:22%;text-align:right">Debit</th>
+            <th style="width:22%;text-align:right">Credit</th>
+            <th style="width:21%;text-align:right">Balance</th>
+          </tr></thead>
+          <tbody>${htmlRows}</tbody>
+          <tfoot><tr class="tfoot">
+            <td>Grand Total</td>
+            <td style="text-align:right">${fmt(totalDr)}</td>
+            <td style="text-align:right">${fmt(totalCr)}</td>
+            <td style="text-align:right">${fmt(Math.abs(closing))} ${closing >= 0 ? 'Dr' : 'Cr'}</td>
+          </tr></tfoot>
+        </table>
+        <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} | ${companyName}</div>
+      </body></html>`;
+
+      const win = window.open('', '_blank', 'width=800,height=650');
+      if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+    }
+  }, [data, ledger, companyName, onPrint]);
 
   // Keyboard: Escape = back, arrows + enter = navigate, Alt+P = print
   useEffect(() => {
@@ -667,66 +743,109 @@ export default function TrialBalanceScreen({
     const fmt = (n: number) => n === 0 ? '' : Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
     const now = new Date().toLocaleString('en-IN');
 
-    const groupRows = sortedGroups.map(grp => {
-      const g = groupsData[grp];
-      const ledgerSubRows = (isDetailed || expandedGroups.has(grp))
-        ? g.ledgers.map(l => {
+    if (onPrint) {
+      const printRows: any[] = [];
+      sortedGroups.forEach(grp => {
+        const g = groupsData[grp];
+        printRows.push({
+          particulars: grp,
+          isGroup: true,
+          level: 0,
+          clDr: g.dr > 0 ? g.dr : undefined,
+          clCr: g.cr > 0 ? g.cr : undefined
+        });
+        if (isDetailed || expandedGroups.has(grp)) {
+          g.ledgers.forEach(l => {
             const b = ledgerBalances[l.id];
-            if (b === 0) return '';
-            return `<tr style="background:#fff">
-              <td style="padding:2px 8px 2px 24px;font-size:11px;border-bottom:1px solid #eee;color:#444">${l.name}</td>
-              <td style="padding:2px 10px;text-align:right;font-size:11px;border-bottom:1px solid #eee;color:#444">${b > 0 ? fmt(b) : ''}</td>
-              <td style="padding:2px 10px;text-align:right;font-size:11px;border-bottom:1px solid #eee;color:#444">${b < 0 ? fmt(Math.abs(b)) : ''}</td>
-            </tr>`;
-          }).join('')
-        : '';
-      return `
-        <tr style="background:#f2f6fa">
-          <td style="padding:4px 10px;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${grp}</td>
-          <td style="padding:4px 10px;text-align:right;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${fmt(g.dr)}</td>
-          <td style="padding:4px 10px;text-align:right;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${fmt(g.cr)}</td>
-        </tr>${ledgerSubRows}`;
-    }).join('');
+            if (b === 0) return;
+            printRows.push({
+              particulars: l.name,
+              isGroup: false,
+              level: 1,
+              clDr: b > 0 ? b : undefined,
+              clCr: b < 0 ? Math.abs(b) : undefined
+            });
+          });
+        }
+      });
 
-    const html = `<!DOCTYPE html><html><head>
-      <title>Trial Balance</title><meta charset="utf-8"/>
-      <style>
-        @page{margin:12mm;size:A4 portrait}
-        *{box-sizing:border-box}
-        body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif;margin:0;padding:0;color:#000;font-size:12px}
-        .hdr{background:#1f4e79;color:#fff;text-align:center;padding:8px 12px}
-        .hdr h1{margin:0;font-size:16px;text-transform:uppercase;letter-spacing:1px}
-        .hdr .sub{font-size:10px;margin-top:3px;opacity:.85;letter-spacing:.5px}
-        table{width:100%;border-collapse:collapse}
-        .col-hdr{background:#2c5f8a;color:#fff;text-align:center;font-size:10px;font-weight:800;padding:4px 10px;letter-spacing:2px}
-        .total td{border-top:2px solid #1f4e79;border-bottom:2px solid #1f4e79;font-weight:900;font-size:13px;background:#e8f0f8;padding:5px 10px}
-        .footer{text-align:right;font-size:9px;color:#888;padding:5px 10px;border-top:1px solid #ddd;margin-top:4px}
-        @media print{.footer{position:fixed;bottom:0;right:0;left:0}}
-      </style>
-    </head><body>
-      <div class="hdr">
-        <h1>${companyName || 'Company'}</h1>
-        <div class="sub">TRIAL BALANCE${isDetailed ? ' — DETAILED' : ''}</div>
-      </div>
-      <table>
-        <tr>
-          <th class="col-hdr" style="text-align:left;width:60%">PARTICULARS</th>
-          <th class="col-hdr" style="width:20%">DEBIT</th>
-          <th class="col-hdr" style="width:20%">CREDIT</th>
-        </tr>
-        ${groupRows}
-        <tr class="total">
-          <td>Grand Total</td>
-          <td style="text-align:right">${fmt(grandTotals.dr)}</td>
-          <td style="text-align:right">${fmt(grandTotals.cr)}</td>
-        </tr>
-      </table>
-      <div class="footer">Printed on ${now} | ${companyName}</div>
-    </body></html>`;
+      onPrint({
+        type: 'trial_balance',
+        companyName,
+        period: 'All Dates',
+        rows: printRows,
+        totals: {
+          opDr: 0,
+          opCr: 0,
+          transDr: 0,
+          transCr: 0,
+          clDr: grandTotals.dr,
+          clCr: grandTotals.cr
+        },
+        isDetailed
+      });
+    } else {
+      const groupRows = sortedGroups.map(grp => {
+        const g = groupsData[grp];
+        const ledgerSubRows = (isDetailed || expandedGroups.has(grp))
+          ? g.ledgers.map(l => {
+              const b = ledgerBalances[l.id];
+              if (b === 0) return '';
+              return `<tr style="background:#fff">
+                <td style="padding:2px 8px 2px 24px;font-size:11px;border-bottom:1px solid #eee;color:#444">${l.name}</td>
+                <td style="padding:2px 10px;text-align:right;font-size:11px;border-bottom:1px solid #eee;color:#444">${b > 0 ? fmt(b) : ''}</td>
+                <td style="padding:2px 10px;text-align:right;font-size:11px;border-bottom:1px solid #eee;color:#444">${b < 0 ? fmt(Math.abs(b)) : ''}</td>
+              </tr>`;
+            }).join('')
+          : '';
+        return `
+          <tr style="background:#f2f6fa">
+            <td style="padding:4px 10px;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${grp}</td>
+            <td style="padding:4px 10px;text-align:right;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${fmt(g.dr)}</td>
+            <td style="padding:4px 10px;text-align:right;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${fmt(g.cr)}</td>
+          </tr>${ledgerSubRows}`;
+      }).join('');
 
-    const win = window.open('', '_blank', 'width=800,height=650');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
-  }, [sortedGroups, groupsData, ledgerBalances, isDetailed, expandedGroups, grandTotals, companyName]);
+      const html = `<!DOCTYPE html><html><head>
+        <title>Trial Balance</title><meta charset="utf-8"/>
+        <style>
+          @page{margin:12mm;size:A4 portrait}
+          *{box-sizing:border-box}
+          body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif;margin:0;padding:0;color:#000;font-size:12px}
+          .hdr{background:#1f4e79;color:#fff;text-align:center;padding:8px 12px}
+          .hdr h1{margin:0;font-size:16px;text-transform:uppercase;letter-spacing:1px}
+          .hdr .sub{font-size:10px;margin-top:3px;opacity:.85;letter-spacing:.5px}
+          table{width:100%;border-collapse:collapse}
+          .col-hdr{background:#2c5f8a;color:#fff;text-align:center;font-size:10px;font-weight:800;padding:4px 10px;letter-spacing:2px}
+          .total td{border-top:2px solid #1f4e79;border-bottom:2px solid #1f4e79;font-weight:900;font-size:13px;background:#e8f0f8;padding:5px 10px}
+          .footer{text-align:right;font-size:9px;color:#888;padding:5px 10px;border-top:1px solid #ddd;margin-top:4px}
+          @media print{.footer{position:fixed;bottom:0;right:0;left:0}}
+        </style>
+      </head><body>
+        <div class="hdr">
+          <h1>${companyName || 'Company'}</h1>
+          <div class="sub">TRIAL BALANCE${isDetailed ? ' — DETAILED' : ''}</div>
+        </div>
+        <table>
+          <tr>
+            <th class="col-hdr" style="text-align:left;width:60%">PARTICULARS</th>
+            <th class="col-hdr" style="width:20%">DEBIT</th>
+            <th class="col-hdr" style="width:20%">CREDIT</th>
+          </tr>
+          ${groupRows}
+          <tr class="total">
+            <td>Grand Total</td>
+            <td style="text-align:right">${fmt(grandTotals.dr)}</td>
+            <td style="text-align:right">${fmt(grandTotals.cr)}</td>
+          </tr>
+        </table>
+        <div class="footer">Printed on ${now} | ${companyName}</div>
+      </body></html>`;
+
+      const win = window.open('', '_blank', 'width=800,height=650');
+      if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+    }
+  }, [sortedGroups, groupsData, ledgerBalances, isDetailed, expandedGroups, grandTotals, companyName, onPrint]);
 
   const handleExport = useCallback(() => {
     const exportData = sortedGroups.flatMap(grp => {
@@ -802,6 +921,7 @@ export default function TrialBalanceScreen({
         voucherId={selectedVoucherId}
         onBack={() => setViewLevel('vouchers')}
         companyName={companyName}
+        onPrint={onPrint}
       />
     );
   }
@@ -814,6 +934,7 @@ export default function TrialBalanceScreen({
         onBack={() => setViewLevel('monthly')}
         onDrill={(vId: string) => { setSelectedVoucherId(vId); setViewLevel('voucher_detail'); }}
         companyName={companyName}
+        onPrint={onPrint}
       />
     );
   }
@@ -825,6 +946,7 @@ export default function TrialBalanceScreen({
         onBack={() => setViewLevel('trial')}
         onDrill={(mIdx: number) => { setSelectedMonthIdx(mIdx); setViewLevel('vouchers'); }}
         companyName={companyName}
+        onPrint={onPrint}
       />
     );
   }

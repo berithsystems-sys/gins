@@ -245,7 +245,7 @@ function AddPeriodModal({ onAdd, onCancel }: { onAdd:(label:string,from:string,t
 
 // ─── Main PLScreen Component ───────────────────────────────────────────────────
 interface Period { label: string; from: string; to: string; }
-interface PLScreenProps { branchId?: string; onBack?: () => void; }
+interface PLScreenProps { branchId?: string; onBack?: () => void; onPrint?: (data: any) => void; }
 
 const FONT_   = `-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,sans-serif`;
 const HDR_BG  = '#1f4e79';
@@ -254,7 +254,7 @@ const LIGHT   = '#f0f4f8';
 const ROW_BDR = '#e0e6ee';
 const DARK    = '#1a2a3a';
 
-export default function PLScreen({ branchId, onBack }: PLScreenProps) {
+export default function PLScreen({ branchId, onBack, onPrint }: PLScreenProps) {
   const [ledgers, setLedgers]             = useState<any[]>([]);
   const [allVouchers, setAllVouchers]     = useState<any[]>([]);
   const [companyName, setCompanyName]     = useState('');
@@ -362,88 +362,115 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
 
   // ── P&L print (main screen) ──────────────────────────────────────────────
   const handlePrint = useCallback(() => {
-    const fmt = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-    const period = allPeriods[0];
-    const pt = periodTotals[0];
-    const periodStr = period?.from && period?.to
-      ? `${fmtDate(period.from)} to ${fmtDate(period.to)}`
-      : 'All Dates';
+    if (onPrint) {
+      const period = allPeriods[0];
+      const pt = periodTotals[0];
+      const periodStr = period?.from && period?.to
+        ? `${fmtDate(period.from)} to ${fmtDate(period.to)}`
+        : 'All Dates';
 
-    const buildGroupRows = (groups: string[]) =>
-      groups.map(grp => {
-        const total = Math.abs(groupTotalForPeriod(grp, period.from, period.to));
-        if (total === 0) return '';
-        const ledgerRows = groupLedgersNonZero(grp, mainPeriod.from, mainPeriod.to)
-          .filter(l => calcBalanceForPeriod(l.id, period.from, period.to) !== 0)
-          .map(l => {
-            const bal = Math.abs(calcBalanceForPeriod(l.id, period.from, period.to));
-            return `<tr>
-              <td style="padding:2px 8px 2px 24px;font-size:11px;border-bottom:1px solid #eee;color:#444">${l.name}</td>
-              <td style="padding:2px 10px;text-align:right;font-size:11px;border-bottom:1px solid #eee;color:#444">${fmt(bal)}</td>
-            </tr>`;
-          }).join('');
-        return `
-          <tr style="background:#f2f6fa">
-            <td style="padding:4px 10px;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${grp}</td>
-            <td style="padding:4px 10px;text-align:right;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${fmt(total)}</td>
-          </tr>${ledgerRows}`;
-      }).join('');
+      const buildGroups = (groups: string[]) =>
+        groups.map(grp => {
+          const total = Math.abs(groupTotalForPeriod(grp, period.from, period.to));
+          const ledgers = groupLedgersNonZero(grp, period.from, period.to)
+            .map(l => ({
+              name: l.name,
+              amount: Math.abs(calcBalanceForPeriod(l.id, period.from, period.to))
+            }));
+          return { group: grp, amount: total, ledgers };
+        }).filter(g => g.amount > 0);
 
-    const nett  = pt?.nett  ?? 0;
-    const grand = pt?.grand ?? 0;
+      onPrint({
+        type: 'pl_account',
+        companyName,
+        period: periodStr,
+        expenditure: buildGroups(LEFT_GROUPS),
+        income: buildGroups(RIGHT_GROUPS),
+        nett: pt?.nett ?? 0,
+        grandTotal: pt?.grand ?? 0
+      });
+    } else {
+      const fmt = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+      const period = allPeriods[0];
+      const pt = periodTotals[0];
+      const periodStr = period?.from && period?.to
+        ? `${fmtDate(period.from)} to ${fmtDate(period.to)}`
+        : 'All Dates';
 
-    const html = `<!DOCTYPE html><html><head>
-      <title>Profit & Loss – ${companyName}</title>
-      <meta charset="utf-8"/>
-      <style>
-        @page { margin: 12mm; size: A4 landscape; }
-        * { box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 12px; }
-        .hdr { background: #1f4e79; color: #fff; text-align: center; padding: 8px 12px; }
-        .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
-        .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; letter-spacing: 0.5px; }
-        .cols { display: flex; border-top: 2px solid #1f4e79; }
-        .col { flex: 1; }
-        .col:first-child { border-right: 2px solid #1f4e79; }
-        table { width: 100%; border-collapse: collapse; }
-        .col-hdr { background: #2c5f8a; color: #fff; text-align: center; font-size: 10px; font-weight: 800; padding: 4px; letter-spacing: 2px; }
-        .nett-row td { font-style: italic; background: #f0f8f0; padding: 3px 10px; font-size: 11px; border-bottom: 1px solid #eee; font-weight: 700; color: #006b00; }
-        .nett-row.loss td { background: #fff0f0; color: #7a0000; }
-        .total td { border-top: 2px solid #1f4e79; border-bottom: 2px solid #1f4e79; font-weight: 900; font-size: 13px; background: #e8f0f8; padding: 5px 10px; }
-        .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
-      </style>
-    </head><body>
-      <div class="hdr">
-        <h1>${companyName || 'Company'}</h1>
-        <div class="sub">PROFIT &amp; LOSS ACCOUNT &nbsp;·&nbsp; ${periodStr}</div>
-      </div>
-      <div class="cols">
-        <div class="col">
-          <table>
-            <tr><td colspan="2" class="col-hdr">EXPENDITURE</td></tr>
-            ${buildGroupRows(LEFT_GROUPS)}
-            ${nett >= 0 ? `<tr class="nett-row"><td>Net Profit (transferred to Balance Sheet)</td><td style="text-align:right">${fmt(nett)}</td></tr>` : ''}
-            <tr class="total"><td>Total</td><td style="text-align:right">${fmt(grand)}</td></tr>
-          </table>
+      const buildGroupRows = (groups: string[]) =>
+        groups.map(grp => {
+          const total = Math.abs(groupTotalForPeriod(grp, period.from, period.to));
+          if (total === 0) return '';
+          const ledgerRows = groupLedgersNonZero(grp, mainPeriod.from, mainPeriod.to)
+            .filter(l => calcBalanceForPeriod(l.id, period.from, period.to) !== 0)
+            .map(l => {
+              const bal = Math.abs(calcBalanceForPeriod(l.id, period.from, period.to));
+              return `<tr>
+                <td style="padding:2px 8px 2px 24px;font-size:11px;border-bottom:1px solid #eee;color:#444">${l.name}</td>
+                <td style="padding:2px 10px;text-align:right;font-size:11px;border-bottom:1px solid #eee;color:#444">${fmt(bal)}</td>
+              </tr>`;
+            }).join('');
+          return `
+            <tr style="background:#f2f6fa">
+              <td style="padding:4px 10px;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${grp}</td>
+              <td style="padding:4px 10px;text-align:right;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${fmt(total)}</td>
+            </tr>${ledgerRows}`;
+        }).join('');
+
+      const nett  = pt?.nett  ?? 0;
+      const grand = pt?.grand ?? 0;
+
+      const html = `<!DOCTYPE html><html><head>
+        <title>Profit & Loss – ${companyName}</title>
+        <meta charset="utf-8"/>
+        <style>
+          @page { margin: 12mm; size: A4 landscape; }
+          * { box-sizing: border-box; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 12px; }
+          .hdr { background: #1f4e79; color: #fff; text-align: center; padding: 8px 12px; }
+          .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+          .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; letter-spacing: 0.5px; }
+          .cols { display: flex; border-top: 2px solid #1f4e79; }
+          .col { flex: 1; }
+          .col:first-child { border-right: 2px solid #1f4e79; }
+          table { width: 100%; border-collapse: collapse; }
+          .col-hdr { background: #2c5f8a; color: #fff; text-align: center; font-size: 10px; font-weight: 800; padding: 4px; letter-spacing: 2px; }
+          .nett-row td { font-style: italic; background: #f0f8f0; padding: 3px 10px; font-size: 11px; border-bottom: 1px solid #eee; font-weight: 700; color: #006b00; }
+          .nett-row.loss td { background: #fff0f0; color: #7a0000; }
+          .total td { border-top: 2px solid #1f4e79; border-bottom: 2px solid #1f4e79; font-weight: 900; font-size: 13px; background: #e8f0f8; padding: 5px 10px; }
+          .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
+        </style>
+      </head><body>
+        <div class="hdr">
+          <h1>${companyName || 'Company'}</h1>
+          <div class="sub">PROFIT &amp; LOSS ACCOUNT &nbsp;·&nbsp; ${periodStr}</div>
         </div>
-        <div class="col">
-          <table>
-            <tr><td colspan="2" class="col-hdr">INCOME</td></tr>
-            ${buildGroupRows(RIGHT_GROUPS)}
-            ${nett < 0 ? `<tr class="nett-row loss"><td>Net Loss (transferred to Balance Sheet)</td><td style="text-align:right">${fmt(Math.abs(nett))}</td></tr>` : ''}
-            <tr class="total"><td>Total</td><td style="text-align:right">${fmt(grand)}</td></tr>
-          </table>
+        <div class="cols">
+          <div class="col">
+            <table>
+              <tr><td colspan="2" class="col-hdr">EXPENDITURE</td></tr>
+              ${buildGroupRows(LEFT_GROUPS)}
+              ${nett >= 0 ? `<tr class="nett-row"><td>Net Profit (transferred to Balance Sheet)</td><td style="text-align:right">${fmt(nett)}</td></tr>` : ''}
+              <tr class="total"><td>Total</td><td style="text-align:right">${fmt(grand)}</td></tr>
+            </table>
+          </div>
+          <div class="col">
+            <table>
+              <tr><td colspan="2" class="col-hdr">INCOME</td></tr>
+              ${buildGroupRows(RIGHT_GROUPS)}
+              ${nett < 0 ? `<tr class="nett-row loss"><td>Net Loss (transferred to Balance Sheet)</td><td style="text-align:right">${fmt(Math.abs(nett))}</td></tr>` : ''}
+              <tr class="total"><td>Total</td><td style="text-align:right">${fmt(grand)}</td></tr>
+            </table>
+          </div>
         </div>
-      </div>
-      <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} &nbsp;|&nbsp; ${companyName}</div>
-    </body></html>`;
+        <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} &nbsp;|&nbsp; ${companyName}</div>
+      </body></html>`;
 
-    const win = window.open('', '_blank', 'width=960,height=700');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
-  }, [allPeriods, periodTotals, groupTotalForPeriod, groupLedgersNonZero, calcBalanceForPeriod, mainPeriod, companyName, LEFT_GROUPS, RIGHT_GROUPS]);
+      const win = window.open('', '_blank', 'width=960,height=700');
+      if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+    }
+  }, [allPeriods, periodTotals, groupTotalForPeriod, groupLedgersNonZero, calcBalanceForPeriod, mainPeriod, companyName, LEFT_GROUPS, RIGHT_GROUPS, onPrint]);
 
-  // ── FIX-1: Ledger statement print (drill-down screen) ────────────────────
-  // Fetches fresh rows, builds a full A4 ledger statement, opens print dialog.
   const handlePrintLedger = useCallback(() => {
     if (!drillLedger) return;
     const fmt = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
@@ -456,96 +483,118 @@ export default function PLScreen({ branchId, onBack }: PLScreenProps) {
         const ob    = Number(drillLedger.openingBalance || 0);
         let running = drillLedger.balanceType === 'Cr' ? -ob : ob;
 
-        const rowsHtml = rows.map((r: any, i: number) => {
+        const printRows = rows.map((r: any) => {
           const amt   = Number(r.entry_amount || 0);
           running    += r.entry_type === 'Dr' ? amt : -amt;
-          const runType = running >= 0 ? 'Dr' : 'Cr';
-          const isDr  = r.entry_type === 'Dr';
-          const bg    = i % 2 === 0 ? '#ffffff' : '#fafbfd';
-          return `<tr style="background:${bg};border-bottom:1px solid #e0e6ee">
-            <td style="padding:3px 8px">${fmtDate(r.date)}</td>
-            <td style="padding:3px 8px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px">${r.narration || r.type || '—'}</td>
-            <td style="padding:3px 8px;font-style:italic;color:#555">${r.type || ''}</td>
-            <td style="padding:3px 8px;text-align:center">${r.number || ''}</td>
-            <td style="padding:3px 10px;text-align:right;color:#7a0000;font-weight:${isDr?700:400}">${isDr ? fmt(amt) : ''}</td>
-            <td style="padding:3px 10px;text-align:right;color:#006b00;font-weight:${!isDr?700:400}">${!isDr ? fmt(amt) : ''}</td>
-            <td style="padding:3px 10px;text-align:right;font-weight:600">${fmt(running)} ${runType}</td>
-          </tr>`;
-        }).join('');
+          return {
+            date: fmtDate(r.date),
+            particulars: r.narration || r.type || '—',
+            vchType: r.type || '',
+            vchNo: r.number || '',
+            debit: r.entry_type === 'Dr' ? amt : undefined,
+            credit: r.entry_type === 'Cr' ? amt : undefined,
+            balance: Math.abs(running),
+            runType: running >= 0 ? ('Dr' as const) : ('Cr' as const)
+          };
+        });
 
-        const totalDr = rows.filter((r: any) => r.entry_type === 'Dr').reduce((a: number, r: any) => a + Number(r.entry_amount || 0), 0);
-        const totalCr = rows.filter((r: any) => r.entry_type === 'Cr').reduce((a: number, r: any) => a + Number(r.entry_amount || 0), 0);
+        const totalDr = rows.filter(r => r.entry_type === 'Dr').reduce((a, r) => a + Number(r.entry_amount || 0), 0);
+        const totalCr = rows.filter(r => r.entry_type === 'Cr').reduce((a, r) => a + Number(r.entry_amount || 0), 0);
         const closing = (drillLedger.balanceType === 'Cr' ? -ob : ob) + totalDr - totalCr;
-        const periodStr = mainPeriod.from && mainPeriod.to
-          ? `${fmtDate(mainPeriod.from)} to ${fmtDate(mainPeriod.to)}`
-          : 'All Dates';
 
-        const html = `<!DOCTYPE html><html><head>
-          <title>Ledger – ${drillLedger.name}</title>
-          <meta charset="utf-8"/>
-          <style>
-            @page { margin: 12mm; size: A4 portrait; }
-            * { box-sizing: border-box; }
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 12px; }
-            .hdr { background: #1f4e79; color: #fff; text-align: center; padding: 8px 12px; }
-            .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
-            .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; }
-            .meta { display: flex; justify-content: space-between; padding: 5px 12px; background: #fafbfd; border-bottom: 1px solid #b8c4cc; font-size: 11px; }
-            table { width: 100%; border-collapse: collapse; }
-            thead tr { background: #f0f4f8; }
-            th { padding: 4px 8px; font-size: 11px; font-weight: 700; color: #333; border-bottom: 1px solid #b8c4cc; border-right: 1px solid #e0e6ee; text-align: left; white-space: nowrap; }
-            th.r { text-align: right; }
-            .ob td { background: #f8fbff; font-style: italic; color: #555; font-weight: 700; padding: 3px 8px; border-bottom: 1px solid #e0e6ee; }
-            .total td { background: #f0f4f8; font-weight: 700; padding: 4px 10px; border-top: 2px solid #555; }
-            .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
-          </style>
-        </head><body>
-          <div class="hdr">
-            <h1>${companyName || 'Company'}</h1>
-            <div class="sub">LEDGER STATEMENT &nbsp;·&nbsp; ${drillLedger.name} &nbsp;·&nbsp; ${periodStr}</div>
-          </div>
-          <div class="meta">
-            <div><b>Ledger:</b> ${drillLedger.name} &nbsp;&nbsp; <b>Group:</b> ${drillLedger.group || drillLedger.group_name || '—'}</div>
-            <div><b>Opening Balance:</b> ${fmt(ob)} ${drillLedger.balanceType || 'Dr'}</div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th style="width:80px">Date</th>
-                <th>Particulars</th>
-                <th style="width:90px">Vch Type</th>
-                <th style="width:65px;text-align:center">Vch No.</th>
-                <th class="r" style="width:110px">Debit (₹)</th>
-                <th class="r" style="width:110px">Credit (₹)</th>
-                <th class="r" style="width:120px">Balance</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr class="ob">
-                <td></td><td>Opening Balance</td><td></td><td></td>
-                <td style="text-align:right;color:#7a0000">${(drillLedger.balanceType !== 'Cr' && ob > 0) ? fmt(ob) : ''}</td>
-                <td style="text-align:right;color:#006b00">${(drillLedger.balanceType === 'Cr' && ob > 0) ? fmt(ob) : ''}</td>
-                <td style="text-align:right">${fmt(ob)} ${drillLedger.balanceType || 'Dr'}</td>
-              </tr>
-              ${rowsHtml}
-            </tbody>
-            <tfoot>
-              <tr class="total">
-                <td colspan="4" style="text-align:right;padding-right:8px">Closing Balance</td>
-                <td style="text-align:right;color:#7a0000">${totalDr > 0 ? fmt(totalDr) : ''}</td>
-                <td style="text-align:right;color:#006b00">${totalCr > 0 ? fmt(totalCr) : ''}</td>
-                <td style="text-align:right">${fmt(closing)} ${closing >= 0 ? 'Dr' : 'Cr'}</td>
-              </tr>
-            </tfoot>
-          </table>
-          <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} &nbsp;|&nbsp; ${companyName} &nbsp;|&nbsp; ${rows.length} transaction(s)</div>
-        </body></html>`;
+        if (onPrint) {
+          onPrint({
+            type: 'ledger',
+            companyName,
+            ledgerName: drillLedger.name,
+            period: 'All Dates',
+            openingBalance: ob,
+            balanceType: drillLedger.balanceType || 'Dr',
+            rows: printRows,
+            closingBalance: Math.abs(closing),
+            closingType: closing >= 0 ? 'Dr' : 'Cr'
+          });
+        } else {
+          const bodyRows = printRows.map((r, i) => {
+            const isDr = r.runType === 'Dr';
+            return `<tr style="background:${i % 2 === 0 ? '#fff' : '#fafbfd'}">
+              <td style="padding:3px 8px;border-right:1px solid #e0e6ee">${r.date}</td>
+              <td style="padding:3px 8px;font-weight:600;border-right:1px solid #e0e6ee;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.particulars}</td>
+              <td style="padding:3px 8px;font-style:italic;color:#555;border-right:1px solid #e0e6ee">${r.vchType}</td>
+              <td style="padding:3px 8px;text-align:center;border-right:1px solid #e0e6ee">${r.vchNo}</td>
+              <td style="padding:3px 10px;text-align:right;color:#7a0000;font-weight:${isDr ? 700 : 400};border-right:1px solid #e0e6ee">${r.debit ? fmt(r.debit) : ''}</td>
+              <td style="padding:3px 10px;text-align:right;color:#006b00;font-weight:${!isDr ? 700 : 400};border-right:1px solid #e0e6ee">${r.credit ? fmt(r.credit) : ''}</td>
+              <td style="padding:3px 10px;text-align:right;font-weight:600">${fmt(r.balance)} ${r.runType}</td>
+            </tr>`;
+          }).join('');
 
-        const win = window.open('', '_blank', 'width=800,height=700');
-        if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+          const html = `<!DOCTYPE html><html><head>
+            <title>Ledger – ${drillLedger.name}</title><meta charset="utf-8"/>
+            <style>
+              @page { margin: 12mm; size: A4 landscape; }
+              * { box-sizing: border-box; }
+              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, sans-serif; margin: 0; padding: 0; font-size: 12px; }
+              .hdr { background: #1f4e79; color: #fff; padding: 8px 14px; }
+              .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+              .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; }
+              .meta { display: flex; justify-content: space-between; background: #f0f4f8; padding: 5px 12px; border-bottom: 1px solid #b8c4cc; font-size: 11px; }
+              table { width: 100%; border-collapse: collapse; }
+              thead th { background: #f0f4f8; padding: 4px 8px; font-size: 11px; font-weight: 700; border-bottom: 1px solid #b8c4cc; border-right: 1px solid #e0e6ee; text-align: left; white-space: nowrap; }
+              thead th:nth-child(4) { text-align: center; }
+              thead th:nth-child(5), thead th:nth-child(6), thead th:nth-child(7) { text-align: right; }
+              .ob-row td { background: #f8fbff; font-weight: 700; font-style: italic; color: #555; padding: 3px 8px; border-bottom: 1px solid #e0e6ee; border-right: 1px solid #e0e6ee; }
+              tfoot td { background: #f0f4f8; font-weight: 700; padding: 4px 8px; border-top: 2px solid #1f4e79; border-right: 1px solid #e0e6ee; }
+              tfoot td:nth-child(5) { text-align: right; color: #7a0000; }
+              tfoot td:nth-child(6) { text-align: right; color: #006b00; }
+              tfoot td:nth-child(7) { text-align: right; font-weight: 800; }
+              .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
+            </style>
+          </head><body>
+            <div class="hdr">
+              <h1>${companyName}</h1>
+              <div class="sub">Ledger Statement &nbsp;·&nbsp; ${drillLedger.name}</div>
+            </div>
+            <div class="meta">
+              <span><strong>Group:</strong> ${drillLedger.group || '—'}</span>
+              <span><strong>Opening Balance:</strong> ${fmt(ob)} ${drillLedger.balanceType || 'Dr'}</span>
+              <span><strong>Closing Balance:</strong> ${fmt(Math.abs(closing))} ${closing >= 0 ? 'Dr' : 'Cr'}</span>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 80px;">Date</th><th>Particulars</th>
+                  <th style="width:100px">Vch Type</th><th style="width:70px">Vch No.</th>
+                  <th style="width:120px">Debit (₹)</th><th style="width:120px">Credit (₹)</th>
+                  <th style="width:130px">Balance</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="ob-row">
+                  <td></td><td>Opening Balance</td><td colspan="2"></td>
+                  <td style="text-align:right;color:#7a0000">${(drillLedger.balanceType || 'Dr') === 'Dr' ? fmt(ob) : ''}</td>
+                  <td style="text-align:right;color:#006b00">${(drillLedger.balanceType || 'Dr') === 'Cr' ? fmt(ob) : ''}</td>
+                  <td style="text-align:right;font-weight:700">${fmt(ob)} ${drillLedger.balanceType || 'Dr'}</td>
+                </tr>
+                ${bodyRows}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="4" style="text-align:right;padding-right:12px">Closing Balance</td>
+                  <td>${totalDr > 0 ? fmt(totalDr) : ''}</td>
+                  <td>${totalCr > 0 ? fmt(totalCr) : ''}</td>
+                  <td>${fmt(Math.abs(closing))} ${closing >= 0 ? 'Dr' : 'Cr'}</td>
+                </tr>
+              </tfoot>
+            </table>
+            <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} &nbsp;|&nbsp; ${drillLedger.name}</div>
+          </body></html>`;
+
+          const win = window.open('', '_blank', 'width=960,height=700');
+          if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+        }
       })
       .catch(err => alert(`Print failed: ${err.message}`));
-  }, [drillLedger, branchId, mainPeriod, companyName]);
+  }, [drillLedger, branchId, companyName, onPrint]);
 
   // ── Global keyboard handler ───────────────────────────────────────────────
   // FIX-3: drillLedger check removed from Alt+P branch so it no longer blocks

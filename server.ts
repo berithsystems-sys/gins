@@ -333,7 +333,7 @@ async function startServer() {
     try {
       const branches = await db('branches').select('id', 'code', 'name', 'location');
       const ledgersRaw = await db('ledgers').select('id', 'branchId', 'group_name', 'openingBalance', 'balanceType');
-      const ledgers = ledgersRaw.map((l: { group_name?: string }) => ({
+      const ledgers = ledgersRaw.map((l: any) => ({
         ...l,
         group: l.group_name,
       }));

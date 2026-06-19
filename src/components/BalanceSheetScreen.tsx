@@ -125,20 +125,21 @@ const s: Record<string, React.CSSProperties> = {
 
 // ── Error Boundary ───────────────────────────────────────────────────────────
 interface EBState { error: Error | null; }
-class ErrorBoundary extends Component<{ children: ReactNode }, EBState> {
+class ErrorBoundary extends React.Component<{ children: ReactNode }, EBState> {
   state: EBState = { error: null };
   static getDerivedStateFromError(error: Error) { return { error }; }
   render() {
-    if (this.state.error) {
+    const self = this as any;
+    if (self.state.error) {
       return (
         <div style={{ padding:40, textAlign:'center', color:'#7a0000', fontFamily:FONT_ }}>
           <div style={{ fontWeight:700, marginBottom:8 }}>⚠ Render Error</div>
-          <div style={{ fontSize:11, color:'#555', fontStyle:'italic' }}>{this.state.error.message}</div>
-          <button onClick={() => this.setState({ error:null })} style={{ marginTop:16, padding:'5px 18px', background:HDR_BG, color:'#fff', border:'none', cursor:'pointer', borderRadius:2 }}>Retry</button>
+          <div style={{ fontSize:11, color:'#555', fontStyle:'italic' }}>{self.state.error.message}</div>
+          <button onClick={() => self.setState({ error:null })} style={{ marginTop:16, padding:'5px 18px', background:HDR_BG, color:'#fff', border:'none', cursor:'pointer', borderRadius:2 }}>Retry</button>
         </div>
       );
     }
-    return this.props.children;
+    return self.props.children;
   }
 }
 
@@ -170,7 +171,7 @@ const SectionHeader = React.memo(({ label, colSpan }: { label: string; colSpan: 
 // ── LedgerDetail ─────────────────────────────────────────────────────────────
 // FIX v8: Added handlePrint() for ledger statement printing
 //         Extended keyboard handler to respond to Alt+P
-function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?: string; onBack: () => void }) {
+function LedgerDetail({ ledger, branchId, onBack, onPrint, companyName }: { ledger: Ledger; branchId?: string; onBack: () => void; onPrint?: (data: any) => void; companyName: string }) {
   const [rows, setRows]       = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -205,24 +206,45 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
     const printRows = rows.map(r => {
       const amt = Number(r.entry_amount || 0);
       runBal += r.entry_type === 'Dr' ? amt : -amt;
-      return { ...r, running: runBal };
+      return {
+        date: fmtDate(r.date),
+        particulars: r.narration || r.type || '—',
+        vchType: r.type || '',
+        vchNo: r.number || '',
+        debit: r.entry_type === 'Dr' ? amt : undefined,
+        credit: r.entry_type === 'Cr' ? amt : undefined,
+        balance: Math.abs(runBal),
+        runType: runBal >= 0 ? ('Dr' as const) : ('Cr' as const)
+      };
     });
 
-    const bodyRows = printRows.map((r, i) => {
-      const isDr    = r.entry_type === 'Dr';
-      const runType = r.running >= 0 ? 'Dr' : 'Cr';
-      return `<tr style="background:${i % 2 === 0 ? '#fff' : '#fafbfd'}">
-        <td style="padding:3px 8px;border-right:1px solid ${BD}">${fmtDate(r.date)}</td>
-        <td style="padding:3px 8px;font-weight:600;border-right:1px solid ${BD};max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.narration || r.type || '—'}</td>
-        <td style="padding:3px 8px;font-style:italic;color:#555;border-right:1px solid ${BD}">${r.type || ''}</td>
-        <td style="padding:3px 8px;text-align:center;border-right:1px solid ${BD}">${r.number || ''}</td>
-        <td style="padding:3px 10px;text-align:right;color:#7a0000;font-weight:${isDr ? 700 : 400};border-right:1px solid ${BD}">${isDr ? fmt(r.entry_amount) : ''}</td>
-        <td style="padding:3px 10px;text-align:right;color:#006b00;font-weight:${!isDr ? 700 : 400};border-right:1px solid ${BD}">${!isDr ? fmt(r.entry_amount) : ''}</td>
-        <td style="padding:3px 10px;text-align:right;font-weight:600">${fmt(r.running)} ${runType}</td>
-      </tr>`;
-    }).join('');
+    if (onPrint) {
+      onPrint({
+        type: 'ledger',
+        companyName,
+        ledgerName: ledger.name,
+        period: 'All Dates',
+        openingBalance: ob,
+        balanceType: ledger.balanceType || 'Dr',
+        rows: printRows,
+        closingBalance: Math.abs(closing),
+        closingType: closing >= 0 ? 'Dr' : 'Cr'
+      });
+    } else {
+      const bodyRows = printRows.map((r, i) => {
+        const isDr    = r.runType === 'Dr';
+        return `<tr style="background:${i % 2 === 0 ? '#fff' : '#fafbfd'}">
+          <td style="padding:3px 8px;border-right:1px solid ${BD}">${r.date}</td>
+          <td style="padding:3px 8px;font-weight:600;border-right:1px solid ${BD};max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.particulars}</td>
+          <td style="padding:3px 8px;font-style:italic;color:#555;border-right:1px solid ${BD}">${r.vchType}</td>
+          <td style="padding:3px 8px;text-align:center;border-right:1px solid ${BD}">${r.vchNo}</td>
+          <td style="padding:3px 10px;text-align:right;color:#7a0000;font-weight:${isDr ? 700 : 400};border-right:1px solid ${BD}">${r.debit ? fmt(r.debit) : ''}</td>
+          <td style="padding:3px 10px;text-align:right;color:#006b00;font-weight:${!isDr ? 700 : 400};border-right:1px solid ${BD}">${r.credit ? fmt(r.credit) : ''}</td>
+          <td style="padding:3px 10px;text-align:right;font-weight:600">${fmt(r.balance)} ${r.runType}</td>
+        </tr>`;
+      }).join('');
 
-    const html = `<!DOCTYPE html>
+      const html = `<!DOCTYPE html>
 <html>
 <head>
   <title>Ledger – ${ledger.name}</title>
@@ -247,14 +269,12 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
     .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
     @media print { .footer { position: fixed; bottom: 0; right: 0; left: 0; } }
   </style>
-</head>
-<body>
+</head><body>
   <div class="hdr">
     <h1>${ledger.name}</h1>
     <div class="sub">Ledger Statement</div>
   </div>
   <div class="meta">
-    <span><strong>Group:</strong> ${ledger.group || '—'}</span>
     <span><strong>Opening Balance:</strong> ${fmt(ob)} ${ledger.balanceType || 'Dr'}</span>
     <span><strong>Closing Balance:</strong> ${fmt(closing)} ${closing >= 0 ? 'Dr' : 'Cr'}</span>
   </div>
@@ -291,16 +311,16 @@ function LedgerDetail({ ledger, branchId, onBack }: { ledger: Ledger; branchId?:
     </tfoot>
   </table>
   <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} &nbsp;|&nbsp; ${ledger.name}</div>
-</body>
-</html>`;
+</body></html>`;
 
-    const win = window.open('', '_blank', 'width=960,height=700');
-    if (win) {
-      win.document.write(html);
-      win.document.close();
-      setTimeout(() => { win.focus(); win.print(); }, 400);
+      const win = window.open('', '_blank', 'width=960,height=700');
+      if (win) {
+        win.document.write(html);
+        win.document.close();
+        setTimeout(() => { win.focus(); win.print(); }, 400);
+      }
     }
-  }, [ledger, rows, ob, obSgn, totalDr, totalCr, closing]);
+  }, [ledger, rows, ob, obSgn, totalDr, totalCr, closing, onPrint, companyName]);
 
   // ── FIX v8: Extended keyboard handler — Escape + Alt+P ────────────
   useEffect(() => {
@@ -704,6 +724,7 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
   }, [allPeriods, groupTotalForPeriod]);
 
   // ── Print (Balance Sheet) ──────────────────────────────────────────
+  // ── Print (Balance Sheet) ──────────────────────────────────────────
   const handlePrint = useCallback(() => {
     const fmt = (n: number) => Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
     const period  = allPeriods[0];
@@ -713,78 +734,105 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
       ? `${fmtDate(period.from)} to ${fmtDate(period.to)}`
       : 'All Dates';
 
-    const buildGroupRows = (groups: string[]) =>
-      groups.map(grp => {
-        const total = Math.abs(groupTotalForPeriod(grp, period.from, period.to));
-        if (total === 0) return '';
-        const ledgerRows = groupLedgersNonZero(grp, period.from, period.to)
-          .map(l => {
-            const bal = Math.abs(calcBalanceForPeriod(l.id, period.from, period.to));
-            return `<tr>
-              <td style="padding:2px 8px 2px 24px;font-size:11px;border-bottom:1px solid #eee;color:#444">${l.name}</td>
-              <td style="padding:2px 10px;text-align:right;font-size:11px;border-bottom:1px solid #eee;color:#444">${fmt(bal)}</td>
-            </tr>`;
-          }).join('');
-        return `
-          <tr style="background:#f2f6fa">
-            <td style="padding:4px 10px;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${grp}</td>
-            <td style="padding:4px 10px;text-align:right;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${fmt(total)}</td>
-          </tr>${ledgerRows}`;
-      }).join('');
+    if (onPrint) {
+      onPrint({
+        type: 'balance_sheet',
+        companyName,
+        period: periodStr,
+        liabilities: LIABILITY_GROUPS.map(grp => {
+          const total = Math.abs(groupTotalForPeriod(grp, period.from, period.to));
+          const ledgers = groupLedgersNonZero(grp, period.from, period.to).map(l => ({
+            name: l.name,
+            amount: Math.abs(calcBalanceForPeriod(l.id, period.from, period.to))
+          }));
+          return { group: grp, amount: total, ledgers };
+        }).filter(g => g.amount > 0),
+        assets: ASSET_GROUPS.map(grp => {
+          const total = Math.abs(groupTotalForPeriod(grp, period.from, period.to));
+          const ledgers = groupLedgersNonZero(grp, period.from, period.to).map(l => ({
+            name: l.name,
+            amount: Math.abs(calcBalanceForPeriod(l.id, period.from, period.to))
+          }));
+          return { group: grp, amount: total, ledgers };
+        }).filter(g => g.amount > 0),
+        plNet,
+        liabTotal: pt?.liabTotal ?? 0,
+        assetTotal: pt?.assetTotal ?? 0
+      });
+    } else {
+      const buildGroupRows = (groups: string[]) =>
+        groups.map(grp => {
+          const total = Math.abs(groupTotalForPeriod(grp, period.from, period.to));
+          if (total === 0) return '';
+          const ledgerRows = groupLedgersNonZero(grp, period.from, period.to)
+            .map(l => {
+              const bal = Math.abs(calcBalanceForPeriod(l.id, period.from, period.to));
+              return `<tr>
+                <td style="padding:2px 8px 2px 24px;font-size:11px;border-bottom:1px solid #eee;color:#444">${l.name}</td>
+                <td style="padding:2px 10px;text-align:right;font-size:11px;border-bottom:1px solid #eee;color:#444">${fmt(bal)}</td>
+              </tr>`;
+            }).join('');
+          return `
+            <tr style="background:#f2f6fa">
+              <td style="padding:4px 10px;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${grp}</td>
+              <td style="padding:4px 10px;text-align:right;font-weight:700;font-size:12px;border-bottom:1px solid #c5d2dc;border-top:1px solid #c5d2dc">${fmt(total)}</td>
+            </tr>${ledgerRows}`;
+        }).join('');
 
-    const html = `<!DOCTYPE html><html><head>
-      <title>Balance Sheet – ${companyName}</title>
-      <meta charset="utf-8"/>
-      <style>
-        @page { margin: 12mm; size: A4 landscape; }
-        * { box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 12px; }
-        .hdr { background: #1f4e79; color: #fff; text-align: center; padding: 8px 12px; }
-        .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
-        .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; letter-spacing: 0.5px; }
-        .cols { display: flex; border-top: 2px solid #1f4e79; }
-        .col { flex: 1; }
-        .col:first-child { border-right: 2px solid #1f4e79; }
-        table { width: 100%; border-collapse: collapse; }
-        .col-hdr { background: #2c5f8a; color: #fff; text-align: center; font-size: 10px; font-weight: 800; padding: 4px; letter-spacing: 2px; }
-        .pl-row td { font-style: italic; background: #fffbf0; padding: 3px 10px; font-size: 11px; border-bottom: 1px solid #eee; }
-        .total td { border-top: 2px solid #1f4e79; border-bottom: 2px solid #1f4e79; font-weight: 900; font-size: 13px; background: #e8f0f8; padding: 5px 10px; }
-        .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
-        @media print { .footer { position: fixed; bottom: 0; right: 0; left: 0; } }
-      </style>
-    </head><body>
-      <div class="hdr">
-        <h1>${companyName || 'Company'}</h1>
-        <div class="sub">BALANCE SHEET &nbsp;·&nbsp; ${periodStr}</div>
-      </div>
-      <div class="cols">
-        <div class="col">
-          <table>
-            <tr><td colspan="2" class="col-hdr">LIABILITIES</td></tr>
-            ${buildGroupRows(LIABILITY_GROUPS)}
-            ${plNet >= 0 ? `<tr class="pl-row"><td>Profit &amp; Loss A/c (Net Profit)</td><td style="text-align:right">${fmt(plNet)}</td></tr>` : ''}
-            <tr class="total"><td>Total</td><td style="text-align:right">${fmt(pt?.liabTotal ?? 0)}</td></tr>
-          </table>
+      const html = `<!DOCTYPE html><html><head>
+        <title>Balance Sheet – ${companyName}</title>
+        <meta charset="utf-8"/>
+        <style>
+          @page { margin: 12mm; size: A4 landscape; }
+          * { box-sizing: border-box; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; padding: 0; color: #000; font-size: 12px; }
+          .hdr { background: #1f4e79; color: #fff; text-align: center; padding: 8px 12px; }
+          .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+          .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; letter-spacing: 0.5px; }
+          .cols { display: flex; border-top: 2px solid #1f4e79; }
+          .col { flex: 1; }
+          .col:first-child { border-right: 2px solid #1f4e79; }
+          table { width: 100%; border-collapse: collapse; }
+          .col-hdr { background: #2c5f8a; color: #fff; text-align: center; font-size: 10px; font-weight: 800; padding: 4px; letter-spacing: 2px; }
+          .pl-row td { font-style: italic; background: #fffbf0; padding: 3px 10px; font-size: 11px; border-bottom: 1px solid #eee; }
+          .total td { border-top: 2px solid #1f4e79; border-bottom: 2px solid #1f4e79; font-weight: 900; font-size: 13px; background: #e8f0f8; padding: 5px 10px; }
+          .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
+          @media print { .footer { position: fixed; bottom: 0; right: 0; left: 0; } }
+        </style>
+      </head><body>
+        <div class="hdr">
+          <h1>${companyName || 'Company'}</h1>
+          <div class="sub">BALANCE SHEET &nbsp;·&nbsp; ${periodStr}</div>
         </div>
-        <div class="col">
-          <table>
-            <tr><td colspan="2" class="col-hdr">ASSETS</td></tr>
-            ${buildGroupRows(ASSET_GROUPS)}
-            ${plNet < 0 ? `<tr class="pl-row"><td>Profit &amp; Loss A/c (Net Loss)</td><td style="text-align:right">${fmt(Math.abs(plNet))}</td></tr>` : ''}
-            <tr class="total"><td>Total</td><td style="text-align:right">${fmt(pt?.assetTotal ?? 0)}</td></tr>
-          </table>
+        <div class="cols">
+          <div class="col">
+            <table>
+              <tr><td colspan="2" class="col-hdr">LIABILITIES</td></tr>
+              ${buildGroupRows(LIABILITY_GROUPS)}
+              ${plNet >= 0 ? `<tr class="pl-row"><td>Profit &amp; Loss A/c (Net Profit)</td><td style="text-align:right">${fmt(plNet)}</td></tr>` : ''}
+              <tr class="total"><td>Total</td><td style="text-align:right">${fmt(pt?.liabTotal ?? 0)}</td></tr>
+            </table>
+          </div>
+          <div class="col">
+            <table>
+              <tr><td colspan="2" class="col-hdr">ASSETS</td></tr>
+              ${buildGroupRows(ASSET_GROUPS)}
+              ${plNet < 0 ? `<tr class="pl-row"><td>Profit &amp; Loss A/c (Net Loss)</td><td style="text-align:right">${fmt(Math.abs(plNet))}</td></tr>` : ''}
+              <tr class="total"><td>Total</td><td style="text-align:right">${fmt(pt?.assetTotal ?? 0)}</td></tr>
+            </table>
+          </div>
         </div>
-      </div>
-      <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} &nbsp;|&nbsp; ${companyName}</div>
-    </body></html>`;
+        <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} &nbsp;|&nbsp; ${companyName}</div>
+      </body></html>`;
 
-    const win = window.open('', '_blank', 'width=960,height=700');
-    if (win) {
-      win.document.write(html);
-      win.document.close();
-      setTimeout(() => { win.focus(); win.print(); }, 400);
+      const win = window.open('', '_blank', 'width=960,height=700');
+      if (win) {
+        win.document.write(html);
+        win.document.close();
+        setTimeout(() => { win.focus(); win.print(); }, 400);
+      }
     }
-  }, [companyName, allPeriods, periodTotals, groupTotalForPeriod, groupLedgersNonZero, calcBalanceForPeriod]);
+  }, [companyName, allPeriods, periodTotals, groupTotalForPeriod, groupLedgersNonZero, calcBalanceForPeriod, onPrint]);
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────
   // FIX v8: Removed `drillLedger` from the early-return guard.
@@ -953,7 +1001,7 @@ function BalanceSheetScreen({ branchId, onBack, onPrint }: BSProps) {
   if (drillLedger) {
     return (
       <ErrorBoundary>
-        <LedgerDetail ledger={drillLedger} branchId={branchId} onBack={() => setDrillLedger(null)} />
+        <LedgerDetail ledger={drillLedger} branchId={branchId} onBack={() => setDrillLedger(null)} onPrint={onPrint} companyName={companyName} />
       </ErrorBoundary>
     );
   }

@@ -50,23 +50,24 @@ const fmtDate = (iso: string) => {
 };
 
 // ── Error Boundary ────────────────────────────────────────────────────────────
-class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+class ErrorBoundary extends React.Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null };
   static getDerivedStateFromError(e: Error) { return { error: e }; }
   render() {
-    if (this.state.error) return (
+    const self = this as any;
+    if (self.state.error) return (
       <div style={{ padding: 40, textAlign: 'center', color: '#7a0000', fontFamily: FONT_ }}>
         <div style={{ fontWeight: 700, marginBottom: 8 }}>⚠ Render Error</div>
         <div style={{ fontSize: 11, color: '#555', fontStyle: 'italic' }}>
-          {(this.state.error as Error).message}
+          {(self.state.error as Error).message}
         </div>
-        <button onClick={() => this.setState({ error: null })}
+        <button onClick={() => self.setState({ error: null })}
           style={{ marginTop: 16, padding: '5px 18px', background: HDR_BG, color: '#fff', border: 'none', cursor: 'pointer', borderRadius: 2 }}>
           Retry
         </button>
       </div>
     );
-    return this.props.children;
+    return self.props.children;
   }
 }
 
@@ -117,11 +118,13 @@ function PeriodModal({ from, to, onAccept, onCancel }: {
 }
 
 // ── LedgerDetail (drill-down) ─────────────────────────────────────────────────
-function LedgerDetail({ ledger, branchId, period, onBack }: {
+function LedgerDetail({ ledger, branchId, period, onBack, onPrint, companyName }: {
   ledger: LedgerSummary;
   branchId?: string;
   period: { from: string; to: string };
   onBack: () => void;
+  onPrint?: (data: any) => void;
+  companyName: string;
 }) {
   const [rows, setRows]       = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -169,87 +172,109 @@ function LedgerDetail({ ledger, branchId, period, onBack }: {
     const printRows = rows.map(r => {
       const amt = Number(r.entry_amount || 0);
       runBal += r.entry_type === 'Dr' ? amt : -amt;
-      return { ...r, running: runBal };
+      return {
+        date: fmtDate(r.date),
+        particulars: r.narration || r.type || '—',
+        vchType: r.type || '',
+        vchNo: r.number || '',
+        debit: r.entry_type === 'Dr' ? amt : undefined,
+        credit: r.entry_type === 'Cr' ? amt : undefined,
+        balance: Math.abs(runBal),
+        runType: runBal >= 0 ? ('Dr' as const) : ('Cr' as const)
+      };
     });
 
-    const bodyRows = printRows.map((r, i) => {
-      const isDr    = r.entry_type === 'Dr';
-      const runType = r.running >= 0 ? 'Dr' : 'Cr';
-      return `<tr style="background:${i % 2 === 0 ? '#fff' : '#fafbfd'}">
-        <td style="padding:3px 8px;border-right:1px solid ${BD}">${fmtDate(r.date)}</td>
-        <td style="padding:3px 8px;font-weight:600;border-right:1px solid ${BD};max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.narration || r.type || '—'}</td>
-        <td style="padding:3px 8px;font-style:italic;color:#555;border-right:1px solid ${BD}">${r.type || ''}</td>
-        <td style="padding:3px 8px;text-align:center;border-right:1px solid ${BD}">${r.number || ''}</td>
-        <td style="padding:3px 10px;text-align:right;color:#7a0000;font-weight:${isDr ? 700 : 400};border-right:1px solid ${BD}">${isDr ? fmtAbs(r.entry_amount) : ''}</td>
-        <td style="padding:3px 10px;text-align:right;color:#006b00;font-weight:${!isDr ? 700 : 400};border-right:1px solid ${BD}">${!isDr ? fmtAbs(r.entry_amount) : ''}</td>
-        <td style="padding:3px 10px;text-align:right;font-weight:600">${fmtAbs(r.running)} ${runType}</td>
-      </tr>`;
-    }).join('');
+    if (onPrint) {
+      onPrint({
+        type: 'ledger',
+        companyName,
+        ledgerName: ledger.name,
+        period: periodStr,
+        openingBalance: ob,
+        balanceType: ledger.balanceType || 'Dr',
+        rows: printRows,
+        closingBalance: Math.abs(closing),
+        closingType: closing >= 0 ? 'Dr' : 'Cr'
+      });
+    } else {
+      const bodyRows = printRows.map((r, i) => {
+        const isDr    = r.runType === 'Dr';
+        return `<tr style="background:${i % 2 === 0 ? '#fff' : '#fafbfd'}">
+          <td style="padding:3px 8px;border-right:1px solid ${BD}">${r.date}</td>
+          <td style="padding:3px 8px;font-weight:600;border-right:1px solid ${BD};max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.particulars}</td>
+          <td style="padding:3px 8px;font-style:italic;color:#555;border-right:1px solid ${BD}">${r.vchType}</td>
+          <td style="padding:3px 8px;text-align:center;border-right:1px solid ${BD}">${r.vchNo}</td>
+          <td style="padding:3px 10px;text-align:right;color:#7a0000;font-weight:${isDr ? 700 : 400};border-right:1px solid ${BD}">${r.debit ? fmtAbs(r.debit) : ''}</td>
+          <td style="padding:3px 10px;text-align:right;color:#006b00;font-weight:${!isDr ? 700 : 400};border-right:1px solid ${BD}">${r.credit ? fmtAbs(r.credit) : ''}</td>
+          <td style="padding:3px 10px;text-align:right;font-weight:600">${fmtAbs(r.balance)} ${r.runType}</td>
+        </tr>`;
+      }).join('');
 
-    const html = `<!DOCTYPE html><html><head>
-      <title>Ledger – ${ledger.name}</title><meta charset="utf-8"/>
-      <style>
-        @page { margin: 12mm; size: A4 landscape; }
-        * { box-sizing: border-box; }
-        body { font-family: ${FONT_}; margin: 0; padding: 0; font-size: 12px; }
-        .hdr { background: ${HDR_BG}; color: #fff; padding: 8px 14px; }
-        .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
-        .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; }
-        .meta { display: flex; justify-content: space-between; background: #f0f4f8; padding: 5px 12px; border-bottom: 1px solid ${BORDER}; font-size: 11px; }
-        table { width: 100%; border-collapse: collapse; }
-        thead th { background: #f0f4f8; padding: 4px 8px; font-size: 11px; font-weight: 700; border-bottom: 1px solid ${BORDER}; border-right: 1px solid ${BD}; text-align: left; white-space: nowrap; }
-        thead th:nth-child(4) { text-align: center; }
-        thead th:nth-child(5), thead th:nth-child(6), thead th:nth-child(7) { text-align: right; }
-        .ob-row td { background: #f8fbff; font-weight: 700; font-style: italic; color: #555; padding: 3px 8px; border-bottom: 1px solid ${BD}; border-right: 1px solid ${BD}; }
-        tfoot td { background: #f0f4f8; font-weight: 700; padding: 4px 8px; border-top: 2px solid ${HDR_BG}; border-right: 1px solid ${BD}; }
-        tfoot td:nth-child(5) { text-align: right; color: #7a0000; }
-        tfoot td:nth-child(6) { text-align: right; color: #006b00; }
-        tfoot td:nth-child(7) { text-align: right; font-weight: 800; }
-        .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
-      </style>
-    </head><body>
-      <div class="hdr">
-        <h1>${ledger.name}</h1>
-        <div class="sub">Ledger Statement &nbsp;·&nbsp; ${periodStr}</div>
-      </div>
-      <div class="meta">
-        <span><strong>Group:</strong> ${ledger.group || '—'}</span>
-        <span><strong>Opening Balance:</strong> ${fmtAbs(ob)} ${ledger.balanceType || 'Dr'}</span>
-        <span><strong>Closing Balance:</strong> ${fmtAbs(closing)} ${closing >= 0 ? 'Dr' : 'Cr'}</span>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th style="width:80px">Date</th><th>Particulars</th>
-            <th style="width:100px">Vch Type</th><th style="width:70px">Vch No.</th>
-            <th style="width:120px">Debit (₹)</th><th style="width:120px">Credit (₹)</th>
-            <th style="width:130px">Balance</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr class="ob-row">
-            <td></td><td>Opening Balance</td><td colspan="2"></td>
-            <td style="text-align:right;color:#7a0000">${obSgn > 0 ? fmtAbs(ob) : ''}</td>
-            <td style="text-align:right;color:#006b00">${obSgn < 0 ? fmtAbs(ob) : ''}</td>
-            <td style="text-align:right;font-weight:700">${fmtAbs(ob)} ${ledger.balanceType || 'Dr'}</td>
-          </tr>
-          ${bodyRows}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="4" style="text-align:right;padding-right:12px">Closing Balance</td>
-            <td>${totalDr > 0 ? fmtAbs(totalDr) : ''}</td>
-            <td>${totalCr > 0 ? fmtAbs(totalCr) : ''}</td>
-            <td>${fmtAbs(closing)} ${closing >= 0 ? 'Dr' : 'Cr'}</td>
-          </tr>
-        </tfoot>
-      </table>
-      <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} &nbsp;|&nbsp; ${ledger.name}</div>
-    </body></html>`;
+      const html = `<!DOCTYPE html><html><head>
+        <title>Ledger – ${ledger.name}</title><meta charset="utf-8"/>
+        <style>
+          @page { margin: 12mm; size: A4 landscape; }
+          * { box-sizing: border-box; }
+          body { font-family: ${FONT_}; margin: 0; padding: 0; font-size: 12px; }
+          .hdr { background: ${HDR_BG}; color: #fff; padding: 8px 14px; }
+          .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+          .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; }
+          .meta { display: flex; justify-content: space-between; background: #f0f4f8; padding: 5px 12px; border-bottom: 1px solid ${BORDER}; font-size: 11px; }
+          table { width: 100%; border-collapse: collapse; }
+          thead th { background: #f0f4f8; padding: 4px 8px; font-size: 11px; font-weight: 700; border-bottom: 1px solid ${BORDER}; border-right: 1px solid ${BD}; text-align: left; white-space: nowrap; }
+          thead th:nth-child(4) { text-align: center; }
+          thead th:nth-child(5), thead th:nth-child(6), thead th:nth-child(7) { text-align: right; }
+          .ob-row td { background: #f8fbff; font-weight: 700; font-style: italic; color: #555; padding: 3px 8px; border-bottom: 1px solid ${BD}; border-right: 1px solid ${BD}; }
+          tfoot td { background: #f0f4f8; font-weight: 700; padding: 4px 8px; border-top: 2px solid ${HDR_BG}; border-right: 1px solid ${BD}; }
+          tfoot td:nth-child(5) { text-align: right; color: #7a0000; }
+          tfoot td:nth-child(6) { text-align: right; color: #006b00; }
+          tfoot td:nth-child(7) { text-align: right; font-weight: 800; }
+          .footer { text-align: right; font-size: 9px; color: #888; padding: 5px 10px; border-top: 1px solid #ddd; margin-top: 4px; }
+        </style>
+      </head><body>
+        <div class="hdr">
+          <h1>${ledger.name}</h1>
+          <div class="sub">Ledger Statement &nbsp;·&nbsp; ${periodStr}</div>
+        </div>
+        <div class="meta">
+          <span><strong>Group:</strong> ${ledger.group || '—'}</span>
+          <span><strong>Opening Balance:</strong> ${fmtAbs(ob)} ${ledger.balanceType || 'Dr'}</span>
+          <span><strong>Closing Balance:</strong> ${fmtAbs(closing)} ${closing >= 0 ? 'Dr' : 'Cr'}</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 80px;">Date</th><th>Particulars</th>
+              <th style="width:100px">Vch Type</th><th style="width:70px">Vch No.</th>
+              <th style="width:120px">Debit (₹)</th><th style="width:120px">Credit (₹)</th>
+              <th style="width:130px">Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="ob-row">
+              <td></td><td>Opening Balance</td><td colspan="2"></td>
+              <td style="text-align:right;color:#7a0000">${obSgn > 0 ? fmtAbs(ob) : ''}</td>
+              <td style="text-align:right;color:#006b00">${obSgn < 0 ? fmtAbs(ob) : ''}</td>
+              <td style="text-align:right;font-weight:700">${fmtAbs(ob)} ${ledger.balanceType || 'Dr'}</td>
+            </tr>
+            ${bodyRows}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="4" style="text-align:right;padding-right:12px">Closing Balance</td>
+              <td>${totalDr > 0 ? fmtAbs(totalDr) : ''}</td>
+              <td>${totalCr > 0 ? fmtAbs(totalCr) : ''}</td>
+              <td>${fmtAbs(closing)} ${closing >= 0 ? 'Dr' : 'Cr'}</td>
+            </tr>
+          </tfoot>
+        </table>
+        <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} &nbsp;|&nbsp; ${ledger.name}</div>
+      </body></html>`;
 
-    const win = window.open('', '_blank', 'width=960,height=700');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
-  }, [ledger, rows, ob, obSgn, totalDr, totalCr, closing, periodStr]);
+      const win = window.open('', '_blank', 'width=960,height=700');
+      if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+    }
+  }, [ledger, rows, ob, obSgn, totalDr, totalCr, closing, periodStr, onPrint, companyName]);
 
   // Keyboard: Escape → back, Alt+P → print
   useEffect(() => {
@@ -357,7 +382,7 @@ function LedgerDetail({ ledger, branchId, period, onBack }: {
 }
 
 // ── Main CashBankBookScreen ───────────────────────────────────────────────────
-function CashBankBookScreen({ branchId }: { branchId?: string }) {
+function CashBankBookScreen({ branchId, onPrint }: { branchId?: string; onPrint?: (data: any) => void }) {
   // ── State ───────────────────────────────────────────────────────────────────
   const [rawLedgers, setRawLedgers]         = useState<any[]>([]);
   const [allVouchers, setAllVouchers]       = useState<any[]>([]);
@@ -527,59 +552,75 @@ function CashBankBookScreen({ branchId }: { branchId?: string }) {
 
   // ── Print summary ─────────────────────────────────────────────────────────
   const handlePrint = useCallback(() => {
-    const bankRows = bankLedgers.map(l =>
-      `<tr><td style="padding:3px 8px 3px 28px;font-size:11px;border-bottom:1px solid #eee;color:#444">${l.name}</td>
-       <td style="padding:3px 12px;text-align:right;font-size:11px;border-bottom:1px solid #eee;color:#444">${fmtAbs(l.balance)}</td></tr>`
-    ).join('');
-    const cashRows = cashLedgers.map(l =>
-      `<tr><td style="padding:3px 8px 3px 28px;font-size:11px;border-bottom:1px solid #eee;color:#444">${l.name}</td>
-       <td style="padding:3px 12px;text-align:right;font-size:11px;border-bottom:1px solid #eee;color:#444">${fmtAbs(l.balance)}</td></tr>`
-    ).join('');
+    if (onPrint) {
+      onPrint({
+        type: 'cash_bank_book',
+        companyName,
+        period: periodStr,
+        bankAccounts: bankLedgers.map(l => ({ name: l.name, balance: l.balance })),
+        cashInHand: cashLedgers.map(l => ({ name: l.name, balance: l.balance })),
+        bankTotal,
+        cashTotal,
+        grandTotal: total,
+        inflow,
+        outflow,
+        netFlow
+      });
+    } else {
+      const bankRows = bankLedgers.map(l =>
+        `<tr><td style="padding:3px 8px 3px 28px;font-size:11px;border-bottom:1px solid #eee;color:#444">${l.name}</td>
+         <td style="padding:3px 12px;text-align:right;font-size:11px;border-bottom:1px solid #eee;color:#444">${fmtAbs(l.balance)}</td></tr>`
+      ).join('');
+      const cashRows = cashLedgers.map(l =>
+        `<tr><td style="padding:3px 8px 3px 28px;font-size:11px;border-bottom:1px solid #eee;color:#444">${l.name}</td>
+         <td style="padding:3px 12px;text-align:right;font-size:11px;border-bottom:1px solid #eee;color:#444">${fmtAbs(l.balance)}</td></tr>`
+      ).join('');
 
-    const html = `<!DOCTYPE html><html><head>
-      <title>Cash / Bank Book – ${companyName}</title><meta charset="utf-8"/>
-      <style>
-        @page { margin: 14mm; size: A4 portrait; }
-        * { box-sizing: border-box; }
-        body { font-family: ${FONT_}; margin: 0; padding: 0; font-size: 12px; }
-        .hdr { background: ${HDR_BG}; color: #fff; text-align: center; padding: 10px 14px; }
-        .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 2px; }
-        .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; }
-        table { width: 100%; border-collapse: collapse; }
-        .sec-hdr td { background: #f2f8f7; font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; padding: 5px 10px; border-top: 1px solid #b8c4cc; border-bottom: 1px solid #b8c4cc; color: ${HDR_BG}; }
-        .sec-hdr td:last-child { text-align: right; }
-        .grand td { font-weight: 900; font-size: 14px; padding: 6px 12px; background: ${HDR_BG}; color: #fff; border-top: 3px solid #0d5e57; }
-        .grand td:last-child { text-align: right; }
-        .flow { display: flex; border: 1px solid #ddd; margin-top: 16px; }
-        .flow-cell { flex: 1; padding: 8px 12px; text-align: center; border-right: 1px solid #ddd; }
-        .flow-cell:last-child { border-right: none; }
-        .lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #888; }
-        .val { font-size: 13px; font-weight: 800; margin-top: 2px; }
-        .footer { text-align: right; font-size: 9px; color: #888; padding: 6px 10px; border-top: 1px solid #eee; margin-top: 8px; }
-      </style>
-    </head><body>
-      <div class="hdr">
-        <h1>${companyName || 'Cash / Bank Book'}</h1>
-        <div class="sub">CASH / BANK BOOK &nbsp;·&nbsp; ${periodStr}</div>
-      </div>
-      <table>
-        <tr class="sec-hdr"><td>🏦 Bank Accounts</td><td>₹ ${fmtAbs(bankTotal)}</td></tr>
-        ${bankRows}
-        <tr class="sec-hdr"><td>👛 Cash-in-Hand</td><td>₹ ${fmtAbs(cashTotal)}</td></tr>
-        ${cashRows}
-        <tr class="grand"><td>Grand Total</td><td>₹ ${fmtAbs(total)}</td></tr>
-      </table>
-      <div class="flow">
-        <div class="flow-cell"><div class="lbl">Total Inflow</div><div class="val" style="color:#16a34a">₹ ${fmtAbs(inflow)}</div></div>
-        <div class="flow-cell"><div class="lbl">Total Outflow</div><div class="val" style="color:#dc2626">₹ ${fmtAbs(outflow)}</div></div>
-        <div class="flow-cell" style="background:#f0fdfa"><div class="lbl" style="color:${HDR_BG}">Net Cash Flow</div><div class="val" style="color:${HDR_BG}">₹ ${fmtAbs(netFlow)}</div></div>
-      </div>
-      <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} &nbsp;|&nbsp; ${companyName}</div>
-    </body></html>`;
+      const html = `<!DOCTYPE html><html><head>
+        <title>Cash / Bank Book – ${companyName}</title><meta charset="utf-8"/>
+        <style>
+          @page { margin: 14mm; size: A4 portrait; }
+          * { box-sizing: border-box; }
+          body { font-family: ${FONT_}; margin: 0; padding: 0; font-size: 12px; }
+          .hdr { background: ${HDR_BG}; color: #fff; text-align: center; padding: 10px 14px; }
+          .hdr h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 2px; }
+          .hdr .sub { font-size: 10px; margin-top: 3px; opacity: 0.85; }
+          table { width: 100%; border-collapse: collapse; }
+          .sec-hdr td { background: #f2f8f7; font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; padding: 5px 10px; border-top: 1px solid #b8c4cc; border-bottom: 1px solid #b8c4cc; color: ${HDR_BG}; }
+          .sec-hdr td:last-child { text-align: right; }
+          .grand td { font-weight: 900; font-size: 14px; padding: 6px 12px; background: ${HDR_BG}; color: #fff; border-top: 3px solid #0d5e57; }
+          .grand td:last-child { text-align: right; }
+          .flow { display: flex; border: 1px solid #ddd; margin-top: 16px; }
+          .flow-cell { flex: 1; padding: 8px 12px; text-align: center; border-right: 1px solid #ddd; }
+          .flow-cell:last-child { border-right: none; }
+          .lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #888; }
+          .val { font-size: 13px; font-weight: 800; margin-top: 2px; }
+          .footer { text-align: right; font-size: 9px; color: #888; padding: 6px 10px; border-top: 1px solid #eee; margin-top: 8px; }
+        </style>
+      </head><body>
+        <div class="hdr">
+          <h1>${companyName || 'Cash / Bank Book'}</h1>
+          <div class="sub">CASH / BANK BOOK &nbsp;·&nbsp; ${periodStr}</div>
+        </div>
+        <table>
+          <tr class="sec-hdr"><td>🏦 Bank Accounts</td><td>₹ ${fmtAbs(bankTotal)}</td></tr>
+          ${bankRows}
+          <tr class="sec-hdr"><td>👛 Cash-in-Hand</td><td>₹ ${fmtAbs(cashTotal)}</td></tr>
+          ${cashRows}
+          <tr class="grand"><td>Grand Total</td><td>₹ ${fmtAbs(total)}</td></tr>
+        </table>
+        <div class="flow">
+          <div class="flow-cell"><div class="lbl">Total Inflow</div><div class="val" style="color:#16a34a">₹ ${fmtAbs(inflow)}</div></div>
+          <div class="flow-cell"><div class="lbl">Total Outflow</div><div class="val" style="color:#dc2626">₹ ${fmtAbs(outflow)}</div></div>
+          <div class="flow-cell" style="background:#f0fdfa"><div class="lbl" style="color:${HDR_BG}">Net Cash Flow</div><div class="val" style="color:${HDR_BG}">₹ ${fmtAbs(netFlow)}</div></div>
+        </div>
+        <div class="footer">Printed on ${new Date().toLocaleString('en-IN')} &nbsp;|&nbsp; ${companyName}</div>
+      </body></html>`;
 
-    const win = window.open('', '_blank', 'width=700,height=900');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
-  }, [companyName, bankLedgers, cashLedgers, bankTotal, cashTotal, total, inflow, outflow, netFlow, periodStr]);
+      const win = window.open('', '_blank', 'width=700,height=900');
+      if (win) { win.document.write(html); win.document.close(); setTimeout(() => { win.focus(); win.print(); }, 400); }
+    }
+  }, [companyName, bankLedgers, cashLedgers, bankTotal, cashTotal, total, inflow, outflow, netFlow, periodStr, onPrint]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
@@ -640,6 +681,8 @@ function CashBankBookScreen({ branchId }: { branchId?: string }) {
           branchId={branchId}
           period={period}
           onBack={() => setDrillLedger(null)}
+          onPrint={onPrint}
+          companyName={companyName}
         />
       </ErrorBoundary>
     );
@@ -851,7 +894,7 @@ function CashBankBookScreen({ branchId }: { branchId?: string }) {
 }
 
 // Exported with error boundary
-export default function CashBankBookScreenSafe(props: { branchId?: string }) {
+export default function CashBankBookScreenSafe(props: { branchId?: string; onPrint?: (data: any) => void }) {
   return (
     <ErrorBoundary>
       <CashBankBookScreen {...props} />
